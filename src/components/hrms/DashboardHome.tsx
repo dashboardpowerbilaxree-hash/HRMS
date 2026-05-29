@@ -230,7 +230,7 @@ export function DashboardHome() {
       trend: `${data.activeEmployees} active`,
       trendUp: true,
       extra: data.firmWiseCount.slice(0, 3).map(f => (
-        <span key={f.firm} className={`${FIRM_BADGE_CLASS[f.firm] || 'firm-badge-lapl'} ml-1`}>{f.firm}: {f.count}</span>
+        <span key={f.firm} className={`${FIRM_BADGE_CLASS[f.firm] || 'firm-badge-lapl'} ml-1 whitespace-nowrap shrink-0`}>{f.firm}: {f.count}</span>
       )),
     },
     {
@@ -378,7 +378,7 @@ export function DashboardHome() {
             <span className="text-sm font-medium">{clock}</span>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <Button
             variant="outline"
             size="sm"
@@ -455,7 +455,7 @@ export function DashboardHome() {
                 <CardContent className="p-3 md:p-4">
                   <div className="flex items-start justify-between">
                     <div className="flex-1 min-w-0">
-                      <p className="text-[10px] md:text-xs text-muted-foreground font-medium">{card.title}</p>
+                      <p className="text-[10px] md:text-xs text-muted-foreground font-medium truncate">{card.title}</p>
                       <p className="text-lg md:text-2xl font-bold mt-0.5">
                         <AnimatedCounter
                           value={card.value}

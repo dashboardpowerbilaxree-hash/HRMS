@@ -228,13 +228,13 @@ export function EmployeeManagement() {
 
   // ── Firm badge renderer ──
   const FirmBadge = ({ firm }: { firm: string }) => (
-    <span className={FIRM_BADGE_CLASS[firm] || 'firm-badge-lapl'}>{firm}</span>
+    <span className={`${FIRM_BADGE_CLASS[firm] || 'firm-badge-lapl'} whitespace-nowrap shrink-0`}>{firm}</span>
   );
 
   // ── Status badge ──
   const StatusBadge = ({ status }: { status: string }) => (
     <span
-      className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
+      className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap shrink-0 ${
         status === 'Yes' || status === 'active'
           ? 'bg-gold/15 text-gold dark:text-gold border border-gold/20'
           : 'bg-red-500/15 text-red-600 dark:text-red-400 border border-red-500/20'
@@ -247,7 +247,7 @@ export function EmployeeManagement() {
 
   // ── Employment Type badge ──
   const EmpTypeBadge = ({ type }: { type: string }) => (
-    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${
+    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium whitespace-nowrap shrink-0 ${
       type === 'Full Time'
         ? 'bg-gold/10 text-gold border border-gold/20'
         : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
@@ -298,7 +298,7 @@ export function EmployeeManagement() {
         transition={{ delay: 0.05 }}
         className="glass-card p-3"
       >
-        <div className="flex flex-col sm:flex-row gap-3">
+        <div className="flex flex-col sm:flex-row gap-3 flex-wrap">
           <div className="relative flex-1">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
@@ -406,7 +406,7 @@ export function EmployeeManagement() {
                         className="border-b border-border/50 hover:bg-muted/30 cursor-pointer transition-colors"
                         onClick={() => setSelectedEmployeeId(emp.employeeId)}
                       >
-                        <TableCell className="font-mono text-xs text-gold font-semibold">
+                        <TableCell className="font-mono text-xs text-gold font-semibold whitespace-nowrap">
                           {emp.employeeId}
                         </TableCell>
                         <TableCell>
@@ -414,7 +414,7 @@ export function EmployeeManagement() {
                             <div className="w-8 h-8 rounded-full gradient-laxree flex items-center justify-center text-white text-xs font-bold shrink-0">
                               {emp.fullName.charAt(0).toUpperCase()}
                             </div>
-                            <div className="min-w-0">
+                            <div className="min-w-0 overflow-hidden">
                               <p className="font-medium text-sm truncate">{emp.fullName}</p>
                               <p className="text-[10px] text-muted-foreground truncate">{emp.designation}</p>
                             </div>
@@ -423,15 +423,15 @@ export function EmployeeManagement() {
                         <TableCell className="hidden md:table-cell">
                           <FirmBadge firm={emp.department || emp.firm} />
                         </TableCell>
-                        <TableCell className="hidden lg:table-cell text-sm text-muted-foreground">
+                        <TableCell className="hidden lg:table-cell text-sm text-muted-foreground truncate max-w-[120px]">
                           {emp.location}
                         </TableCell>
-                        <TableCell className="hidden md:table-cell">
+                        <TableCell className="hidden md:table-cell whitespace-nowrap">
                           <span className="text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground capitalize">
                             {emp.salaryType}
                           </span>
                         </TableCell>
-                        <TableCell className="hidden sm:table-cell text-sm font-mono">
+                        <TableCell className="hidden sm:table-cell text-sm font-mono whitespace-nowrap">
                           {emp.hourlyRate > 0 ? `₹${emp.hourlyRate.toFixed(2)}` : '—'}
                         </TableCell>
                         <TableCell className="hidden sm:table-cell">

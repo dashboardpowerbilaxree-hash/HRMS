@@ -59,7 +59,7 @@ export function ReportsAnalytics() {
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
   const FirmBadge = ({ firm }: { firm: string }) => (
-    <span className={FIRM_BADGE_CLASS[firm] || 'firm-badge-lapl'}>{firm}</span>
+    <span className={`${FIRM_BADGE_CLASS[firm] || 'firm-badge-lapl'} whitespace-nowrap shrink-0`}>{firm}</span>
   );
 
   // Filter payroll by selected firm
@@ -89,7 +89,7 @@ export function ReportsAnalytics() {
           </h2>
           <p className="text-sm text-muted-foreground">Comprehensive HR analytics for Laxree Group</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <Select value={String(month)} onValueChange={v => setMonth(Number(v))}>
             <SelectTrigger className="w-28"><SelectValue /></SelectTrigger>
             <SelectContent>{months.map((m, i) => <SelectItem key={i} value={String(i + 1)}>{m}</SelectItem>)}</SelectContent>
@@ -124,7 +124,7 @@ export function ReportsAnalytics() {
                   <Card className="glass-card card-gold-hover border-0">
                     <CardContent className="p-4 flex items-center gap-3">
                       <c.icon className={`w-8 h-8 ${c.color}`} />
-                      <div><p className="text-xs text-muted-foreground">{c.title}</p><p className="text-lg font-bold">{c.value}</p></div>
+                      <div className="min-w-0 overflow-hidden"><p className="text-xs text-muted-foreground truncate">{c.title}</p><p className="text-lg font-bold">{c.value}</p></div>
                     </CardContent>
                   </Card>
                 </motion.div>
@@ -195,7 +195,7 @@ export function ReportsAnalytics() {
                   { title: 'OT Hours', value: Math.round((attReport.summary?.totalOvertimeHours || 0) * 10) / 10, color: 'text-cyan-500' },
                 ].map((c, i) => (
                   <Card key={c.title} className="glass-card card-gold-hover border-0">
-                    <CardContent className="p-3 text-center"><p className="text-xs text-muted-foreground">{c.title}</p><p className={`text-xl font-bold ${c.color}`}>{c.value}</p></CardContent>
+                    <CardContent className="p-3 text-center min-w-0"><p className="text-xs text-muted-foreground truncate">{c.title}</p><p className={`text-xl font-bold ${c.color}`}>{c.value}</p></CardContent>
                   </Card>
                 ))}
               </div>
@@ -207,12 +207,12 @@ export function ReportsAnalytics() {
                       <TableBody>
                         {(attReport.records || []).slice(0, 50).map((r: any) => (
                           <TableRow key={r.id} className="hover:bg-muted/30">
-                            <TableCell className="text-sm">{r.employee?.fullName || r.employeeId}</TableCell>
+                            <TableCell className="text-sm truncate max-w-[150px]">{r.employee?.fullName || r.employeeId}</TableCell>
                             <TableCell><FirmBadge firm={r.employee?.department || ''} /></TableCell>
-                            <TableCell className="text-sm">{new Date(r.date).toLocaleDateString()}</TableCell>
-                            <TableCell className="text-sm">{r.status}</TableCell>
-                            <TableCell className="text-sm">{r.totalHours}h</TableCell>
-                            <TableCell className="text-sm">{r.overtimeHours > 0 ? `${r.overtimeHours}h` : '-'}</TableCell>
+                            <TableCell className="text-sm whitespace-nowrap">{new Date(r.date).toLocaleDateString()}</TableCell>
+                            <TableCell className="text-sm whitespace-nowrap">{r.status}</TableCell>
+                            <TableCell className="text-sm whitespace-nowrap">{r.totalHours}h</TableCell>
+                            <TableCell className="text-sm whitespace-nowrap">{r.overtimeHours > 0 ? `${r.overtimeHours}h` : '-'}</TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
@@ -248,7 +248,7 @@ export function ReportsAnalytics() {
                   { title: 'Net Total', value: `₹${(payReport.totals?.totalNet || 0).toLocaleString()}`, color: 'text-gold' },
                 ].map((c, i) => (
                   <Card key={c.title} className="glass-card card-gold-hover border-0">
-                    <CardContent className="p-3 text-center"><p className="text-xs text-muted-foreground">{c.title}</p><p className={`text-xl font-bold ${c.color}`}>{c.value}</p></CardContent>
+                    <CardContent className="p-3 text-center min-w-0"><p className="text-xs text-muted-foreground truncate">{c.title}</p><p className={`text-xl font-bold ${c.color}`}>{c.value}</p></CardContent>
                   </Card>
                 ))}
               </div>
@@ -284,11 +284,11 @@ export function ReportsAnalytics() {
                       <TableBody>
                         {filteredPayrolls.map((p: any) => (
                           <TableRow key={p.id} className="hover:bg-muted/30">
-                            <TableCell className="text-sm">{p.employee?.fullName || p.employeeId}</TableCell>
+                            <TableCell className="text-sm truncate max-w-[150px]">{p.employee?.fullName || p.employeeId}</TableCell>
                             <TableCell><FirmBadge firm={p.employee?.department || ''} /></TableCell>
-                            <TableCell className="text-sm">₹{p.grossSalary.toLocaleString()}</TableCell>
-                            <TableCell className="text-sm text-red-500">₹{p.totalDeductions.toLocaleString()}</TableCell>
-                            <TableCell className="text-sm font-bold text-gold">₹{p.netSalary.toLocaleString()}</TableCell>
+                            <TableCell className="text-sm whitespace-nowrap">₹{p.grossSalary.toLocaleString()}</TableCell>
+                            <TableCell className="text-sm text-red-500 whitespace-nowrap">₹{p.totalDeductions.toLocaleString()}</TableCell>
+                            <TableCell className="text-sm font-bold text-gold whitespace-nowrap">₹{p.netSalary.toLocaleString()}</TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
@@ -360,7 +360,7 @@ export function ReportsAnalytics() {
                       <CardContent className="p-4 flex items-center gap-3">
                         <MapPin className="w-5 h-5 text-gold" />
                         <div>
-                          <p className="text-sm font-medium">{l.location}</p>
+                          <p className="text-sm font-medium truncate">{l.location}</p>
                           <p className="text-xl font-bold">{l.count}</p>
                           <p className="text-xs text-muted-foreground">employees</p>
                         </div>

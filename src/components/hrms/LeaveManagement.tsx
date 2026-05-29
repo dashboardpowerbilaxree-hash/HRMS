@@ -78,7 +78,7 @@ export function LeaveManagement() {
           <DialogTrigger asChild>
             <Button className="bg-gold text-white"><CalendarDays className="w-4 h-4 mr-2" /> Apply Leave</Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="max-h-[90vh] overflow-y-auto">
             <DialogHeader><DialogTitle>Apply Leave</DialogTitle></DialogHeader>
             <div className="space-y-4 py-4">
               <div><Label>Employee</Label><Select value={form.employeeId} onValueChange={v => setForm({ ...form, employeeId: v })}><SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger><SelectContent>{employees.map(e => <SelectItem key={e.employeeId} value={e.employeeId}>{e.fullName}</SelectItem>)}</SelectContent></Select></div>
@@ -105,7 +105,7 @@ export function LeaveManagement() {
             <Card className="glass-card card-gold-hover border-0">
               <CardContent className="p-4 flex items-center gap-3">
                 <c.icon className={`w-8 h-8 ${c.color}`} />
-                <div><p className="text-xs text-muted-foreground">{c.title}</p><p className="text-xl font-bold">{c.value}</p></div>
+                <div className="min-w-0 overflow-hidden"><p className="text-xs text-muted-foreground truncate">{c.title}</p><p className="text-xl font-bold">{c.value}</p></div>
               </CardContent>
             </Card>
           </motion.div>
@@ -120,12 +120,12 @@ export function LeaveManagement() {
               <TableBody>
                 {leaves.map((l) => (
                   <TableRow key={l.id} className="hover:bg-muted/30">
-                    <TableCell><p className="text-sm font-medium">{l.employee?.fullName || l.employeeId}</p><p className="text-xs text-muted-foreground">{l.employee?.department}</p></TableCell>
-                    <TableCell className="text-sm">{l.type}</TableCell>
-                    <TableCell className="text-sm">{new Date(l.startDate).toLocaleDateString()} - {new Date(l.endDate).toLocaleDateString()}</TableCell>
-                    <TableCell className="text-sm">{l.days}</TableCell>
+                    <TableCell><div className="min-w-0 overflow-hidden"><p className="text-sm font-medium truncate">{l.employee?.fullName || l.employeeId}</p><p className="text-xs text-muted-foreground truncate">{l.employee?.department}</p></div></TableCell>
+                    <TableCell className="text-sm whitespace-nowrap">{l.type}</TableCell>
+                    <TableCell className="text-sm whitespace-nowrap">{new Date(l.startDate).toLocaleDateString()} - {new Date(l.endDate).toLocaleDateString()}</TableCell>
+                    <TableCell className="text-sm whitespace-nowrap">{l.days}</TableCell>
                     <TableCell>
-                      <Badge variant={l.status === 'approved' ? 'default' : l.status === 'rejected' ? 'destructive' : 'secondary'} className="text-[10px]">{l.status}</Badge>
+                      <Badge variant={l.status === 'approved' ? 'default' : l.status === 'rejected' ? 'destructive' : 'secondary'} className="text-[10px] whitespace-nowrap shrink-0">{l.status}</Badge>
                     </TableCell>
                     <TableCell>
                       {l.status === 'pending' && (

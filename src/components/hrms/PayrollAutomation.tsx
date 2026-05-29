@@ -116,7 +116,7 @@ function PayrollStatusBadge({ status }: { status: string }) {
   };
   const s = config[status] || { bg: 'bg-muted border-border', text: 'text-muted-foreground', label: status };
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${s.bg} ${s.text}`}>
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border whitespace-nowrap shrink-0 ${s.bg} ${s.text}`}>
       {s.label}
     </span>
   );
@@ -124,7 +124,7 @@ function PayrollStatusBadge({ status }: { status: string }) {
 
 // ── Firm Badge ──
 function FirmBadge({ firm }: { firm: string }) {
-  return <span className={FIRM_BADGE_CLASS[firm] || 'firm-badge-lapl'}>{firm}</span>;
+  return <span className={`${FIRM_BADGE_CLASS[firm] || 'firm-badge-lapl'} whitespace-nowrap shrink-0`}>{firm}</span>;
 }
 
 export function PayrollAutomation() {
@@ -364,7 +364,7 @@ export function PayrollAutomation() {
         transition={{ delay: 0.1 }}
         className="glass-card p-3"
       >
-        <div className="flex flex-col sm:flex-row gap-3">
+        <div className="flex flex-col sm:flex-row gap-3 flex-wrap">
           <Select value={filterMonth} onValueChange={setFilterMonth}>
             <SelectTrigger className="w-full sm:w-36 h-9">
               <CalendarDays className="w-3.5 h-3.5 mr-1.5 text-muted-foreground" />
@@ -428,7 +428,7 @@ export function PayrollAutomation() {
                     <Icon className="w-5 h-5 text-white" />
                   </div>
                   <div>
-                    <p className="text-xs text-muted-foreground font-medium">{card.title}</p>
+                    <p className="text-xs text-muted-foreground font-medium truncate">{card.title}</p>
                     <p className="text-xl font-bold">
                       {card.format === 'currency' ? (
                         <AnimatedCounter value={card.value} prefix="₹" decimals={0} />
@@ -544,53 +544,53 @@ export function PayrollAutomation() {
                             <div className="w-7 h-7 rounded-full gradient-laxree flex items-center justify-center text-white text-[10px] font-bold shrink-0">
                               {p.employee?.fullName?.charAt(0) || '?'}
                             </div>
-                            <div className="min-w-0">
+                            <div className="min-w-0 overflow-hidden">
                               <p className="text-sm font-medium truncate">{p.employee?.fullName || p.employeeId}</p>
-                              <p className="text-[10px] text-muted-foreground font-mono">{p.employeeId}</p>
+                              <p className="text-[10px] text-muted-foreground font-mono whitespace-nowrap">{p.employeeId}</p>
                             </div>
                           </motion.div>
                         </TableCell>
                         <TableCell className="hidden md:table-cell">
                           <FirmBadge firm={p.employee?.department || ''} />
                         </TableCell>
-                        <TableCell className="hidden lg:table-cell text-sm">
+                        <TableCell className="hidden lg:table-cell text-sm whitespace-nowrap">
                           {(p.totalWorkedHrs || p.totalWorkHours || 0) > 0 ? `${(p.totalWorkedHrs || p.totalWorkHours).toFixed(1)}h` : '—'}
                         </TableCell>
-                        <TableCell className="hidden xl:table-cell text-sm font-mono">
+                        <TableCell className="hidden xl:table-cell text-sm font-mono whitespace-nowrap">
                           {(p.hourlyRate || p.salaryPerHour || 0) > 0 ? `₹${(p.hourlyRate || p.salaryPerHour).toFixed(2)}` : '—'}
                         </TableCell>
-                        <TableCell className="hidden lg:table-cell text-sm">
+                        <TableCell className="hidden lg:table-cell text-sm whitespace-nowrap">
                           {(p.otHours || 0) > 0 ? (
                             <span className="text-cyan-600 dark:text-cyan-400 font-medium">{p.otHours}h</span>
                           ) : '—'}
                         </TableCell>
-                        <TableCell className="hidden sm:table-cell text-sm">
+                        <TableCell className="hidden sm:table-cell text-sm whitespace-nowrap">
                           {(p.otAmount || 0) > 0 ? (
                             <span className="text-cyan-600 dark:text-cyan-400">₹{p.otAmount.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
                           ) : '—'}
                         </TableCell>
-                        <TableCell className="hidden lg:table-cell text-sm">
+                        <TableCell className="hidden lg:table-cell text-sm whitespace-nowrap">
                           {(p.sundayHrs || 0) > 0 ? (
                             <span className="text-blue-600 dark:text-blue-400 font-medium">{p.sundayHrs}h</span>
                           ) : '—'}
                         </TableCell>
-                        <TableCell className="hidden lg:table-cell text-sm">
+                        <TableCell className="hidden lg:table-cell text-sm whitespace-nowrap">
                           {(p.phHours || 0) > 0 ? (
                             <span className="text-purple-600 dark:text-purple-400 font-medium">{p.phHours}h</span>
                           ) : '—'}
                         </TableCell>
-                        <TableCell className="text-sm">
+                        <TableCell className="text-sm whitespace-nowrap">
                           ₹{p.grossSalary.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
                         </TableCell>
-                        <TableCell className="hidden md:table-cell text-sm text-red-500">
+                        <TableCell className="hidden md:table-cell text-sm text-red-500 whitespace-nowrap">
                           ₹{p.totalDeductions.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
                         </TableCell>
-                        <TableCell className="hidden xl:table-cell text-sm">
+                        <TableCell className="hidden xl:table-cell text-sm whitespace-nowrap">
                           {(p.arrear || 0) > 0 ? (
                             <span className="text-amber-600 dark:text-amber-400">₹{p.arrear.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
                           ) : '—'}
                         </TableCell>
-                        <TableCell className="text-sm font-bold text-gold">
+                        <TableCell className="text-sm font-bold text-gold whitespace-nowrap">
                           ₹{p.netSalary.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
                         </TableCell>
                         <TableCell>
@@ -614,7 +614,7 @@ export function PayrollAutomation() {
           setEmployeeSearch('');
         }
       }}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <DollarSign className="w-5 h-5 text-gold" />
@@ -636,28 +636,28 @@ export function PayrollAutomation() {
                   />
                 </div>
                 {!form.employeeId ? (
-                  <ScrollArea className="max-h-40 border rounded-lg">
+                  <div className="max-h-40 border rounded-lg overflow-y-auto">
                     <div className="p-1">
                       {filteredEmployees.slice(0, 20).map((e) => (
                         <button
                           key={e.employeeId}
-                          className="w-full text-left px-3 py-2 rounded-md hover:bg-muted/80 text-sm flex items-center justify-between transition-colors"
+                          className="w-full text-left px-3 py-2 rounded-md hover:bg-muted/80 text-sm flex items-center justify-between transition-colors gap-2"
                           onClick={() => { setForm({ ...form, employeeId: e.employeeId }); setEmployeeSearch(''); }}
                         >
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 min-w-0 overflow-hidden">
                             <FirmBadge firm={e.department} />
-                            <span>{e.fullName}</span>
+                            <span className="truncate">{e.fullName}</span>
                           </div>
-                          <span className="text-xs text-muted-foreground font-mono">{e.employeeId}</span>
+                          <span className="text-xs text-muted-foreground font-mono whitespace-nowrap shrink-0">{e.employeeId}</span>
                         </button>
                       ))}
                     </div>
-                  </ScrollArea>
+                  </div>
                 ) : (
                   <div className="flex items-center justify-between px-3 py-2 bg-muted/50 rounded-lg">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 min-w-0 overflow-hidden">
                       <FirmBadge firm={selectedEmp?.department || ''} />
-                      <span className="text-sm font-medium">{selectedEmp?.fullName}</span>
+                      <span className="text-sm font-medium truncate">{selectedEmp?.fullName}</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-mono text-muted-foreground">{form.employeeId}</span>

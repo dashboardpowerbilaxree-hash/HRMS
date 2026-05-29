@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import {
   Clock, CheckCircle, XCircle, AlertTriangle, Timer,
-  CalendarDays, Search, Building2, Info, MapPin,
+  CalendarDays, Search, Building2, Info, MapPin, X
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -93,7 +93,7 @@ function StatusBadge({ status }: { status: string }) {
   };
   const s = config[status] || { bg: 'bg-muted border-border', text: 'text-muted-foreground', label: status };
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${s.bg} ${s.text}`}>
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border whitespace-nowrap ${s.bg} ${s.text}`}>
       {s.label}
     </span>
   );
@@ -101,7 +101,7 @@ function StatusBadge({ status }: { status: string }) {
 
 // ── Firm badge ──
 function FirmBadge({ firm }: { firm: string }) {
-  return <span className={FIRM_BADGE_CLASS[firm] || 'firm-badge-lapl'}>{firm}</span>;
+  return <span className={`${FIRM_BADGE_CLASS[firm] || 'firm-badge-lapl'} whitespace-nowrap shrink-0`}>{firm}</span>;
 }
 
 export function AttendanceTracker() {
@@ -243,6 +243,11 @@ export function AttendanceTracker() {
     return list;
   }, [employees, employeeSearch]);
 
+  // Selected employee info
+  const selectedEmployee = useMemo(() => {
+    return employees.find((e) => e.employeeId === form.employeeId);
+  }, [employees, form.employeeId]);
+
   return (
     <div className="space-y-4">
       {/* ── Header ── */}
@@ -261,7 +266,7 @@ export function AttendanceTracker() {
           </p>
         </div>
         <Button
-          className="gradient-laxree text-white gap-1.5"
+          className="gradient-laxree text-white gap-1.5 shrink-0"
           size="sm"
           onClick={() => setOpen(true)}
         >
@@ -286,8 +291,8 @@ export function AttendanceTracker() {
                   <div className={`w-10 h-10 rounded-xl ${card.gradient} flex items-center justify-center shrink-0 shadow-lg`}>
                     <Icon className="w-5 h-5 text-white" />
                   </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground font-medium">{card.title}</p>
+                  <div className="min-w-0">
+                    <p className="text-xs text-muted-foreground font-medium truncate">{card.title}</p>
                     <p className="text-xl font-bold">
                       <AnimatedCounter
                         value={card.value}
@@ -310,7 +315,7 @@ export function AttendanceTracker() {
         transition={{ delay: 0.2 }}
         className="glass-card p-3"
       >
-        <div className="flex flex-col sm:flex-row gap-3">
+        <div className="flex flex-col sm:flex-row gap-3 flex-wrap">
           <Select value={filterMonth} onValueChange={setFilterMonth}>
             <SelectTrigger className="w-full sm:w-36 h-9">
               <CalendarDays className="w-3.5 h-3.5 mr-1.5 text-muted-foreground" />
@@ -356,7 +361,7 @@ export function AttendanceTracker() {
               ))}
             </SelectContent>
           </Select>
-          <div className="relative flex-1">
+          <div className="relative flex-1 min-w-[200px]">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
               className="pl-9 h-9"
@@ -380,16 +385,16 @@ export function AttendanceTracker() {
               <Table>
                 <TableHeader>
                   <TableRow className="hover:bg-transparent">
-                    <TableHead>Employee</TableHead>
-                    <TableHead className="hidden md:table-cell">Firm</TableHead>
-                    <TableHead className="hidden lg:table-cell">Location</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Check-In</TableHead>
-                    <TableHead className="hidden sm:table-cell">Check-Out</TableHead>
-                    <TableHead>Hours</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="hidden lg:table-cell">OT</TableHead>
-                    <TableHead className="hidden lg:table-cell">Sunday</TableHead>
+                    <TableHead className="min-w-[160px]">Employee</TableHead>
+                    <TableHead className="hidden md:table-cell min-w-[70px]">Firm</TableHead>
+                    <TableHead className="hidden lg:table-cell min-w-[100px]">Location</TableHead>
+                    <TableHead className="min-w-[80px]">Date</TableHead>
+                    <TableHead className="min-w-[70px]">In</TableHead>
+                    <TableHead className="hidden sm:table-cell min-w-[70px]">Out</TableHead>
+                    <TableHead className="min-w-[50px]">Hrs</TableHead>
+                    <TableHead className="min-w-[80px]">Status</TableHead>
+                    <TableHead className="hidden lg:table-cell min-w-[50px]">OT</TableHead>
+                    <TableHead className="hidden lg:table-cell min-w-[60px]">Sunday</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -417,31 +422,31 @@ export function AttendanceTracker() {
                             <div className="w-7 h-7 rounded-full gradient-laxree flex items-center justify-center text-white text-[10px] font-bold shrink-0">
                               {rec.employee?.fullName?.charAt(0) || '?'}
                             </div>
-                            <div className="min-w-0">
-                              <p className="text-sm font-medium truncate">{rec.employee?.fullName || rec.employeeId}</p>
-                              <p className="text-[10px] text-muted-foreground font-mono">{rec.employeeId}</p>
+                            <div className="min-w-0 overflow-hidden">
+                              <p className="text-sm font-medium truncate max-w-[120px]">{rec.employee?.fullName || rec.employeeId}</p>
+                              <p className="text-[10px] text-muted-foreground font-mono truncate">{rec.employeeId}</p>
                             </div>
                           </div>
                         </TableCell>
                         <TableCell className="hidden md:table-cell">
                           <FirmBadge firm={rec.employee?.department || ''} />
                         </TableCell>
-                        <TableCell className="hidden lg:table-cell text-sm text-muted-foreground">
+                        <TableCell className="hidden lg:table-cell text-sm text-muted-foreground truncate max-w-[100px]">
                           {rec.employee?.location || '—'}
                         </TableCell>
-                        <TableCell className="text-sm">
+                        <TableCell className="text-sm whitespace-nowrap">
                           {new Date(rec.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
                         </TableCell>
-                        <TableCell className="text-sm font-mono">{rec.checkIn || '—'}</TableCell>
-                        <TableCell className="hidden sm:table-cell text-sm font-mono">{rec.checkOut || '—'}</TableCell>
-                        <TableCell className="text-sm font-medium">{rec.totalHours > 0 ? `${rec.totalHours}h` : '—'}</TableCell>
+                        <TableCell className="text-sm font-mono whitespace-nowrap">{rec.checkIn || '—'}</TableCell>
+                        <TableCell className="hidden sm:table-cell text-sm font-mono whitespace-nowrap">{rec.checkOut || '—'}</TableCell>
+                        <TableCell className="text-sm font-medium whitespace-nowrap">{rec.totalHours > 0 ? `${rec.totalHours}h` : '—'}</TableCell>
                         <TableCell><StatusBadge status={rec.status} /></TableCell>
-                        <TableCell className="hidden lg:table-cell text-sm">
+                        <TableCell className="hidden lg:table-cell text-sm whitespace-nowrap">
                           {rec.overtimeHours > 0 ? (
                             <span className="text-cyan-600 dark:text-cyan-400 font-medium">{rec.overtimeHours}h</span>
                           ) : '—'}
                         </TableCell>
-                        <TableCell className="hidden lg:table-cell text-sm">
+                        <TableCell className="hidden lg:table-cell text-sm whitespace-nowrap">
                           {rec.isSunday ? (
                             <span className="text-blue-600 dark:text-blue-400 font-medium">
                               {rec.sundayHours > 0 ? `${rec.sundayHours}h` : '✓'}
@@ -458,91 +463,95 @@ export function AttendanceTracker() {
         </Card>
       </motion.div>
 
-      {/* ── Mark Attendance Dialog ── */}
+      {/* ── Mark Attendance Dialog — Fixed overlapping ── */}
       <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setForm({ employeeId: '', date: '', checkIn: '', checkOut: '' }); setEmployeeSearch(''); } }}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Clock className="w-5 h-5 text-gold" />
               Mark Attendance
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            {/* Employee Search */}
-            <div>
-              <Label>Employee *</Label>
-              <div className="space-y-2">
-                <div className="relative">
-                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    className="pl-9"
-                    placeholder="Search employee..."
-                    value={employeeSearch}
-                    onChange={(e) => setEmployeeSearch(e.target.value)}
-                  />
-                </div>
-                {!form.employeeId ? (
-                  <ScrollArea className="max-h-40 border rounded-lg">
-                    <div className="p-1">
-                      {filteredEmployees.slice(0, 20).map((e) => (
+          <div className="space-y-4 py-2">
+            {/* Employee Selection — Fixed layout to prevent overlap */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Employee *</Label>
+              {!form.employeeId ? (
+                <div className="space-y-2">
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      className="pl-9"
+                      placeholder="Search employee by name or ID..."
+                      value={employeeSearch}
+                      onChange={(e) => setEmployeeSearch(e.target.value)}
+                      autoFocus
+                    />
+                  </div>
+                  <div className="border rounded-lg max-h-48 overflow-y-auto">
+                    {filteredEmployees.length === 0 ? (
+                      <p className="text-sm text-muted-foreground text-center py-4">No employees found</p>
+                    ) : (
+                      filteredEmployees.slice(0, 20).map((e) => (
                         <button
                           key={e.employeeId}
-                          className="w-full text-left px-3 py-2 rounded-md hover:bg-muted/80 text-sm flex items-center justify-between transition-colors"
+                          className="w-full text-left px-3 py-2.5 hover:bg-muted/80 text-sm flex items-center justify-between transition-colors border-b border-border/50 last:border-0"
                           onClick={() => { setForm({ ...form, employeeId: e.employeeId }); setEmployeeSearch(''); }}
                         >
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 min-w-0 overflow-hidden">
                             <FirmBadge firm={e.department} />
-                            <span>{e.fullName}</span>
+                            <span className="truncate">{e.fullName}</span>
                           </div>
-                          <span className="text-xs text-muted-foreground font-mono">{e.employeeId}</span>
+                          <span className="text-xs text-muted-foreground font-mono shrink-0 ml-2">{e.employeeId}</span>
                         </button>
-                      ))}
-                    </div>
-                  </ScrollArea>
-                ) : (
-                  <div className="flex items-center justify-between px-3 py-2 bg-muted/50 rounded-lg">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium">
-                        {employees.find((e) => e.employeeId === form.employeeId)?.fullName}
-                      </span>
-                      <FirmBadge firm={employees.find((e) => e.employeeId === form.employeeId)?.department || ''} />
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 text-xs"
-                      onClick={() => setForm({ ...form, employeeId: '' })}
-                    >
-                      Change
-                    </Button>
+                      ))
+                    )}
                   </div>
-                )}
-              </div>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between px-3 py-2.5 bg-muted/50 rounded-lg gap-2">
+                  <div className="flex items-center gap-2 min-w-0 overflow-hidden">
+                    <div className="w-7 h-7 rounded-full gradient-laxree flex items-center justify-center text-white text-[10px] font-bold shrink-0">
+                      {selectedEmployee?.fullName?.charAt(0) || '?'}
+                    </div>
+                    <span className="text-sm font-medium truncate">{selectedEmployee?.fullName}</span>
+                    <FirmBadge firm={selectedEmployee?.department || ''} />
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs shrink-0 px-2"
+                    onClick={() => setForm({ ...form, employeeId: '' })}
+                  >
+                    <X className="w-3 h-3 mr-1" /> Change
+                  </Button>
+                </div>
+              )}
             </div>
 
-            <div>
-              <Label>Date *</Label>
-              <Input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Date *</Label>
+              <Input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} className="w-full" />
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label>Check-In Time</Label>
-                <Input type="time" value={form.checkIn} onChange={(e) => setForm({ ...form, checkIn: e.target.value })} />
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Check-In Time</Label>
+                <Input type="time" value={form.checkIn} onChange={(e) => setForm({ ...form, checkIn: e.target.value })} className="w-full" />
               </div>
-              <div>
-                <Label>Check-Out Time</Label>
-                <Input type="time" value={form.checkOut} onChange={(e) => setForm({ ...form, checkOut: e.target.value })} />
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Check-Out Time</Label>
+                <Input type="time" value={form.checkOut} onChange={(e) => setForm({ ...form, checkOut: e.target.value })} className="w-full" />
               </div>
             </div>
 
             <div className="flex items-start gap-2 p-3 rounded-lg bg-gold/5 border border-gold/10">
               <Info className="w-4 h-4 text-gold shrink-0 mt-0.5" />
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-muted-foreground leading-relaxed">
                 System auto-calculates working hours, late entry detection, overtime, Sunday hours, and public holiday tracking.
               </p>
             </div>
 
-            <Button className="w-full gradient-laxree text-white" onClick={handleSubmit}>
+            <Button className="w-full gradient-laxree text-white h-10" onClick={handleSubmit}>
               Save Attendance
             </Button>
           </div>

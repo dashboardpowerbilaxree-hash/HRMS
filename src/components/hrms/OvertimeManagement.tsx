@@ -79,27 +79,27 @@ function AnimatedCounter({ value, prefix = '', suffix = '', decimals = 0 }: {
 
 // ── Firm Badge ──
 function FirmBadge({ firm }: { firm: string }) {
-  return <span className={FIRM_BADGE_CLASS[firm] || 'firm-badge-lapl'}>{firm}</span>;
+  return <span className={`${FIRM_BADGE_CLASS[firm] || 'firm-badge-lapl'} whitespace-nowrap shrink-0`}>{firm}</span>;
 }
 
 // ── OT Type Badge ──
 function OTTypeBadge({ isSunday, isHoliday }: { isSunday: boolean; isHoliday: boolean }) {
   if (isHoliday) {
     return (
-      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border bg-purple-500/15 border-purple-500/20 text-purple-600 dark:text-purple-400">
+      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border whitespace-nowrap shrink-0 bg-purple-500/15 border-purple-500/20 text-purple-600 dark:text-purple-400">
         <PartyPopper className="w-3 h-3 mr-1" /> Holiday
       </span>
     );
   }
   if (isSunday) {
     return (
-      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border bg-blue-500/15 border-blue-500/20 text-blue-600 dark:text-blue-400">
+      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border whitespace-nowrap shrink-0 bg-blue-500/15 border-blue-500/20 text-blue-600 dark:text-blue-400">
         <Sun className="w-3 h-3 mr-1" /> Sunday
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border bg-cyan-500/15 border-cyan-500/20 text-cyan-600 dark:text-cyan-400">
+    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border whitespace-nowrap shrink-0 bg-cyan-500/15 border-cyan-500/20 text-cyan-600 dark:text-cyan-400">
       <Clock className="w-3 h-3 mr-1" /> Regular
     </span>
   );
@@ -304,7 +304,7 @@ export function OvertimeManagement() {
         transition={{ delay: 0.1 }}
         className="glass-card card-gold-hover p-3"
       >
-        <div className="flex gap-3">
+        <div className="flex gap-3 flex-wrap">
           <Select value={filterMonth} onValueChange={setFilterMonth}>
             <SelectTrigger className="w-full sm:w-36 h-9">
               <CalendarDays className="w-3.5 h-3.5 mr-1.5 text-muted-foreground" />
@@ -347,7 +347,7 @@ export function OvertimeManagement() {
                     <Icon className="w-5 h-5 text-white" />
                   </div>
                   <div>
-                    <p className="text-xs text-muted-foreground font-medium">{card.title}</p>
+                    <p className="text-xs text-muted-foreground font-medium truncate">{card.title}</p>
                     <p className="text-xl font-bold">
                       {card.format === 'currency' ? (
                         <AnimatedCounter value={card.value} prefix={card.prefix || ''} decimals={0} />
@@ -470,21 +470,21 @@ export function OvertimeManagement() {
                             <div className="w-7 h-7 rounded-full gradient-laxree flex items-center justify-center text-white text-[10px] font-bold shrink-0">
                               {r.employee?.fullName?.charAt(0) || '?'}
                             </div>
-                            <div className="min-w-0">
+                            <div className="min-w-0 overflow-hidden">
                               <p className="text-sm font-medium truncate">{r.employee?.fullName || r.employeeId}</p>
-                              <p className="text-[10px] text-muted-foreground font-mono">{r.employeeId}</p>
+                              <p className="text-[10px] text-muted-foreground font-mono whitespace-nowrap">{r.employeeId}</p>
                             </div>
                           </motion.div>
                         </TableCell>
                         <TableCell className="hidden md:table-cell">
                           <FirmBadge firm={r.employee?.department || ''} />
                         </TableCell>
-                        <TableCell className="text-sm">
+                        <TableCell className="text-sm whitespace-nowrap">
                           {new Date(r.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
                         </TableCell>
-                        <TableCell className="text-sm font-medium">{r.hours}h</TableCell>
-                        <TableCell className="hidden sm:table-cell text-sm font-mono">₹{r.rate}/hr</TableCell>
-                        <TableCell className="text-sm font-bold text-gold">
+                        <TableCell className="text-sm font-medium whitespace-nowrap">{r.hours}h</TableCell>
+                        <TableCell className="hidden sm:table-cell text-sm font-mono whitespace-nowrap">₹{r.rate}/hr</TableCell>
+                        <TableCell className="text-sm font-bold text-gold whitespace-nowrap">
                           ₹{r.amount.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
                         </TableCell>
                         <TableCell>
@@ -508,7 +508,7 @@ export function OvertimeManagement() {
           setEmployeeSearch('');
         }
       }}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Timer className="w-5 h-5 text-gold" />
@@ -530,31 +530,31 @@ export function OvertimeManagement() {
                   />
                 </div>
                 {!form.employeeId ? (
-                  <ScrollArea className="max-h-40 border rounded-lg">
+                  <div className="max-h-40 border rounded-lg overflow-y-auto">
                     <div className="p-1">
                       {filteredEmployees.slice(0, 20).map((e) => (
                         <button
                           key={e.employeeId}
-                          className="w-full text-left px-3 py-2 rounded-md hover:bg-muted/80 text-sm flex items-center justify-between transition-colors"
+                          className="w-full text-left px-3 py-2 rounded-md hover:bg-muted/80 text-sm flex items-center justify-between transition-colors gap-2"
                           onClick={() => {
                             setForm({ ...form, employeeId: e.employeeId, rate: e.overtimeRate });
                             setEmployeeSearch('');
                           }}
                         >
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 min-w-0 overflow-hidden">
                             <FirmBadge firm={e.department} />
-                            <span>{e.fullName}</span>
+                            <span className="truncate">{e.fullName}</span>
                           </div>
-                          <span className="text-xs font-mono text-muted-foreground">{e.employeeId}</span>
+                          <span className="text-xs font-mono text-muted-foreground whitespace-nowrap shrink-0">{e.employeeId}</span>
                         </button>
                       ))}
                     </div>
-                  </ScrollArea>
+                  </div>
                 ) : (
                   <div className="flex items-center justify-between px-3 py-2 bg-muted/50 rounded-lg">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 min-w-0 overflow-hidden">
                       <FirmBadge firm={selectedEmp?.department || ''} />
-                      <span className="text-sm font-medium">{selectedEmp?.fullName}</span>
+                      <span className="text-sm font-medium truncate">{selectedEmp?.fullName}</span>
                     </div>
                     <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => setForm({ ...form, employeeId: '', rate: 0 })}>
                       Change
