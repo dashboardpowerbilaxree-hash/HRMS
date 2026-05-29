@@ -79,7 +79,7 @@ export function SettingsPanel() {
       >
         <div>
           <h2 className="text-xl font-bold flex items-center gap-2">
-            <Settings className="w-5 h-5 text-primary" />
+            <Settings className="w-5 h-5 text-gold" />
             Settings
           </h2>
           <p className="text-sm text-muted-foreground">Configure your Laxree HRMS system</p>
@@ -96,14 +96,14 @@ export function SettingsPanel() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.05 }}
       >
-        <Card className="glass-card border-0">
+        <Card className="glass-card card-gold-hover border-0">
           <CardContent className="p-6">
             <div className="flex items-center gap-4">
-              <div className="w-16 h-16 rounded-2xl gradient-laxree flex items-center justify-center overflow-hidden neon-glow">
+              <div className="w-16 h-16 rounded-2xl gradient-laxree flex items-center justify-center overflow-hidden shadow-[0_0_20px_rgba(212,168,67,0.3)]">
                 <Image src="/laxree-logo.png" alt="Laxree" width={52} height={52} className="rounded-xl" />
               </div>
               <div>
-                <h3 className="text-lg font-bold neon-text">Laxree Group of Companies</h3>
+                <h3 className="text-lg font-bold text-gold-gradient">Laxree Group of Companies</h3>
                 <p className="text-sm text-muted-foreground">AI-Powered HRMS Dashboard &middot; Firms: LAPL, LRSL, SI, SDF</p>
                 <div className="flex items-center gap-2 mt-1">
                   <Badge variant="outline" className="text-[10px]">v2.0</Badge>
@@ -125,10 +125,10 @@ export function SettingsPanel() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 + gi * 0.05 }}
           >
-            <Card className="glass-card border-0">
+            <Card className="glass-card card-gold-hover border-0">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                  <GroupIcon className="w-4 h-4 text-primary" />
+                  <GroupIcon className="w-4 h-4 text-gold" />
                   {group.title}
                 </CardTitle>
               </CardHeader>
@@ -187,10 +187,10 @@ export function SettingsPanel() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.3 }}
       >
-        <Card className="glass-card border-0">
+        <Card className="glass-card card-gold-hover border-0">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-semibold flex items-center gap-2">
-              <Info className="w-4 h-4 text-primary" />
+              <Info className="w-4 h-4 text-gold" />
               Laxree Salary Formula Reference
             </CardTitle>
           </CardHeader>
@@ -229,7 +229,7 @@ export function SettingsPanel() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.35 }}
       >
-        <Card className="glass-card border-0">
+        <Card className="glass-card card-gold-hover border-0">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-semibold">About</CardTitle>
           </CardHeader>

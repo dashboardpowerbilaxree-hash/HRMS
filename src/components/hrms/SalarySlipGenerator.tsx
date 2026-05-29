@@ -70,7 +70,7 @@ export function SalarySlipGenerator() {
       >
         <div>
           <h2 className="text-xl font-bold flex items-center gap-2">
-            <FileText className="w-5 h-5 text-primary" />
+            <FileText className="w-5 h-5 text-gold" />
             Salary Slip Generator
           </h2>
           <p className="text-sm text-muted-foreground">Auto-generated salary slips with Laxree formula calculations</p>
@@ -100,7 +100,7 @@ export function SalarySlipGenerator() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
         >
-          <Card className="glass-card border-0 print:shadow-none print:border print:border-black" id="salary-slip">
+          <Card className="glass-card card-gold-hover border-0 print:shadow-none print:border print:border-black" id="salary-slip">
             <CardHeader className="text-center pb-2">
               <div className="flex items-center justify-center gap-3 mb-2">
                 <div className="w-12 h-12 rounded-xl gradient-laxree flex items-center justify-center overflow-hidden">
@@ -148,7 +148,7 @@ export function SalarySlipGenerator() {
               {/* Earnings & Deductions */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <h4 className="font-semibold text-sm mb-2 text-emerald-600 dark:text-emerald-400">Earnings</h4>
+                  <h4 className="font-semibold text-sm mb-2 text-gold">Earnings</h4>
                   <div className="space-y-1 text-sm">
                     <div className="flex justify-between"><span>Gross (Hrs × Rate)</span><span>₹{slip.payroll.grossSalary.toLocaleString()}</span></div>
                     <div className="flex justify-between"><span>OT Amount ({slip.payroll.otHours || 0}h × ₹{(slip.payroll.otRate || 0).toFixed(2)})</span><span>₹{(slip.payroll.otAmount || 0).toLocaleString()}</span></div>
@@ -179,7 +179,7 @@ export function SalarySlipGenerator() {
                 <div><p className="text-xs text-muted-foreground">Present Days</p><p className="text-lg font-bold">{slip.payroll.presentDays}</p></div>
                 <div><p className="text-xs text-muted-foreground">Absent Days</p><p className="text-lg font-bold text-destructive">{slip.payroll.absentDays}</p></div>
                 <div><p className="text-xs text-muted-foreground">OT Hours</p><p className="text-lg font-bold text-cyan-600 dark:text-cyan-400">{(slip.payroll.otHours || 0).toFixed(1)}h</p></div>
-                <div><p className="text-xs text-muted-foreground">Net Salary</p><p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">₹{slip.payroll.netSalary.toLocaleString()}</p></div>
+                <div><p className="text-xs text-muted-foreground">Net Salary</p><p className="text-2xl font-bold text-gold">₹{slip.payroll.netSalary.toLocaleString()}</p></div>
               </div>
 
               {/* Formula Footer */}
@@ -190,7 +190,7 @@ export function SalarySlipGenerator() {
           </Card>
         </motion.div>
       ) : (
-        <Card className="glass-card border-0">
+        <Card className="glass-card card-gold-hover border-0">
           <CardContent className="p-8 text-center text-muted-foreground">
             <FileText className="w-12 h-12 mx-auto mb-3 opacity-30" />
             <p>Select an employee and period to generate salary slip</p>

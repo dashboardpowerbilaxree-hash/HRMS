@@ -307,7 +307,7 @@ export function PayrollAutomation() {
       value: totalNet,
       icon: DollarSign,
       gradient: 'gradient-success',
-      color: 'text-emerald-500',
+      color: 'text-gold',
       prefix: '₹',
       format: 'currency',
     },
@@ -330,7 +330,7 @@ export function PayrollAutomation() {
       >
         <div>
           <h2 className="text-xl font-bold flex items-center gap-2">
-            <IndianRupee className="w-5 h-5 text-primary" />
+            <IndianRupee className="w-5 h-5 text-gold" />
             Payroll Automation
           </h2>
           <p className="text-sm text-muted-foreground">
@@ -452,8 +452,8 @@ export function PayrollAutomation() {
         className="glass-card p-4"
       >
         <div className="flex items-start gap-3">
-          <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-            <Info className="w-4.5 h-4.5 text-primary" />
+          <div className="w-9 h-9 rounded-lg bg-gold/10 flex items-center justify-center shrink-0">
+            <Info className="w-4.5 h-4.5 text-gold" />
           </div>
           <div className="space-y-1.5">
             <p className="text-sm font-semibold">Laxree Payroll Formula</p>
@@ -484,7 +484,7 @@ export function PayrollAutomation() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.25 }}
       >
-        <Card className="glass-card border-0">
+        <Card className="glass-card card-gold-hover border-0">
           <CardContent className="p-0">
             <ScrollArea className="max-h-[50vh]">
               <Table>
@@ -590,7 +590,7 @@ export function PayrollAutomation() {
                             <span className="text-amber-600 dark:text-amber-400">₹{p.arrear.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
                           ) : '—'}
                         </TableCell>
-                        <TableCell className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
+                        <TableCell className="text-sm font-bold text-gold">
                           ₹{p.netSalary.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
                         </TableCell>
                         <TableCell>
@@ -617,7 +617,7 @@ export function PayrollAutomation() {
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <DollarSign className="w-5 h-5 text-primary" />
+              <DollarSign className="w-5 h-5 text-gold" />
               Generate Payroll
             </DialogTitle>
           </DialogHeader>
@@ -672,8 +672,8 @@ export function PayrollAutomation() {
 
             {/* Salary info for selected employee */}
             {selectedEmp && (
-              <div className="flex items-center gap-2 p-2.5 rounded-lg bg-primary/5 border border-primary/10 text-xs">
-                <Info className="w-3.5 h-3.5 text-primary shrink-0" />
+              <div className="flex items-center gap-2 p-2.5 rounded-lg bg-gold/5 border border-gold/10 text-xs">
+                <Info className="w-3.5 h-3.5 text-gold shrink-0" />
                 <span>
                   <strong>{selectedEmp.salaryType}</strong> worker &middot; Monthly: ₹{selectedEmp.basicSalary.toLocaleString('en-IN')}
                   {selectedEmp.salaryType === 'Hourly' && ` · Shift: ${selectedEmp.shiftHours}h`}
@@ -767,7 +767,7 @@ export function PayrollAutomation() {
                   </div>
                   <div>
                     <p className="text-[10px] text-muted-foreground">Net Salary</p>
-                    <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400">₹{salaryPreview.net.toLocaleString('en-IN')}</p>
+                    <p className="text-sm font-bold text-gold">₹{salaryPreview.net.toLocaleString('en-IN')}</p>
                   </div>
                 </div>
               </div>

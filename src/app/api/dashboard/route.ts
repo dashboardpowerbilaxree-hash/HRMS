@@ -35,6 +35,30 @@ export async function GET() {
     const firmCounts = await db.employee.groupBy({ by: ['firm'], _count: { firm: true } });
     const firmWiseCount = firmCounts.map(f => ({ firm: f.firm, count: f._count.firm }));
 
+    // Firm payroll breakdown
+    const firmPayrollBreakdown: Record<string, { count: number; totalGross: number; totalNet: number }> = {};
+    for (const fc of firmCounts) {
+      const firmName = fc.firm;
+      const firmPayrolls = payrolls.filter(p => {
+        // Find employee for this payroll to check their firm
+        return true; // We'll filter properly below
+      });
+      firmPayrollBreakdown[firmName] = { count: fc._count.firm, totalGross: 0, totalNet: 0 };
+    }
+    // Calculate payroll per firm by looking up employee firm
+    const payrollEmployees = await db.payroll.findMany({
+      where: { month, year },
+      include: { employee: { select: { firm: true } } },
+    });
+    for (const p of payrollEmployees) {
+      const firm = p.employee.firm;
+      if (!firmPayrollBreakdown[firm]) {
+        firmPayrollBreakdown[firm] = { count: 0, totalGross: 0, totalNet: 0 };
+      }
+      firmPayrollBreakdown[firm].totalGross += p.grossSalary;
+      firmPayrollBreakdown[firm].totalNet += p.netSalary;
+    }
+
     // Location-wise counts
     const locationCounts = await db.employee.groupBy({ by: ['location'], _count: { location: true } });
     const locationWiseCount = locationCounts.map(l => ({ location: l.location, count: l._count.location }));
@@ -71,7 +95,7 @@ export async function GET() {
 
     return NextResponse.json({
       totalEmployees,
-      activeEmployees: totalEmployees,
+      activeEmployees,
       inactiveEmployees,
       presentToday,
       absentToday,
@@ -80,6 +104,7 @@ export async function GET() {
       monthlyPayrollCost,
       pendingLeaves,
       firmWiseCount,
+      firmPayrollBreakdown,
       locationWiseCount,
       firmsCount: firms.length,
       locationsCount: locations.length,

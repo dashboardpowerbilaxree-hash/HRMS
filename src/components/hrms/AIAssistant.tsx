@@ -62,7 +62,7 @@ export function AIAssistant() {
     <div className="space-y-4 h-full flex flex-col">
       <div>
         <h2 className="text-xl font-bold flex items-center gap-2">
-          <Sparkles className="w-5 h-5 text-primary" />
+          <Sparkles className="w-5 h-5 text-gold" />
           AI HR Assistant
         </h2>
         <p className="text-sm text-muted-foreground">Powered by AI &middot; Ask anything about HR, payroll, attendance, or policies</p>
@@ -78,7 +78,7 @@ export function AIAssistant() {
       </div>
 
       {/* Chat Messages */}
-      <Card className="glass-card border-0 flex-1 flex flex-col min-h-0">
+      <Card className="glass-card card-gold-hover border-0 flex-1 flex flex-col min-h-0">
         <ScrollArea className="flex-1 p-4" ref={scrollRef}>
           <div className="space-y-4">
             {messages.map((msg, i) => (
@@ -88,7 +88,7 @@ export function AIAssistant() {
                 animate={{ opacity: 1, y: 0 }}
                 className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}
               >
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${msg.role === 'assistant' ? 'gradient-primary' : 'bg-muted'}`}>
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${msg.role === 'assistant' ? 'bg-gold' : 'bg-muted'}`}>
                   {msg.role === 'assistant' ? <Bot className="w-4 h-4 text-white" /> : <User className="w-4 h-4" />}
                 </div>
                 <div className={`max-w-[75%] p-3 rounded-xl text-sm ${msg.role === 'assistant' ? 'chat-bubble-ai' : 'chat-bubble-user'}`}>
@@ -98,7 +98,7 @@ export function AIAssistant() {
             ))}
             {loading && (
               <div className="flex gap-3">
-                <div className="w-8 h-8 rounded-full gradient-primary flex items-center justify-center"><Bot className="w-4 h-4 text-white" /></div>
+                <div className="w-8 h-8 rounded-full bg-gold flex items-center justify-center"><Bot className="w-4 h-4 text-white" /></div>
                 <div className="chat-bubble-ai p-3 rounded-xl"><Loader2 className="w-4 h-4 animate-spin" /></div>
               </div>
             )}
@@ -115,7 +115,7 @@ export function AIAssistant() {
           onKeyDown={e => e.key === 'Enter' && handleSend()}
           className="flex-1"
         />
-        <Button className="gradient-primary text-white" onClick={() => handleSend()} disabled={loading || !input.trim()}>
+        <Button className="bg-gold text-white" onClick={() => handleSend()} disabled={loading || !input.trim()}>
           <Send className="w-4 h-4" />
         </Button>
       </div>

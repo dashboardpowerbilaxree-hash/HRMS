@@ -6,7 +6,7 @@ import {
   Users, UserCheck, UserX, Clock, DollarSign, Timer,
   TrendingUp, TrendingDown, CalendarDays, Building2,
   AlertCircle, Sparkles, ArrowUpRight, ArrowDownRight,
-  Briefcase, IndianRupee, MapPin, Zap, FileText, Bot
+  Briefcase, IndianRupee, MapPin, Zap, FileText, Bot, Crown
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -44,20 +44,24 @@ interface DashboardData {
   payrollTrend: { month: number; year: number; total: number }[];
 }
 
-// Emerald/Teal color palette for Laxree
+// Laxree Gold + Teal premium palette
 const LAXREE_COLORS = {
-  emerald: '#10b981',
+  gold: '#D4A843',
+  goldDark: '#B8860B',
   teal: '#14b8a6',
+  emerald: '#10b981',
   cyan: '#06b6d4',
   amber: '#f59e0b',
   rose: '#f43f5e',
   violet: '#8b5cf6',
   sky: '#0ea5e9',
   lime: '#84cc16',
+  warmGold: '#C9A84C',
+  richGold: '#E5C158',
 };
 
 const FIRM_COLORS: Record<string, string> = {
-  LAPL: LAXREE_COLORS.emerald,
+  LAPL: LAXREE_COLORS.gold,
   LRSL: LAXREE_COLORS.cyan,
   SI: LAXREE_COLORS.amber,
   SDF: LAXREE_COLORS.violet,
@@ -133,14 +137,14 @@ export function DashboardHome() {
     const insights: { icon: string; text: string; color: string }[] = [];
 
     // Highest payroll firm
-    const firmPayroll = data.firmPayrollBreakdown;
+    const firmPayroll = data.firmPayrollBreakdown || {};
     const firmEntries = Object.entries(firmPayroll);
     if (firmEntries.length > 0) {
       const highest = firmEntries.reduce((a, b) => b[1].totalNet > a[1].totalNet ? b : a, firmEntries[0]);
       insights.push({
         icon: '💰',
         text: `${highest[0]} has the highest payroll at ₹${Math.round(highest[1].totalNet).toLocaleString()}`,
-        color: 'text-emerald-400',
+        color: 'text-gold',
       });
     }
 
@@ -322,14 +326,16 @@ export function DashboardHome() {
     },
   ];
 
+  const firmPayrollBreakdown = data.firmPayrollBreakdown || {};
+
   // Firm distribution cards
   const firmCards = data.firmWiseCount.map(f => {
-    const payroll = data.firmPayrollBreakdown[f.firm];
+    const payroll = firmPayrollBreakdown[f.firm];
     return {
       name: f.firm,
       count: f.count,
       payroll: payroll?.totalNet || 0,
-      color: FIRM_COLORS[f.firm] || LAXREE_COLORS.teal,
+      color: FIRM_COLORS[f.firm] || LAXREE_COLORS.gold,
       badgeClass: FIRM_BADGE_CLASS[f.firm] || 'firm-badge-lapl',
     };
   });
@@ -337,15 +343,15 @@ export function DashboardHome() {
   // Payroll by firm for bar chart
   const payrollByFirm = data.firmWiseCount.map(f => ({
     firm: f.firm,
-    payroll: data.firmPayrollBreakdown[f.firm]?.totalNet || 0,
-    fill: FIRM_COLORS[f.firm] || LAXREE_COLORS.teal,
+    payroll: firmPayrollBreakdown[f.firm]?.totalNet || 0,
+    fill: FIRM_COLORS[f.firm] || LAXREE_COLORS.gold,
   }));
 
   // Location distribution for bar chart
   const locationDistribution = data.locationWiseCount.map(l => ({
     location: l.location,
     count: l.count,
-    fill: LAXREE_COLORS.teal,
+    fill: LAXREE_COLORS.gold,
   }));
 
   // Payroll cost trend (6 months) formatted for bar chart
@@ -367,8 +373,8 @@ export function DashboardHome() {
         className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3"
       >
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary/5 border border-primary/10">
-            <Clock className="w-4 h-4 text-primary" />
+          <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gold/5 border border-gold/15">
+            <Clock className="w-4 h-4 text-gold" />
             <span className="text-sm font-medium">{clock}</span>
           </div>
         </div>
@@ -376,21 +382,21 @@ export function DashboardHome() {
           <Button
             variant="outline"
             size="sm"
-            className="gap-1.5"
+            className="gap-1.5 border-gold/20 hover:border-gold/40 hover:bg-gold/5"
             onClick={() => setCurrentPage('payroll')}
           >
-            <Zap className="w-3.5 h-3.5" /> Generate Payroll
+            <Zap className="w-3.5 h-3.5 text-gold" /> Generate Payroll
           </Button>
           <Button
             variant="outline"
             size="sm"
-            className="gap-1.5"
+            className="gap-1.5 border-gold/20 hover:border-gold/40 hover:bg-gold/5"
             onClick={() => setCurrentPage('attendance')}
           >
-            <Clock className="w-3.5 h-3.5" /> Mark Attendance
+            <Clock className="w-3.5 h-3.5 text-gold" /> Mark Attendance
           </Button>
           <Button
-            className="gradient-laxree text-white gap-1.5"
+            className="gradient-laxree text-white gap-1.5 btn-gold-glow"
             size="sm"
             onClick={() => setCurrentPage('employees')}
           >
@@ -399,18 +405,22 @@ export function DashboardHome() {
         </div>
       </motion.div>
 
-      {/* AI Insight Card */}
+      {/* AI Insight Card — Premium gold border */}
       {aiInsights.length > 0 && (
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.1 }}
-          className="glass-card animate-glow-pulse p-4 md:p-5"
+          className="glass-card animate-glow-pulse p-4 md:p-5 border border-gold/15"
         >
           <div className="flex items-center gap-2 mb-3">
-            <Bot className="w-5 h-5 text-primary" />
-            <h3 className="text-sm font-semibold neon-text">AI Insights</h3>
-            <span className="text-[10px] text-muted-foreground ml-auto">Powered by Laxree AI</span>
+            <div className="w-6 h-6 rounded-md gradient-laxree flex items-center justify-center">
+              <Bot className="w-3.5 h-3.5 text-white" />
+            </div>
+            <h3 className="text-sm font-semibold text-gold-gradient">AI Insights</h3>
+            <span className="text-[10px] text-muted-foreground ml-auto flex items-center gap-1">
+              <Crown className="w-3 h-3 text-gold" /> Powered by Laxree AI
+            </span>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {aiInsights.map((insight, i) => (
@@ -419,7 +429,7 @@ export function DashboardHome() {
                 initial={{ opacity: 0, x: -10 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: i * 0.1 + 0.3 }}
-                className="flex items-start gap-2 text-sm"
+                className="flex items-start gap-2 text-sm p-2 rounded-lg bg-muted/30"
               >
                 <span className="text-base shrink-0">{insight.icon}</span>
                 <span className="text-muted-foreground">{insight.text}</span>
@@ -429,7 +439,7 @@ export function DashboardHome() {
         </motion.div>
       )}
 
-      {/* KPI Cards Row */}
+      {/* KPI Cards Row — Premium gold-accented */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         {kpiCards.map((card, i) => {
           const Icon = card.icon;
@@ -479,7 +489,7 @@ export function DashboardHome() {
         })}
       </div>
 
-      {/* Firm Distribution Row */}
+      {/* Firm Distribution Row — Premium cards with gold accents */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -498,8 +508,8 @@ export function DashboardHome() {
                 <CardContent className="p-3 md:p-4">
                   <div className="flex items-center gap-2 mb-2">
                     <div
-                      className="w-2.5 h-2.5 rounded-full shrink-0"
-                      style={{ backgroundColor: firm.color }}
+                      className="w-2.5 h-2.5 rounded-full shrink-0 shadow-sm"
+                      style={{ backgroundColor: firm.color, boxShadow: `0 0 8px ${firm.color}40` }}
                     />
                     <span className="text-xs font-bold truncate">{firm.name}</span>
                   </div>
@@ -508,7 +518,7 @@ export function DashboardHome() {
                     <span className="text-[10px] text-muted-foreground">employees</span>
                   </div>
                   <div className="flex items-baseline gap-1 mt-1">
-                    <IndianRupee className="w-3 h-3 text-muted-foreground" />
+                    <IndianRupee className="w-3 h-3 text-gold" />
                     <span className="text-xs font-medium text-muted-foreground">
                       {firm.payroll > 0 ? `₹${Math.round(firm.payroll).toLocaleString()}` : 'No payroll'}
                     </span>
@@ -528,10 +538,10 @@ export function DashboardHome() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.5 }}
         >
-          <Card className="glass-card border-0">
+          <Card className="glass-card card-gold-hover border-0">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                <TrendingUp className="w-4 h-4 text-primary" />
+                <TrendingUp className="w-4 h-4 text-gold" />
                 Attendance Trend (7 Days)
               </CardTitle>
             </CardHeader>
@@ -541,8 +551,8 @@ export function DashboardHome() {
                   <AreaChart data={data.attendanceTrend}>
                     <defs>
                       <linearGradient id="laxreePresentGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor={LAXREE_COLORS.emerald} stopOpacity={0.35} />
-                        <stop offset="95%" stopColor={LAXREE_COLORS.emerald} stopOpacity={0} />
+                        <stop offset="5%" stopColor={LAXREE_COLORS.gold} stopOpacity={0.35} />
+                        <stop offset="95%" stopColor={LAXREE_COLORS.gold} stopOpacity={0} />
                       </linearGradient>
                       <linearGradient id="laxreeAbsentGrad" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor={LAXREE_COLORS.rose} stopOpacity={0.2} />
@@ -571,7 +581,7 @@ export function DashboardHome() {
                     <Area
                       type="monotone"
                       dataKey="present"
-                      stroke={LAXREE_COLORS.emerald}
+                      stroke={LAXREE_COLORS.gold}
                       fill="url(#laxreePresentGrad)"
                       strokeWidth={2}
                       name="Present"
@@ -599,10 +609,10 @@ export function DashboardHome() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.55 }}
         >
-          <Card className="glass-card border-0">
+          <Card className="glass-card card-gold-hover border-0">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                <DollarSign className="w-4 h-4 text-primary" />
+                <DollarSign className="w-4 h-4 text-gold" />
                 Payroll Cost Trend (6 Months)
               </CardTitle>
             </CardHeader>
@@ -612,8 +622,8 @@ export function DashboardHome() {
                   <BarChart data={payrollTrendFormatted} barCategoryGap="20%">
                     <defs>
                       <linearGradient id="laxreePayrollBarGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor={LAXREE_COLORS.teal} stopOpacity={0.9} />
-                        <stop offset="95%" stopColor={LAXREE_COLORS.emerald} stopOpacity={0.7} />
+                        <stop offset="5%" stopColor={LAXREE_COLORS.gold} stopOpacity={0.9} />
+                        <stop offset="95%" stopColor={LAXREE_COLORS.goldDark} stopOpacity={0.7} />
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
@@ -649,10 +659,10 @@ export function DashboardHome() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.6 }}
         >
-          <Card className="glass-card border-0">
+          <Card className="glass-card card-gold-hover border-0">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                <Briefcase className="w-4 h-4 text-primary" />
+                <Briefcase className="w-4 h-4 text-gold" />
                 Firm-wise Distribution
               </CardTitle>
             </CardHeader>
@@ -673,7 +683,7 @@ export function DashboardHome() {
                       {data.firmWiseCount.map((entry, i) => (
                         <Cell
                           key={entry.firm}
-                          fill={FIRM_COLORS[entry.firm] || LAXREE_COLORS.teal}
+                          fill={FIRM_COLORS[entry.firm] || LAXREE_COLORS.gold}
                         />
                       ))}
                     </Pie>
@@ -703,10 +713,10 @@ export function DashboardHome() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.65 }}
         >
-          <Card className="glass-card border-0">
+          <Card className="glass-card card-gold-hover border-0">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                <MapPin className="w-4 h-4 text-primary" />
+                <MapPin className="w-4 h-4 text-gold" />
                 Location-wise Distribution
               </CardTitle>
             </CardHeader>
@@ -731,7 +741,7 @@ export function DashboardHome() {
                         fontSize: 12,
                       }}
                     />
-                    <Bar dataKey="count" fill={LAXREE_COLORS.teal} radius={[0, 6, 6, 0]} name="Employees" />
+                    <Bar dataKey="count" fill={LAXREE_COLORS.gold} radius={[0, 6, 6, 0]} name="Employees" />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -745,10 +755,10 @@ export function DashboardHome() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.7 }}
         >
-          <Card className="glass-card border-0">
+          <Card className="glass-card card-gold-hover border-0">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 text-primary" />
+                <AlertCircle className="w-4 h-4 text-gold" />
                 Recent Activity
               </CardTitle>
             </CardHeader>
@@ -764,12 +774,12 @@ export function DashboardHome() {
                       className="flex items-start gap-3 p-2.5 rounded-lg hover:bg-muted/50 transition-colors"
                     >
                       <div className={`w-2 h-2 rounded-full mt-2 shrink-0 ${
-                        n.type === 'payroll' ? 'bg-emerald-500' :
+                        n.type === 'payroll' ? 'bg-gold' :
                         n.type === 'leave' ? 'bg-amber-500' :
                         n.type === 'employee' ? 'bg-cyan-500' :
                         n.type === 'attendance' ? 'bg-teal-500' :
                         n.type === 'holiday' ? 'bg-violet-500' :
-                        'bg-primary'
+                        'bg-gold'
                       }`} />
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium truncate">{n.title}</p>

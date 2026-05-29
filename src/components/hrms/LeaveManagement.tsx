@@ -76,7 +76,7 @@ export function LeaveManagement() {
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
-            <Button className="gradient-primary text-white"><CalendarDays className="w-4 h-4 mr-2" /> Apply Leave</Button>
+            <Button className="bg-gold text-white"><CalendarDays className="w-4 h-4 mr-2" /> Apply Leave</Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader><DialogTitle>Apply Leave</DialogTitle></DialogHeader>
@@ -89,7 +89,7 @@ export function LeaveManagement() {
               </div>
               <div><Label>Days</Label><Input type="number" value={form.days} onChange={e => setForm({ ...form, days: Number(e.target.value) })} /></div>
               <div><Label>Reason</Label><Input value={form.reason} onChange={e => setForm({ ...form, reason: e.target.value })} placeholder="Reason for leave" /></div>
-              <Button className="w-full gradient-primary text-white" onClick={handleSubmit}>Submit Leave</Button>
+              <Button className="w-full bg-gold text-white" onClick={handleSubmit}>Submit Leave</Button>
             </div>
           </DialogContent>
         </Dialog>
@@ -102,7 +102,7 @@ export function LeaveManagement() {
           { title: 'Rejected', value: rejected, color: 'text-red-500', icon: X },
         ].map((c, i) => (
           <motion.div key={c.title} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
-            <Card className="glass-card border-0">
+            <Card className="glass-card card-gold-hover border-0">
               <CardContent className="p-4 flex items-center gap-3">
                 <c.icon className={`w-8 h-8 ${c.color}`} />
                 <div><p className="text-xs text-muted-foreground">{c.title}</p><p className="text-xl font-bold">{c.value}</p></div>
@@ -112,7 +112,7 @@ export function LeaveManagement() {
         ))}
       </div>
 
-      <Card className="glass-card border-0">
+      <Card className="glass-card card-gold-hover border-0">
         <CardContent className="p-0">
           <ScrollArea className="max-h-[55vh]">
             <Table>

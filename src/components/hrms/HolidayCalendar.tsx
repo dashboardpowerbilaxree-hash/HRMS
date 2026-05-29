@@ -74,7 +74,7 @@ export function HolidayCalendar() {
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
-            <Button className="gradient-primary text-white"><Plus className="w-4 h-4 mr-2" /> Add Holiday</Button>
+            <Button className="bg-gold text-white"><Plus className="w-4 h-4 mr-2" /> Add Holiday</Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader><DialogTitle>Add Holiday</DialogTitle></DialogHeader>
@@ -83,7 +83,7 @@ export function HolidayCalendar() {
               <div><Label>Date *</Label><Input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} /></div>
               <div><Label>Type</Label><Select value={form.type} onValueChange={v => setForm({ ...form, type: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="national">National Holiday</SelectItem><SelectItem value="festival">Festival</SelectItem><SelectItem value="optional">Optional Holiday</SelectItem><SelectItem value="company">Company Holiday</SelectItem></SelectContent></Select></div>
               <div><Label>Description</Label><Input value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="Optional description" /></div>
-              <Button className="w-full gradient-primary text-white" onClick={handleSubmit}>Add Holiday</Button>
+              <Button className="w-full bg-gold text-white" onClick={handleSubmit}>Add Holiday</Button>
             </div>
           </DialogContent>
         </Dialog>
@@ -91,10 +91,10 @@ export function HolidayCalendar() {
 
       {Object.entries(grouped).map(([month, items]) => (
         <motion.div key={month} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-          <Card className="glass-card border-0 mb-4">
+          <Card className="glass-card card-gold-hover border-0 mb-4">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                <Palmtree className="w-4 h-4 text-primary" /> {month}
+                <Palmtree className="w-4 h-4 text-gold" /> {month}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -123,7 +123,7 @@ export function HolidayCalendar() {
       ))}
 
       {holidays.length === 0 && (
-        <Card className="glass-card border-0">
+        <Card className="glass-card card-gold-hover border-0">
           <CardContent className="p-8 text-center text-muted-foreground">
             <Palmtree className="w-12 h-12 mx-auto mb-3 opacity-30" />
             <p>No holidays configured. Add holidays to get started.</p>

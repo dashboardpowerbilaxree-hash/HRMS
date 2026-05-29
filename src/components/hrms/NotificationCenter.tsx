@@ -71,13 +71,13 @@ export function NotificationCenter() {
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: i * 0.03 }}
             >
-              <Card className={`border-0 ${n.read ? 'bg-muted/30' : 'glass-card'} transition-colors`}>
+              <Card className={`border-0 ${n.read ? 'bg-muted/30' : 'glass-card card-gold-hover'} transition-colors`}>
                 <CardContent className="p-3 flex items-start gap-3">
                   <div className="text-lg mt-0.5">{typeIcons[n.type] || '🔔'}</div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <p className="text-sm font-medium truncate">{n.title}</p>
-                      {!n.read && <div className="w-2 h-2 rounded-full bg-primary shrink-0" />}
+                      {!n.read && <div className="w-2 h-2 rounded-full bg-gold shrink-0" />}
                     </div>
                     <p className="text-xs text-muted-foreground truncate">{n.message}</p>
                     <p className="text-[10px] text-muted-foreground mt-1">
@@ -89,7 +89,7 @@ export function NotificationCenter() {
             </motion.div>
           ))}
           {notifications.length === 0 && (
-            <Card className="glass-card border-0">
+            <Card className="glass-card card-gold-hover border-0">
               <CardContent className="p-8 text-center text-muted-foreground">
                 <Bell className="w-12 h-12 mx-auto mb-3 opacity-30" />
                 <p>No notifications yet</p>

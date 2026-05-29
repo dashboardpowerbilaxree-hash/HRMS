@@ -236,11 +236,11 @@ export function EmployeeManagement() {
     <span
       className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
         status === 'Yes' || status === 'active'
-          ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+          ? 'bg-gold/15 text-gold dark:text-gold border border-gold/20'
           : 'bg-red-500/15 text-red-600 dark:text-red-400 border border-red-500/20'
       }`}
     >
-      <span className={`w-1.5 h-1.5 rounded-full mr-1 ${status === 'Yes' || status === 'active' ? 'bg-emerald-500' : 'bg-red-500'}`} />
+      <span className={`w-1.5 h-1.5 rounded-full mr-1 ${status === 'Yes' || status === 'active' ? 'bg-gold' : 'bg-red-500'}`} />
       {(status === 'Yes' || status === 'active') ? 'Active' : 'Inactive'}
     </span>
   );
@@ -249,7 +249,7 @@ export function EmployeeManagement() {
   const EmpTypeBadge = ({ type }: { type: string }) => (
     <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${
       type === 'Full Time'
-        ? 'bg-primary/10 text-primary border border-primary/20'
+        ? 'bg-gold/10 text-gold border border-gold/20'
         : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
     }`}>
       {type}
@@ -266,7 +266,7 @@ export function EmployeeManagement() {
       >
         <div>
           <h2 className="text-xl font-bold flex items-center gap-2">
-            <Users className="w-5 h-5 text-primary" />
+            <Users className="w-5 h-5 text-gold" />
             Employee Management
           </h2>
           <p className="text-sm text-muted-foreground">
@@ -362,7 +362,7 @@ export function EmployeeManagement() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
       >
-        <Card className="glass-card border-0">
+        <Card className="glass-card card-gold-hover border-0">
           <CardContent className="p-0">
             <ScrollArea className="max-h-[65vh]">
               <Table>
@@ -406,7 +406,7 @@ export function EmployeeManagement() {
                         className="border-b border-border/50 hover:bg-muted/30 cursor-pointer transition-colors"
                         onClick={() => setSelectedEmployeeId(emp.employeeId)}
                       >
-                        <TableCell className="font-mono text-xs text-primary font-semibold">
+                        <TableCell className="font-mono text-xs text-gold font-semibold">
                           {emp.employeeId}
                         </TableCell>
                         <TableCell>
@@ -486,7 +486,7 @@ export function EmployeeManagement() {
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Users className="w-5 h-5 text-primary" />
+              <Users className="w-5 h-5 text-gold" />
               {editId ? 'Edit Employee' : 'Add New Employee'}
             </DialogTitle>
           </DialogHeader>

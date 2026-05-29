@@ -47,87 +47,99 @@
   --color-glass-border: var(--glass-border);
   --color-success: var(--success);
   --color-warning: var(--warning);
+  --color-gold: var(--gold);
+  --color-gold-soft: var(--gold-soft);
 }
+
+/* ═══════════════════════════════════════════════════════════
+   LAXREE PREMIUM GOLD/BLACK THEME
+   ═══════════════════════════════════════════════════════════ */
 
 :root {
   --radius: 0.75rem;
-  --background: oklch(0.97 0.005 170);
-  --foreground: oklch(0.15 0.02 170);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.15 0.02 170);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.15 0.02 170);
-  --primary: oklch(0.55 0.2 170);
-  --primary-foreground: oklch(0.98 0 0);
-  --secondary: oklch(0.94 0.01 170);
-  --secondary-foreground: oklch(0.2 0.02 170);
-  --muted: oklch(0.94 0.01 170);
-  --muted-foreground: oklch(0.5 0.02 170);
-  --accent: oklch(0.92 0.03 170);
-  --accent-foreground: oklch(0.2 0.02 170);
+  /* Light mode: Cream/Gold luxury palette */
+  --background: oklch(0.97 0.008 85);
+  --foreground: oklch(0.15 0.03 60);
+  --card: oklch(0.99 0.004 85);
+  --card-foreground: oklch(0.15 0.03 60);
+  --popover: oklch(0.99 0.004 85);
+  --popover-foreground: oklch(0.15 0.03 60);
+  --primary: oklch(0.62 0.16 75);
+  --primary-foreground: oklch(0.98 0.005 85);
+  --secondary: oklch(0.93 0.02 80);
+  --secondary-foreground: oklch(0.2 0.03 60);
+  --muted: oklch(0.94 0.015 80);
+  --muted-foreground: oklch(0.5 0.03 70);
+  --accent: oklch(0.92 0.04 75);
+  --accent-foreground: oklch(0.2 0.03 60);
   --destructive: oklch(0.58 0.24 27);
-  --border: oklch(0.9 0.01 170);
-  --input: oklch(0.9 0.01 170);
-  --ring: oklch(0.55 0.2 170);
-  --chart-1: oklch(0.55 0.2 170);
-  --chart-2: oklch(0.6 0.18 185);
-  --chart-3: oklch(0.7 0.15 45);
-  --chart-4: oklch(0.6 0.22 310);
+  --border: oklch(0.9 0.02 80);
+  --input: oklch(0.9 0.02 80);
+  --ring: oklch(0.62 0.16 75);
+  --chart-1: oklch(0.62 0.16 75);
+  --chart-2: oklch(0.55 0.18 55);
+  --chart-3: oklch(0.7 0.12 170);
+  --chart-4: oklch(0.6 0.14 40);
   --chart-5: oklch(0.65 0.2 25);
-  --neon: oklch(0.6 0.25 170);
-  --neon-soft: oklch(0.75 0.15 170);
-  --glass: oklch(1 0 0 / 60%);
-  --glass-border: oklch(1 0 0 / 20%);
+  --neon: oklch(0.7 0.18 75);
+  --neon-soft: oklch(0.8 0.12 75);
+  --glass: oklch(1 0.005 85 / 70%);
+  --glass-border: oklch(0.75 0.12 75 / 25%);
   --success: oklch(0.6 0.2 155);
-  --warning: oklch(0.7 0.18 80);
-  --sidebar: oklch(0.98 0.005 170);
-  --sidebar-foreground: oklch(0.15 0.02 170);
-  --sidebar-primary: oklch(0.55 0.2 170);
-  --sidebar-primary-foreground: oklch(0.98 0 0);
-  --sidebar-accent: oklch(0.94 0.02 170);
-  --sidebar-accent-foreground: oklch(0.2 0.02 170);
-  --sidebar-border: oklch(0.9 0.01 170);
-  --sidebar-ring: oklch(0.55 0.2 170);
+  --warning: oklch(0.72 0.18 80);
+  --gold: oklch(0.72 0.17 75);
+  --gold-soft: oklch(0.82 0.1 75);
+  --sidebar: oklch(0.98 0.008 85);
+  --sidebar-foreground: oklch(0.15 0.03 60);
+  --sidebar-primary: oklch(0.62 0.16 75);
+  --sidebar-primary-foreground: oklch(0.98 0.005 85);
+  --sidebar-accent: oklch(0.94 0.03 75);
+  --sidebar-accent-foreground: oklch(0.2 0.03 60);
+  --sidebar-border: oklch(0.9 0.02 80);
+  --sidebar-ring: oklch(0.62 0.16 75);
 }
 
 .dark {
-  --background: oklch(0.12 0.02 170);
-  --foreground: oklch(0.93 0.01 170);
-  --card: oklch(0.17 0.02 170);
-  --card-foreground: oklch(0.93 0.01 170);
-  --popover: oklch(0.17 0.02 170);
-  --popover-foreground: oklch(0.93 0.01 170);
-  --primary: oklch(0.65 0.22 170);
-  --primary-foreground: oklch(0.12 0.02 170);
-  --secondary: oklch(0.22 0.02 170);
-  --secondary-foreground: oklch(0.9 0.01 170);
-  --muted: oklch(0.22 0.02 170);
-  --muted-foreground: oklch(0.65 0.02 170);
-  --accent: oklch(0.22 0.03 170);
-  --accent-foreground: oklch(0.9 0.01 170);
+  /* Dark mode: Rich Black + Gold luxury — Laxree signature */
+  --background: oklch(0.1 0.01 70);
+  --foreground: oklch(0.93 0.015 75);
+  --card: oklch(0.14 0.015 70);
+  --card-foreground: oklch(0.93 0.015 75);
+  --popover: oklch(0.14 0.015 70);
+  --popover-foreground: oklch(0.93 0.015 75);
+  --primary: oklch(0.75 0.17 80);
+  --primary-foreground: oklch(0.12 0.02 70);
+  --secondary: oklch(0.2 0.02 70);
+  --secondary-foreground: oklch(0.88 0.02 75);
+  --muted: oklch(0.2 0.015 70);
+  --muted-foreground: oklch(0.6 0.03 75);
+  --accent: oklch(0.22 0.04 75);
+  --accent-foreground: oklch(0.88 0.02 75);
   --destructive: oklch(0.65 0.22 25);
-  --border: oklch(0.28 0.02 170);
-  --input: oklch(0.28 0.02 170);
-  --ring: oklch(0.65 0.22 170);
-  --chart-1: oklch(0.65 0.22 170);
-  --chart-2: oklch(0.7 0.2 185);
-  --chart-3: oklch(0.75 0.18 45);
-  --chart-4: oklch(0.7 0.24 310);
-  --chart-5: oklch(0.7 0.22 25);
-  --neon: oklch(0.7 0.25 170);
-  --neon-soft: oklch(0.55 0.15 170);
-  --glass: oklch(0.2 0.02 170 / 60%);
-  --glass-border: oklch(1 0 0 / 10%);
+  --border: oklch(0.25 0.02 70);
+  --input: oklch(0.25 0.02 70);
+  --ring: oklch(0.75 0.17 80);
+  --chart-1: oklch(0.75 0.17 80);
+  --chart-2: oklch(0.65 0.15 55);
+  --chart-3: oklch(0.6 0.2 170);
+  --chart-4: oklch(0.7 0.12 40);
+  --chart-5: oklch(0.7 0.2 25);
+  --neon: oklch(0.8 0.19 80);
+  --neon-soft: oklch(0.55 0.12 75);
+  --glass: oklch(0.16 0.02 70 / 60%);
+  --glass-border: oklch(0.75 0.15 80 / 12%);
   --success: oklch(0.65 0.22 155);
-  --warning: oklch(0.75 0.2 80);
-  --sidebar: oklch(0.14 0.02 170);
-  --sidebar-foreground: oklch(0.9 0.01 170);
-  --sidebar-primary: oklch(0.65 0.22 170);
-  --sidebar-primary-foreground: oklch(0.12 0.02 170);
-  --sidebar-accent: oklch(0.22 0.03 170);
-  --sidebar-accent-foreground: oklch(0.9 0.01 170);
-  --sidebar-border: oklch(0.28 0.02 170);
-  --sidebar-ring: oklch(0.65 0.22 170);
+  --warning: oklch(0.78 0.2 80);
+  --gold: oklch(0.78 0.19 80);
+  --gold-soft: oklch(0.6 0.12 75);
+  --sidebar: oklch(0.12 0.015 70);
+  --sidebar-foreground: oklch(0.9 0.02 75);
+  --sidebar-primary: oklch(0.75 0.17 80);
+  --sidebar-primary-foreground: oklch(0.12 0.02 70);
+  --sidebar-accent: oklch(0.2 0.03 75);
+  --sidebar-accent-foreground: oklch(0.88 0.02 75);
+  --sidebar-border: oklch(0.25 0.02 70);
+  --sidebar-ring: oklch(0.75 0.17 80);
 }
 
 @layer base {
@@ -139,44 +151,59 @@
   }
 }
 
-/* ===== Glassmorphism Card ===== */
+/* ═══════════════════════════════════════════════════════════
+   GLASSMORPHISM — Premium frosted glass effect
+   ═══════════════════════════════════════════════════════════ */
 .glass-card {
   background: var(--glass);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
   border: 1px solid var(--glass-border);
   border-radius: 1rem;
 }
 
-/* ===== Neon Glow (Emerald/Teal) ===== */
+/* ═══════════════════════════════════════════════════════════
+   GOLD NEON GLOW — Laxree signature
+   ═══════════════════════════════════════════════════════════ */
 .neon-glow {
-  box-shadow: 0 0 15px oklch(0.6 0.25 170 / 30%),
-              0 0 30px oklch(0.6 0.25 170 / 15%);
+  box-shadow: 0 0 15px oklch(0.72 0.17 75 / 25%),
+              0 0 30px oklch(0.72 0.17 75 / 10%),
+              inset 0 1px 0 oklch(0.9 0.1 80 / 20%);
 }
 
 .dark .neon-glow {
-  box-shadow: 0 0 20px oklch(0.7 0.25 170 / 40%),
-              0 0 40px oklch(0.7 0.25 170 / 20%);
+  box-shadow: 0 0 20px oklch(0.78 0.19 80 / 35%),
+              0 0 40px oklch(0.78 0.19 80 / 15%),
+              inset 0 1px 0 oklch(0.9 0.1 80 / 15%);
 }
 
 .neon-text {
   color: var(--neon);
-  text-shadow: 0 0 10px oklch(0.6 0.25 170 / 50%);
+  text-shadow: 0 0 10px oklch(0.72 0.17 75 / 40%);
 }
 
 .dark .neon-text {
-  text-shadow: 0 0 20px oklch(0.7 0.25 170 / 60%),
-               0 0 40px oklch(0.7 0.25 170 / 30%);
+  color: oklch(0.82 0.19 80);
+  text-shadow: 0 0 20px oklch(0.78 0.19 80 / 50%),
+               0 0 40px oklch(0.78 0.19 80 / 25%);
 }
 
-/* ===== Laxree Brand Gradient ===== */
+/* ═══════════════════════════════════════════════════════════
+   LAXREE BRAND GRADIENT — Rich gold
+   ═══════════════════════════════════════════════════════════ */
 .gradient-laxree {
-  background: linear-gradient(135deg, oklch(0.55 0.2 170), oklch(0.5 0.18 185));
+  background: linear-gradient(135deg, oklch(0.7 0.17 75), oklch(0.6 0.2 55));
 }
 
-/* ===== Gradient Backgrounds ===== */
+.dark .gradient-laxree {
+  background: linear-gradient(135deg, oklch(0.78 0.19 80), oklch(0.68 0.22 55));
+}
+
+/* ═══════════════════════════════════════════════════════════
+   GRADIENT BACKGROUNDS — Premium palette
+   ═══════════════════════════════════════════════════════════ */
 .gradient-primary {
-  background: linear-gradient(135deg, oklch(0.55 0.2 170), oklch(0.6 0.18 185));
+  background: linear-gradient(135deg, oklch(0.72 0.17 75), oklch(0.65 0.2 55));
 }
 
 .gradient-success {
@@ -184,7 +211,7 @@
 }
 
 .gradient-warning {
-  background: linear-gradient(135deg, oklch(0.65 0.18 80), oklch(0.6 0.2 50));
+  background: linear-gradient(135deg, oklch(0.72 0.18 80), oklch(0.68 0.2 55));
 }
 
 .gradient-danger {
@@ -195,7 +222,9 @@
   background: linear-gradient(135deg, oklch(0.6 0.18 195), oklch(0.55 0.2 210));
 }
 
-/* ===== Animated Counter ===== */
+/* ═══════════════════════════════════════════════════════════
+   ANIMATIONS
+   ═══════════════════════════════════════════════════════════ */
 @keyframes countUp {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
@@ -205,30 +234,60 @@
   animation: countUp 0.5s ease-out forwards;
 }
 
-/* ===== Pulse animation ===== */
 @keyframes neon-pulse {
   0%, 100% { opacity: 1; }
-  50% { opacity: 0.7; }
+  50% { opacity: 0.6; }
 }
 
 .animate-neon-pulse {
   animation: neon-pulse 2s ease-in-out infinite;
 }
 
-/* ===== Floating animation ===== */
 @keyframes float {
   0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-5px); }
+  50% { transform: translateY(-6px); }
 }
 
 .animate-float {
   animation: float 3s ease-in-out infinite;
 }
 
-/* ===== Scrollbar ===== */
+@keyframes glow-pulse {
+  0%, 100% {
+    box-shadow: 0 0 10px oklch(0.72 0.17 75 / 15%),
+                0 0 20px oklch(0.72 0.17 75 / 5%);
+  }
+  50% {
+    box-shadow: 0 0 20px oklch(0.78 0.19 80 / 30%),
+                0 0 40px oklch(0.78 0.19 80 / 12%);
+  }
+}
+
+.dark .animate-glow-pulse {
+  animation: glow-pulse 3s ease-in-out infinite;
+}
+
+.animate-glow-pulse {
+  animation: glow-pulse 3s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.animate-shimmer {
+  background: linear-gradient(90deg, transparent 25%, oklch(0.72 0.1 75 / 15%) 50%, transparent 75%);
+  background-size: 200% 100%;
+  animation: shimmer 2s infinite;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   SCROLLBAR — Gold accent
+   ═══════════════════════════════════════════════════════════ */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 
 ::-webkit-scrollbar-track {
@@ -236,53 +295,66 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: oklch(0.5 0.1 170 / 40%);
+  background: oklch(0.6 0.1 75 / 35%);
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: oklch(0.5 0.1 170 / 60%);
+  background: oklch(0.7 0.15 75 / 55%);
 }
 
-/* ===== Sidebar gradient overlay ===== */
+/* ═══════════════════════════════════════════════════════════
+   SIDEBAR — Premium dark with gold accents
+   ═══════════════════════════════════════════════════════════ */
 .sidebar-gradient {
-  background: linear-gradient(180deg, var(--sidebar) 0%, oklch(0.96 0.01 170 / 95%) 100%);
+  background: linear-gradient(180deg, var(--sidebar) 0%, oklch(0.96 0.01 75 / 95%) 100%);
 }
 
 .dark .sidebar-gradient {
-  background: linear-gradient(180deg, oklch(0.14 0.02 170) 0%, oklch(0.1 0.03 170) 100%);
+  background: linear-gradient(180deg, oklch(0.12 0.02 70) 0%, oklch(0.08 0.03 70) 100%);
 }
 
-/* ===== KPI card hover ===== */
+/* ═══════════════════════════════════════════════════════════
+   KPI CARD — Premium hover with gold glow
+   ═══════════════════════════════════════════════════════════ */
 .kpi-card {
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 1rem;
 }
 
 .kpi-card:hover {
   transform: translateY(-4px);
-  box-shadow: 0 12px 40px oklch(0.5 0.15 170 / 20%);
+  box-shadow: 0 12px 40px oklch(0.6 0.12 75 / 18%);
+  border-color: oklch(0.7 0.15 75 / 30%);
 }
 
 .dark .kpi-card:hover {
-  box-shadow: 0 12px 40px oklch(0.7 0.2 170 / 25%);
+  box-shadow: 0 12px 40px oklch(0.78 0.19 80 / 22%);
+  border-color: oklch(0.78 0.19 80 / 25%);
 }
 
-/* ===== Chat bubble ===== */
+/* ═══════════════════════════════════════════════════════════
+   CHAT BUBBLE — Gold branded
+   ═══════════════════════════════════════════════════════════ */
 .chat-bubble-ai {
-  background: linear-gradient(135deg, oklch(0.55 0.15 170), oklch(0.5 0.12 185));
+  background: linear-gradient(135deg, oklch(0.62 0.15 75), oklch(0.55 0.18 55));
   color: white;
 }
 
 .chat-bubble-user {
-  background: oklch(0.22 0.02 170);
-  color: oklch(0.9 0.01 170);
+  background: oklch(0.2 0.02 70);
+  color: oklch(0.9 0.02 75);
 }
 
 .dark .chat-bubble-user {
-  background: oklch(0.28 0.02 170);
+  background: oklch(0.25 0.03 70);
 }
 
-/* ===== Dark Mode Animated Background Pattern (Dots Grid) ===== */
+/* ═══════════════════════════════════════════════════════════
+   DARK MODE ANIMATED BACKGROUND — Subtle gold dot grid
+   ═══════════════════════════════════════════════════════════ */
 .dark body::before {
   content: '';
   position: fixed;
@@ -290,15 +362,17 @@
   left: 0;
   width: 100%;
   height: 100%;
-  background-image: radial-gradient(oklch(0.4 0.05 170 / 15%) 1px, transparent 1px);
-  background-size: 24px 24px;
+  background-image: radial-gradient(oklch(0.55 0.08 75 / 12%) 1px, transparent 1px);
+  background-size: 28px 28px;
   pointer-events: none;
   z-index: 0;
 }
 
-/* ===== Firm Badges ===== */
+/* ═══════════════════════════════════════════════════════════
+   FIRM BADGES — Gold-branded variants
+   ═══════════════════════════════════════════════════════════ */
 .firm-badge-lapl {
-  background: linear-gradient(135deg, oklch(0.55 0.2 170), oklch(0.5 0.18 160));
+  background: linear-gradient(135deg, oklch(0.72 0.17 75), oklch(0.65 0.2 55));
   color: white;
   padding: 2px 8px;
   border-radius: 9999px;
@@ -308,7 +382,7 @@
 }
 
 .firm-badge-lrsl {
-  background: linear-gradient(135deg, oklch(0.6 0.2 200), oklch(0.55 0.18 210));
+  background: linear-gradient(135deg, oklch(0.6 0.2 195), oklch(0.55 0.18 210));
   color: white;
   padding: 2px 8px;
   border-radius: 9999px;
@@ -347,28 +421,126 @@
   letter-spacing: 0.05em;
 }
 
-/* ===== Glow pulse for AI insights ===== */
-@keyframes glow-pulse {
-  0%, 100% {
-    box-shadow: 0 0 10px oklch(0.6 0.25 170 / 20%);
-  }
-  50% {
-    box-shadow: 0 0 25px oklch(0.7 0.25 170 / 35%);
-  }
+/* ═══════════════════════════════════════════════════════════
+   PREMIUM BUTTON GLOW
+   ═══════════════════════════════════════════════════════════ */
+.btn-gold-glow {
+  position: relative;
+  overflow: hidden;
 }
 
-.animate-glow-pulse {
-  animation: glow-pulse 3s ease-in-out infinite;
+.btn-gold-glow::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, oklch(0.9 0.1 80 / 30%), transparent);
+  transition: left 0.5s ease;
 }
 
-/* ===== Shimmer loading ===== */
-@keyframes shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
+.btn-gold-glow:hover::before {
+  left: 100%;
 }
 
-.animate-shimmer {
-  background: linear-gradient(90deg, transparent 25%, oklch(0.7 0.1 170 / 15%) 50%, transparent 75%);
-  background-size: 200% 100%;
-  animation: shimmer 2s infinite;
+/* ═══════════════════════════════════════════════════════════
+   LOGIN CARD SPECIAL — Premium gold border glow
+   ═══════════════════════════════════════════════════════════ */
+.login-card-glow {
+  position: relative;
+}
+
+.login-card-glow::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 1.1rem;
+  background: linear-gradient(135deg, oklch(0.78 0.19 80 / 40%), oklch(0.6 0.2 55 / 20%), oklch(0.78 0.19 80 / 40%));
+  z-index: -1;
+  filter: blur(1px);
+}
+
+.dark .login-card-glow::before {
+  background: linear-gradient(135deg, oklch(0.78 0.19 80 / 50%), oklch(0.55 0.22 55 / 25%), oklch(0.78 0.19 80 / 50%));
+  filter: blur(2px);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   PREMIUM INPUT STYLE
+   ═══════════════════════════════════════════════════════════ */
+.input-premium {
+  background: oklch(0.2 0.015 70 / 80%);
+  border: 1px solid oklch(0.3 0.03 75 / 50%);
+  transition: all 0.3s ease;
+}
+
+.input-premium:focus {
+  border-color: oklch(0.75 0.17 80 / 70%);
+  box-shadow: 0 0 0 3px oklch(0.75 0.17 80 / 15%);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   HEADER BLUR — Premium frosted effect
+   ═══════════════════════════════════════════════════════════ */
+.header-blur {
+  background: oklch(0.14 0.015 70 / 80%);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid oklch(0.25 0.03 70);
+}
+
+.dark .header-blur {
+  background: oklch(0.12 0.02 70 / 85%);
+  border-bottom: 1px solid oklch(0.25 0.02 70);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   GOLD TEXT GRADIENT
+   ═══════════════════════════════════════════════════════════ */
+.text-gold-gradient {
+  background: linear-gradient(135deg, oklch(0.78 0.19 80), oklch(0.68 0.22 55));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.dark .text-gold-gradient {
+  background: linear-gradient(135deg, oklch(0.85 0.2 80), oklch(0.72 0.24 55));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   SIDEBAR ACTIVE ITEM — Gold indicator
+   ═══════════════════════════════════════════════════════════ */
+.nav-active-gold {
+  background: oklch(0.75 0.17 80 / 12%);
+  color: oklch(0.78 0.19 80);
+  box-shadow: inset 3px 0 0 oklch(0.75 0.17 80);
+}
+
+.dark .nav-active-gold {
+  background: oklch(0.78 0.19 80 / 10%);
+  color: oklch(0.85 0.2 80);
+  box-shadow: inset 3px 0 0 oklch(0.78 0.19 80);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   PREMIUM CARD HOVER — Subtle gold border transition
+   ═══════════════════════════════════════════════════════════ */
+.card-gold-hover {
+  transition: all 0.3s ease;
+  border: 1px solid var(--border);
+}
+
+.card-gold-hover:hover {
+  border-color: oklch(0.72 0.17 75 / 30%);
+  box-shadow: 0 8px 32px oklch(0.6 0.12 75 / 10%);
+}
+
+.dark .card-gold-hover:hover {
+  border-color: oklch(0.78 0.19 80 / 25%);
+  box-shadow: 0 8px 32px oklch(0.78 0.19 80 / 12%);
 }

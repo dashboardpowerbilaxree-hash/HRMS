@@ -253,7 +253,7 @@ export function AttendanceTracker() {
       >
         <div>
           <h2 className="text-xl font-bold flex items-center gap-2">
-            <Clock className="w-5 h-5 text-primary" />
+            <Clock className="w-5 h-5 text-gold" />
             Attendance Tracker
           </h2>
           <p className="text-sm text-muted-foreground">
@@ -374,7 +374,7 @@ export function AttendanceTracker() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.25 }}
       >
-        <Card className="glass-card border-0">
+        <Card className="glass-card card-gold-hover border-0">
           <CardContent className="p-0">
             <ScrollArea className="max-h-[55vh]">
               <Table>
@@ -463,7 +463,7 @@ export function AttendanceTracker() {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Clock className="w-5 h-5 text-primary" />
+              <Clock className="w-5 h-5 text-gold" />
               Mark Attendance
             </DialogTitle>
           </DialogHeader>
@@ -535,8 +535,8 @@ export function AttendanceTracker() {
               </div>
             </div>
 
-            <div className="flex items-start gap-2 p-3 rounded-lg bg-primary/5 border border-primary/10">
-              <Info className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+            <div className="flex items-start gap-2 p-3 rounded-lg bg-gold/5 border border-gold/10">
+              <Info className="w-4 h-4 text-gold shrink-0 mt-0.5" />
               <p className="text-xs text-muted-foreground">
                 System auto-calculates working hours, late entry detection, overtime, Sunday hours, and public holiday tracking.
               </p>

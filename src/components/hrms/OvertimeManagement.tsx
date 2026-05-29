@@ -32,7 +32,7 @@ const MONTHS = [
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
 
-const DEPT_COLORS = ['#10b981', '#06b6d4', '#f59e0b', '#8b5cf6', '#f43f5e'];
+const DEPT_COLORS = ['#D4A843', '#06b6d4', '#f59e0b', '#8b5cf6', '#f43f5e'];
 
 // ── OT Record Type ──
 interface OTRecord {
@@ -198,7 +198,7 @@ export function OvertimeManagement() {
       value: summary.totalAmount,
       icon: IndianRupee,
       gradient: 'gradient-success',
-      color: 'text-emerald-500',
+      color: 'text-gold',
       prefix: '₹',
       format: 'currency',
     },
@@ -267,7 +267,7 @@ export function OvertimeManagement() {
       >
         <div>
           <h2 className="text-xl font-bold flex items-center gap-2">
-            <Timer className="w-5 h-5 text-primary" />
+            <Timer className="w-5 h-5 text-gold" />
             Overtime Management
           </h2>
           <p className="text-sm text-muted-foreground">
@@ -302,7 +302,7 @@ export function OvertimeManagement() {
         initial={{ opacity: 0, y: -5 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
-        className="glass-card p-3"
+        className="glass-card card-gold-hover p-3"
       >
         <div className="flex gap-3">
           <Select value={filterMonth} onValueChange={setFilterMonth}>
@@ -374,10 +374,10 @@ export function OvertimeManagement() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
         >
-          <Card className="glass-card border-0">
+          <Card className="glass-card card-gold-hover border-0">
             <CardContent className="p-4">
               <p className="text-sm font-semibold mb-3 flex items-center gap-2">
-                <Building2 className="w-4 h-4 text-primary" />
+                <Building2 className="w-4 h-4 text-gold" />
                 Department-wise OT Cost
               </p>
               <div className="h-56">
@@ -424,7 +424,7 @@ export function OvertimeManagement() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.25 }}
       >
-        <Card className="glass-card border-0">
+        <Card className="glass-card card-gold-hover border-0">
           <CardContent className="p-0">
             <ScrollArea className="max-h-[45vh]">
               <Table>
@@ -484,7 +484,7 @@ export function OvertimeManagement() {
                         </TableCell>
                         <TableCell className="text-sm font-medium">{r.hours}h</TableCell>
                         <TableCell className="hidden sm:table-cell text-sm font-mono">₹{r.rate}/hr</TableCell>
-                        <TableCell className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
+                        <TableCell className="text-sm font-bold text-gold">
                           ₹{r.amount.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
                         </TableCell>
                         <TableCell>
@@ -511,7 +511,7 @@ export function OvertimeManagement() {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Timer className="w-5 h-5 text-primary" />
+              <Timer className="w-5 h-5 text-gold" />
               Add Overtime
             </DialogTitle>
           </DialogHeader>
@@ -596,9 +596,9 @@ export function OvertimeManagement() {
 
             {/* Calculated Amount Preview */}
             {form.hours > 0 && form.rate > 0 && (
-              <div className="p-3 rounded-lg bg-primary/5 border border-primary/10 text-center">
+              <div className="p-3 rounded-lg bg-gold/5 border border-gold/10 text-center">
                 <p className="text-xs text-muted-foreground">OT Amount</p>
-                <p className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
+                <p className="text-lg font-bold text-gold">
                   ₹{(form.hours * form.rate).toLocaleString('en-IN', { maximumFractionDigits: 2 })}
                 </p>
               </div>

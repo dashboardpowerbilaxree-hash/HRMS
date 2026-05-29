@@ -11,7 +11,7 @@ import { motion } from 'framer-motion';
 import { AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
 const LAXREE_COLORS = {
-  emerald: '#10b981',
+  gold: '#D4A843',
   teal: '#14b8a6',
   cyan: '#06b6d4',
   amber: '#f59e0b',
@@ -20,7 +20,7 @@ const LAXREE_COLORS = {
 };
 
 const FIRM_COLORS: Record<string, string> = {
-  LAPL: LAXREE_COLORS.emerald,
+  LAPL: LAXREE_COLORS.gold,
   LRSL: LAXREE_COLORS.cyan,
   SI: LAXREE_COLORS.amber,
   SDF: LAXREE_COLORS.violet,
@@ -72,7 +72,7 @@ export function ReportsAnalytics() {
     firm: f.firm,
     employees: f.count,
     payroll: dashboardData?.firmPayrollBreakdown?.[f.firm]?.totalNet || 0,
-    fill: FIRM_COLORS[f.firm] || LAXREE_COLORS.teal,
+    fill: FIRM_COLORS[f.firm] || LAXREE_COLORS.gold,
   })) || [];
 
   return (
@@ -84,7 +84,7 @@ export function ReportsAnalytics() {
       >
         <div>
           <h2 className="text-xl font-bold flex items-center gap-2">
-            <BarChart3 className="w-5 h-5 text-primary" />
+            <BarChart3 className="w-5 h-5 text-gold" />
             Reports & Analytics
           </h2>
           <p className="text-sm text-muted-foreground">Comprehensive HR analytics for Laxree Group</p>
@@ -115,13 +115,13 @@ export function ReportsAnalytics() {
           {dashboardData && (
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               {[
-                { title: 'Total Employees', value: dashboardData.totalEmployees, icon: Users, color: 'text-emerald-500' },
+                { title: 'Total Employees', value: dashboardData.totalEmployees, icon: Users, color: 'text-gold' },
                 { title: 'Present Today', value: dashboardData.presentToday, icon: Clock, color: 'text-teal-500' },
                 { title: 'Monthly Payroll', value: `₹${dashboardData.monthlyPayrollCost.toLocaleString()}`, icon: DollarSign, color: 'text-violet-500' },
                 { title: 'Pending Leaves', value: dashboardData.pendingLeaves, icon: TrendingUp, color: 'text-amber-500' },
               ].map((c, i) => (
                 <motion.div key={c.title} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
-                  <Card className="glass-card border-0">
+                  <Card className="glass-card card-gold-hover border-0">
                     <CardContent className="p-4 flex items-center gap-3">
                       <c.icon className={`w-8 h-8 ${c.color}`} />
                       <div><p className="text-xs text-muted-foreground">{c.title}</p><p className="text-lg font-bold">{c.value}</p></div>
@@ -135,7 +135,7 @@ export function ReportsAnalytics() {
           {/* Charts */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {dashboardData?.attendanceTrend && (
-              <Card className="glass-card border-0">
+              <Card className="glass-card card-gold-hover border-0">
                 <CardHeader className="pb-2"><CardTitle className="text-sm">Attendance Trend (7 Days)</CardTitle></CardHeader>
                 <CardContent>
                   <div className="h-52">
@@ -143,15 +143,15 @@ export function ReportsAnalytics() {
                       <AreaChart data={dashboardData.attendanceTrend}>
                         <defs>
                           <linearGradient id="attPresentGrad" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor={LAXREE_COLORS.emerald} stopOpacity={0.3} />
-                            <stop offset="95%" stopColor={LAXREE_COLORS.emerald} stopOpacity={0} />
+                            <stop offset="5%" stopColor={LAXREE_COLORS.gold} stopOpacity={0.3} />
+                            <stop offset="95%" stopColor={LAXREE_COLORS.gold} stopOpacity={0} />
                           </linearGradient>
                         </defs>
                         <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                         <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="var(--muted-foreground)" tickFormatter={(v) => v.slice(5)} />
                         <YAxis tick={{ fontSize: 10 }} stroke="var(--muted-foreground)" />
                         <Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '8px', fontSize: 12 }} />
-                        <Area type="monotone" dataKey="present" stroke={LAXREE_COLORS.emerald} fill="url(#attPresentGrad)" name="Present" />
+                        <Area type="monotone" dataKey="present" stroke={LAXREE_COLORS.gold} fill="url(#attPresentGrad)" name="Present" />
                         <Area type="monotone" dataKey="absent" stroke={LAXREE_COLORS.rose} fill="transparent" strokeDasharray="5 5" name="Absent" />
                         <Legend />
                       </AreaChart>
@@ -162,7 +162,7 @@ export function ReportsAnalytics() {
             )}
 
             {dashboardData?.firmWiseCount && (
-              <Card className="glass-card border-0">
+              <Card className="glass-card card-gold-hover border-0">
                 <CardHeader className="pb-2"><CardTitle className="text-sm">Firm Distribution</CardTitle></CardHeader>
                 <CardContent>
                   <div className="h-52">
@@ -170,7 +170,7 @@ export function ReportsAnalytics() {
                       <PieChart>
                         <Pie data={dashboardData.firmWiseCount} dataKey="count" nameKey="firm" cx="50%" cy="50%" outerRadius={70} innerRadius={35} paddingAngle={2}>
                           {dashboardData.firmWiseCount.map((entry: any, i: number) => (
-                            <Cell key={i} fill={FIRM_COLORS[entry.firm] || LAXREE_COLORS.teal} />
+                            <Cell key={i} fill={FIRM_COLORS[entry.firm] || LAXREE_COLORS.gold} />
                           ))}
                         </Pie>
                         <Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '8px', fontSize: 12 }} />
@@ -194,12 +194,12 @@ export function ReportsAnalytics() {
                   { title: 'Late', value: attReport.summary?.late || 0, color: 'text-amber-500' },
                   { title: 'OT Hours', value: Math.round((attReport.summary?.totalOvertimeHours || 0) * 10) / 10, color: 'text-cyan-500' },
                 ].map((c, i) => (
-                  <Card key={c.title} className="glass-card border-0">
+                  <Card key={c.title} className="glass-card card-gold-hover border-0">
                     <CardContent className="p-3 text-center"><p className="text-xs text-muted-foreground">{c.title}</p><p className={`text-xl font-bold ${c.color}`}>{c.value}</p></CardContent>
                   </Card>
                 ))}
               </div>
-              <Card className="glass-card border-0">
+              <Card className="glass-card card-gold-hover border-0">
                 <CardContent className="p-0">
                   <ScrollArea className="max-h-[50vh]">
                     <Table>
@@ -245,28 +245,28 @@ export function ReportsAnalytics() {
                 {[
                   { title: 'Gross Total', value: `₹${(payReport.totals?.totalGross || 0).toLocaleString()}`, color: 'text-cyan-500' },
                   { title: 'Deductions', value: `₹${(payReport.totals?.totalDeductions || 0).toLocaleString()}`, color: 'text-red-500' },
-                  { title: 'Net Total', value: `₹${(payReport.totals?.totalNet || 0).toLocaleString()}`, color: 'text-emerald-500' },
+                  { title: 'Net Total', value: `₹${(payReport.totals?.totalNet || 0).toLocaleString()}`, color: 'text-gold' },
                 ].map((c, i) => (
-                  <Card key={c.title} className="glass-card border-0">
+                  <Card key={c.title} className="glass-card card-gold-hover border-0">
                     <CardContent className="p-3 text-center"><p className="text-xs text-muted-foreground">{c.title}</p><p className={`text-xl font-bold ${c.color}`}>{c.value}</p></CardContent>
                   </Card>
                 ))}
               </div>
 
               {payReport.deptBreakdown && Object.keys(payReport.deptBreakdown).length > 0 && (
-                <Card className="glass-card border-0">
+                <Card className="glass-card card-gold-hover border-0">
                   <CardHeader className="pb-2"><CardTitle className="text-sm">Firm-wise Payroll Breakdown</CardTitle></CardHeader>
                   <CardContent>
                     <div className="h-52">
                       <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={Object.entries(payReport.deptBreakdown).map(([dept, data]: [string, any]) => ({ department: dept, net: data.totalNet, fill: FIRM_COLORS[dept] || LAXREE_COLORS.teal }))}>
+                        <BarChart data={Object.entries(payReport.deptBreakdown).map(([dept, data]: [string, any]) => ({ department: dept, net: data.totalNet, fill: FIRM_COLORS[dept] || LAXREE_COLORS.gold }))}>
                           <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                           <XAxis dataKey="department" tick={{ fontSize: 10 }} stroke="var(--muted-foreground)" />
                           <YAxis tick={{ fontSize: 10 }} stroke="var(--muted-foreground)" tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`} />
                           <Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '8px', fontSize: 12 }} />
                           <Bar dataKey="net" radius={[4, 4, 0, 0]} name="Net Payroll">
                             {Object.entries(payReport.deptBreakdown).map(([dept], i) => (
-                              <Cell key={i} fill={FIRM_COLORS[dept] || LAXREE_COLORS.teal} />
+                              <Cell key={i} fill={FIRM_COLORS[dept] || LAXREE_COLORS.gold} />
                             ))}
                           </Bar>
                         </BarChart>
@@ -276,7 +276,7 @@ export function ReportsAnalytics() {
                 </Card>
               )}
 
-              <Card className="glass-card border-0">
+              <Card className="glass-card card-gold-hover border-0">
                 <CardContent className="p-0">
                   <ScrollArea className="max-h-[40vh]">
                     <Table>
@@ -288,7 +288,7 @@ export function ReportsAnalytics() {
                             <TableCell><FirmBadge firm={p.employee?.department || ''} /></TableCell>
                             <TableCell className="text-sm">₹{p.grossSalary.toLocaleString()}</TableCell>
                             <TableCell className="text-sm text-red-500">₹{p.totalDeductions.toLocaleString()}</TableCell>
-                            <TableCell className="text-sm font-bold text-emerald-600 dark:text-emerald-400">₹{p.netSalary.toLocaleString()}</TableCell>
+                            <TableCell className="text-sm font-bold text-gold">₹{p.netSalary.toLocaleString()}</TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
@@ -306,10 +306,10 @@ export function ReportsAnalytics() {
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                 {dashboardData.firmWiseCount?.map((f: any, i: number) => (
                   <motion.div key={f.firm} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
-                    <Card className="glass-card border-0">
+                    <Card className="glass-card card-gold-hover border-0">
                       <CardContent className="p-4">
                         <div className="flex items-center gap-2 mb-2">
-                          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: FIRM_COLORS[f.firm] || LAXREE_COLORS.teal }} />
+                          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: FIRM_COLORS[f.firm] || LAXREE_COLORS.gold }} />
                           <FirmBadge firm={f.firm} />
                         </div>
                         <div className="text-2xl font-bold">{f.count}</div>
@@ -323,8 +323,8 @@ export function ReportsAnalytics() {
                 ))}
               </div>
 
-              <Card className="glass-card border-0">
-                <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Building2 className="w-4 h-4 text-primary" /> Firm-wise Employee & Payroll Distribution</CardTitle></CardHeader>
+              <Card className="glass-card card-gold-hover border-0">
+                <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Building2 className="w-4 h-4 text-gold" /> Firm-wise Employee & Payroll Distribution</CardTitle></CardHeader>
                 <CardContent>
                   <div className="h-64">
                     <ResponsiveContainer width="100%" height="100%">
@@ -334,7 +334,7 @@ export function ReportsAnalytics() {
                         <YAxis yAxisId="left" tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" />
                         <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`} />
                         <Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '8px', fontSize: 12 }} />
-                        <Bar yAxisId="left" dataKey="employees" fill={LAXREE_COLORS.emerald} radius={[4, 4, 0, 0]} name="Employees" />
+                        <Bar yAxisId="left" dataKey="employees" fill={LAXREE_COLORS.gold} radius={[4, 4, 0, 0]} name="Employees" />
                         <Bar yAxisId="right" dataKey="payroll" radius={[4, 4, 0, 0]} name="Payroll (₹)">
                           {firmPayrollData.map((entry: any, i: number) => (
                             <Cell key={i} fill={entry.fill} />
@@ -356,9 +356,9 @@ export function ReportsAnalytics() {
               <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
                 {dashboardData.locationWiseCount.map((l: any, i: number) => (
                   <motion.div key={l.location} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
-                    <Card className="glass-card border-0">
+                    <Card className="glass-card card-gold-hover border-0">
                       <CardContent className="p-4 flex items-center gap-3">
-                        <MapPin className="w-5 h-5 text-primary" />
+                        <MapPin className="w-5 h-5 text-gold" />
                         <div>
                           <p className="text-sm font-medium">{l.location}</p>
                           <p className="text-xl font-bold">{l.count}</p>
@@ -370,8 +370,8 @@ export function ReportsAnalytics() {
                 ))}
               </div>
 
-              <Card className="glass-card border-0">
-                <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><MapPin className="w-4 h-4 text-primary" /> Location-wise Employee Distribution</CardTitle></CardHeader>
+              <Card className="glass-card card-gold-hover border-0">
+                <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><MapPin className="w-4 h-4 text-gold" /> Location-wise Employee Distribution</CardTitle></CardHeader>
                 <CardContent>
                   <div className="h-64">
                     <ResponsiveContainer width="100%" height="100%">
@@ -380,7 +380,7 @@ export function ReportsAnalytics() {
                         <XAxis type="number" tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" />
                         <YAxis type="category" dataKey="location" tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" width={110} />
                         <Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '8px', fontSize: 12 }} />
-                        <Bar dataKey="count" fill={LAXREE_COLORS.teal} radius={[0, 6, 6, 0]} name="Employees" />
+                        <Bar dataKey="count" fill={LAXREE_COLORS.gold} radius={[0, 6, 6, 0]} name="Employees" />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>

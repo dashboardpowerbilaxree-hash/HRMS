@@ -58,7 +58,7 @@ export function DepartmentManagement() {
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
-            <Button className="gradient-primary text-white"><Plus className="w-4 h-4 mr-2" /> Add Department</Button>
+            <Button className="bg-gold text-white"><Plus className="w-4 h-4 mr-2" /> Add Department</Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader><DialogTitle>Add Department</DialogTitle></DialogHeader>
@@ -67,7 +67,7 @@ export function DepartmentManagement() {
               <div><Label>Code *</Label><Input value={form.code} onChange={e => setForm({ ...form, code: e.target.value })} placeholder="e.g. ENG" /></div>
               <div><Label>Head</Label><Input value={form.head} onChange={e => setForm({ ...form, head: e.target.value })} placeholder="Department head" /></div>
               <div><Label>Description</Label><Input value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="Description" /></div>
-              <Button className="w-full gradient-primary text-white" onClick={handleSubmit}>Create Department</Button>
+              <Button className="w-full bg-gold text-white" onClick={handleSubmit}>Create Department</Button>
             </div>
           </DialogContent>
         </Dialog>
@@ -76,10 +76,10 @@ export function DepartmentManagement() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {departments.map((dept, i) => (
           <motion.div key={dept.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
-            <Card className="glass-card border-0 kpi-card">
+            <Card className="glass-card card-gold-hover border-0 kpi-card">
               <CardContent className="p-4">
                 <div className="flex items-center justify-between mb-3">
-                  <div className="w-10 h-10 rounded-lg gradient-primary flex items-center justify-center">
+                  <div className="w-10 h-10 rounded-lg bg-gold flex items-center justify-center">
                     <Building2 className="w-5 h-5 text-white" />
                   </div>
                   <div className="flex items-center gap-1 text-muted-foreground">

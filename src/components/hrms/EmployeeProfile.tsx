@@ -124,7 +124,7 @@ export function EmployeeProfile() {
 
   if (!employee) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] glass-card p-8">
+      <div className="flex flex-col items-center justify-center min-h-[60vh] glass-card card-gold-hover p-8">
         <div className="w-16 h-16 rounded-2xl gradient-laxree flex items-center justify-center mb-4">
           <User className="w-8 h-8 text-white" />
         </div>
@@ -149,7 +149,7 @@ export function EmployeeProfile() {
       icon: IndianRupee,
       label: 'Monthly Salary',
       value: `₹${employee.basicSalary.toLocaleString('en-IN')}`,
-      color: 'text-emerald-500',
+      color: 'text-gold',
     },
     {
       icon: Calendar,
@@ -186,7 +186,7 @@ export function EmployeeProfile() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.05 }}
       >
-        <Card className="glass-card border-0">
+        <Card className="glass-card card-gold-hover border-0">
           <CardContent className="p-6">
             <div className="flex flex-col sm:flex-row items-start gap-4">
               {/* Avatar */}
@@ -282,7 +282,7 @@ export function EmployeeProfile() {
 
           {/* ── Attendance Tab ── */}
           <TabsContent value="attendance" className="mt-4">
-            <Card className="glass-card border-0">
+            <Card className="glass-card card-gold-hover border-0">
               <CardContent className="p-0">
                 <ScrollArea className="max-h-[50vh]">
                   <Table>
@@ -332,7 +332,7 @@ export function EmployeeProfile() {
 
           {/* ── Payroll Tab ── */}
           <TabsContent value="payroll" className="mt-4">
-            <Card className="glass-card border-0">
+            <Card className="glass-card card-gold-hover border-0">
               <CardContent className="p-0">
                 <ScrollArea className="max-h-[50vh]">
                   <Table>
@@ -358,7 +358,7 @@ export function EmployeeProfile() {
                             </TableCell>
                             <TableCell className="text-sm">₹{p.grossSalary.toLocaleString('en-IN')}</TableCell>
                             <TableCell className="text-sm text-red-500">₹{p.totalDeductions.toLocaleString('en-IN')}</TableCell>
-                            <TableCell className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
+                            <TableCell className="text-sm font-bold text-gold">
                               ₹{p.netSalary.toLocaleString('en-IN')}
                             </TableCell>
                             <TableCell>
@@ -390,7 +390,7 @@ export function EmployeeProfile() {
 
           {/* ── Leaves Tab ── */}
           <TabsContent value="leaves" className="mt-4">
-            <Card className="glass-card border-0">
+            <Card className="glass-card card-gold-hover border-0">
               <CardContent className="p-0">
                 <ScrollArea className="max-h-[50vh]">
                   <Table>
@@ -438,7 +438,7 @@ export function EmployeeProfile() {
 
           {/* ── Overtime Tab ── */}
           <TabsContent value="overtime" className="mt-4">
-            <Card className="glass-card border-0">
+            <Card className="glass-card card-gold-hover border-0">
               <CardContent className="p-0">
                 <ScrollArea className="max-h-[50vh]">
                   <Table>
@@ -461,7 +461,7 @@ export function EmployeeProfile() {
                             </TableCell>
                             <TableCell className="text-sm font-medium">{o.hours}h</TableCell>
                             <TableCell className="text-sm">₹{o.rate}/hr</TableCell>
-                            <TableCell className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
+                            <TableCell className="text-sm font-bold text-gold">
                               ₹{o.amount.toLocaleString('en-IN')}
                             </TableCell>
                             <TableCell className="hidden md:table-cell text-sm">
@@ -492,7 +492,7 @@ export function EmployeeProfile() {
 
           {/* ── Documents Tab ── */}
           <TabsContent value="documents" className="mt-4">
-            <Card className="glass-card border-0">
+            <Card className="glass-card card-gold-hover border-0">
               <CardContent className="p-8">
                 <div className="flex flex-col items-center justify-center text-center">
                   <div className="w-14 h-14 rounded-2xl bg-muted/50 flex items-center justify-center mb-4">

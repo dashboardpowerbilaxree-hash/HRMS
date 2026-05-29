@@ -19,7 +19,7 @@ import { EmployeeProfile } from '@/components/hrms/EmployeeProfile';
 import { DepartmentManagement } from '@/components/hrms/DepartmentManagement';
 import { Header } from '@/components/hrms/Header';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ShieldCheck, ScrollText, Lock, User, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { ShieldCheck, ScrollText, Lock, User, Eye, EyeOff, Loader2, Crown, Sparkles } from 'lucide-react';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -29,11 +29,11 @@ import { toast } from 'sonner';
 // Placeholder components
 function AdminPanel() {
   return (
-    <div className="flex flex-col items-center justify-center min-h-[60vh] glass-card p-8">
-      <div className="w-16 h-16 rounded-2xl gradient-laxree flex items-center justify-center mb-4">
+    <div className="flex flex-col items-center justify-center min-h-[60vh] glass-card p-8 border border-gold/15">
+      <div className="w-16 h-16 rounded-2xl gradient-laxree flex items-center justify-center mb-4 shadow-lg">
         <ShieldCheck className="w-8 h-8 text-white" />
       </div>
-      <h2 className="text-xl font-bold mb-2">Admin Panel</h2>
+      <h2 className="text-xl font-bold mb-2 text-gold-gradient">Admin Panel</h2>
       <p className="text-muted-foreground text-sm text-center max-w-md">
         Administrative controls and system configuration for Laxree HRMS. This module is under development.
       </p>
@@ -43,8 +43,8 @@ function AdminPanel() {
 
 function AuditLogs() {
   return (
-    <div className="flex flex-col items-center justify-center min-h-[60vh] glass-card p-8">
-      <div className="w-16 h-16 rounded-2xl gradient-info flex items-center justify-center mb-4">
+    <div className="flex flex-col items-center justify-center min-h-[60vh] glass-card p-8 border border-gold/15">
+      <div className="w-16 h-16 rounded-2xl gradient-info flex items-center justify-center mb-4 shadow-lg">
         <ScrollText className="w-8 h-8 text-white" />
       </div>
       <h2 className="text-xl font-bold mb-2">Audit Logs</h2>
@@ -55,7 +55,7 @@ function AuditLogs() {
   );
 }
 
-// ── Login Screen ──
+// ── Premium Login Screen — Laxree Gold/Black ──
 function LoginScreen() {
   const { setIsLoggedIn, setAdminName, setAdminRole } = useHRMSStore();
   const [username, setUsername] = useState('');
@@ -95,25 +95,33 @@ function LoginScreen() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background relative overflow-hidden">
-      {/* Animated background elements */}
+      {/* Animated background elements — Gold orbs */}
       <div className="absolute inset-0 overflow-hidden">
         <motion.div
-          className="absolute -top-40 -right-40 w-80 h-80 rounded-full opacity-10"
-          style={{ background: 'radial-gradient(circle, oklch(0.65 0.22 170), transparent)' }}
+          className="absolute -top-40 -right-40 w-[500px] h-[500px] rounded-full opacity-[0.07]"
+          style={{ background: 'radial-gradient(circle, oklch(0.78 0.19 80), transparent)' }}
           animate={{ scale: [1, 1.2, 1], rotate: [0, 90, 0] }}
           transition={{ duration: 20, repeat: Infinity, ease: 'linear' }}
         />
         <motion.div
-          className="absolute -bottom-40 -left-40 w-96 h-96 rounded-full opacity-8"
-          style={{ background: 'radial-gradient(circle, oklch(0.6 0.2 185), transparent)' }}
+          className="absolute -bottom-40 -left-40 w-[600px] h-[600px] rounded-full opacity-[0.05]"
+          style={{ background: 'radial-gradient(circle, oklch(0.68 0.22 55), transparent)' }}
           animate={{ scale: [1.2, 1, 1.2], rotate: [0, -90, 0] }}
           transition={{ duration: 25, repeat: Infinity, ease: 'linear' }}
         />
         <motion.div
-          className="absolute top-1/3 left-1/4 w-48 h-48 rounded-full opacity-5"
-          style={{ background: 'radial-gradient(circle, oklch(0.7 0.18 45), transparent)' }}
+          className="absolute top-1/3 left-1/4 w-48 h-48 rounded-full opacity-[0.04]"
+          style={{ background: 'radial-gradient(circle, oklch(0.82 0.15 80), transparent)' }}
           animate={{ y: [-20, 20, -20], x: [-10, 10, -10] }}
           transition={{ duration: 15, repeat: Infinity, ease: 'easeInOut' }}
+        />
+        {/* Subtle grid pattern */}
+        <div
+          className="absolute inset-0 opacity-[0.03]"
+          style={{
+            backgroundImage: 'radial-gradient(oklch(0.7 0.15 75) 1px, transparent 1px)',
+            backgroundSize: '32px 32px',
+          }}
         />
       </div>
 
@@ -123,9 +131,9 @@ function LoginScreen() {
         transition={{ duration: 0.6, ease: 'easeOut' }}
         className="relative z-10 w-full max-w-md px-4"
       >
-        <Card className="glass-card border-0 neon-glow">
+        <Card className="glass-card login-card-glow border-0">
           <CardContent className="p-8">
-            {/* Logo & Brand */}
+            {/* Logo & Brand — Premium Laxree */}
             <motion.div
               className="flex flex-col items-center mb-8"
               initial={{ opacity: 0, y: -20 }}
@@ -133,23 +141,23 @@ function LoginScreen() {
               transition={{ delay: 0.2, duration: 0.5 }}
             >
               <motion.div
-                className="w-20 h-20 rounded-2xl gradient-laxree flex items-center justify-center mb-4 shadow-xl animate-float"
+                className="w-24 h-24 rounded-2xl gradient-laxree flex items-center justify-center mb-4 shadow-2xl animate-float"
                 whileHover={{ scale: 1.05 }}
               >
                 <Image
                   src="/laxree-logo.png"
                   alt="Laxree Logo"
-                  width={60}
-                  height={60}
-                  className="rounded-xl"
+                  width={72}
+                  height={72}
+                  className="rounded-xl object-contain"
                 />
               </motion.div>
-              <h1 className="text-2xl font-bold neon-text">Laxree</h1>
-              <p className="text-sm text-muted-foreground mt-1">Group of Companies</p>
-              <div className="flex items-center gap-2 mt-2">
-                <div className="w-1.5 h-1.5 rounded-full bg-primary animate-neon-pulse" />
-                <span className="text-xs text-primary font-medium">AI-Powered HRMS Dashboard</span>
-                <div className="w-1.5 h-1.5 rounded-full bg-primary animate-neon-pulse" />
+              <h1 className="text-3xl font-bold text-gold-gradient tracking-wide">LAXREE</h1>
+              <p className="text-sm text-muted-foreground mt-1">Your Support, Our Success</p>
+              <div className="flex items-center gap-2 mt-3 px-3 py-1.5 rounded-full bg-gold/5 border border-gold/15">
+                <Sparkles className="w-3 h-3 text-gold" />
+                <span className="text-xs text-gold font-medium">AI-Powered HRMS Dashboard</span>
+                <Sparkles className="w-3 h-3 text-gold" />
               </div>
             </motion.div>
 
@@ -163,13 +171,13 @@ function LoginScreen() {
             >
               <div className="space-y-2">
                 <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gold-soft" />
                   <Input
                     type="text"
                     placeholder="Username"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
-                    className="pl-10 h-11 bg-muted/50 border-0 focus-visible:ring-1"
+                    className="pl-10 h-12 input-premium rounded-xl text-sm"
                     autoComplete="username"
                   />
                 </div>
@@ -177,19 +185,19 @@ function LoginScreen() {
 
               <div className="space-y-2">
                 <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gold-soft" />
                   <Input
                     type={showPassword ? 'text' : 'password'}
                     placeholder="Password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="pl-10 pr-10 h-11 bg-muted/50 border-0 focus-visible:ring-1"
+                    className="pl-10 pr-10 h-12 input-premium rounded-xl text-sm"
                     autoComplete="current-password"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-gold transition-colors"
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
@@ -208,7 +216,7 @@ function LoginScreen() {
 
               <Button
                 type="submit"
-                className="w-full gradient-laxree text-white h-11 font-semibold"
+                className="w-full gradient-laxree text-white h-12 font-semibold rounded-xl btn-gold-glow shadow-lg"
                 disabled={loading}
               >
                 {loading ? (
@@ -218,7 +226,7 @@ function LoginScreen() {
                   </div>
                 ) : (
                   <div className="flex items-center gap-2">
-                    <Lock className="w-4 h-4" />
+                    <Crown className="w-4 h-4" />
                     <span>Sign In to Laxree HRMS</span>
                   </div>
                 )}
