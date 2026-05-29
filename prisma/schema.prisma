@@ -1,0 +1,180 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Department {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  code        String   @unique
+  description String?
+  head        String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Employee {
+  id               String      @id @default(cuid())
+  employeeId       String      @unique
+  fullName         String
+  mobile           String?
+  email            String?
+  department       String
+  designation      String
+  joiningDate      DateTime
+  salaryType       String      @default("monthly")
+  basicSalary      Float       @default(0)
+  perDaySalary     Float       @default(0)
+  overtimeRate     Float       @default(0)
+  shiftStart       String      @default("09:00")
+  shiftEnd         String      @default("18:00")
+  shiftHours       Float       @default(9)
+  address          String?
+  bankName         String?
+  bankAccount      String?
+  bankIfsc         String?
+  panNumber        String?
+  aadhaarNumber    String?
+  pfNumber         String?
+  esiNumber        String?
+  status           String      @default("active")
+  reportingManager String?
+  emergencyContact String?
+  profilePhoto     String?
+  documents        String?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+  attendance       Attendance[]
+  payrolls         Payroll[]
+  leaves           Leave[]
+  overtimes        Overtime[]
+  salaryHistory    SalaryHistory[]
+  notifications    Notification[]
+}
+
+model Attendance {
+  id             String    @id @default(cuid())
+  employeeId     String
+  date           DateTime
+  checkIn        String?
+  checkOut       String?
+  totalHours     Float     @default(0)
+  status         String    @default("present")
+  lateEntry      Boolean   @default(false)
+  halfDay        Boolean   @default(false)
+  overtimeHours  Float     @default(0)
+  isHoliday      Boolean   @default(false)
+  isWeeklyOff    Boolean   @default(false)
+  remarks        String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  employee       Employee  @relation(fields: [employeeId], references: [employeeId])
+}
+
+model Holiday {
+  id          String   @id @default(cuid())
+  name        String
+  date        DateTime
+  type        String   @default("national")
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Leave {
+  id          String   @id @default(cuid())
+  employeeId  String
+  type        String
+  startDate   DateTime
+  endDate     DateTime
+  days        Float    @default(1)
+  reason      String?
+  status      String   @default("pending")
+  approvedBy  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  employee    Employee @relation(fields: [employeeId], references: [employeeId])
+}
+
+model Overtime {
+  id          String   @id @default(cuid())
+  employeeId  String
+  date        DateTime
+  hours       Float    @default(0)
+  rate        Float    @default(0)
+  amount      Float    @default(0)
+  isHoliday   Boolean  @default(false)
+  status      String   @default("approved")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  employee    Employee @relation(fields: [employeeId], references: [employeeId])
+}
+
+model Payroll {
+  id              String   @id @default(cuid())
+  employeeId      String
+  month           Int
+  year            Int
+  basicSalary     Float    @default(0)
+  presentDays     Float    @default(0)
+  absentDays      Float    @default(0)
+  holidayDays     Float    @default(0)
+  paidLeaves      Float    @default(0)
+  overtimeAmount  Float    @default(0)
+  bonus           Float    @default(0)
+  incentive       Float    @default(0)
+  pfDeduction     Float    @default(0)
+  esiDeduction    Float    @default(0)
+  tdsDeduction    Float    @default(0)
+  advanceDeduction Float   @default(0)
+  otherDeductions Float    @default(0)
+  grossSalary     Float    @default(0)
+  totalDeductions Float    @default(0)
+  netSalary       Float    @default(0)
+  status          String   @default("generated")
+  generatedAt     DateTime @default(now())
+  approvedBy      String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  employee        Employee @relation(fields: [employeeId], references: [employeeId])
+}
+
+model SalaryHistory {
+  id          String   @id @default(cuid())
+  employeeId  String
+  month       Int
+  year        Int
+  netSalary   Float    @default(0)
+  createdAt   DateTime @default(now())
+  employee    Employee @relation(fields: [employeeId], references: [employeeId])
+}
+
+model Notification {
+  id         String   @id @default(cuid())
+  employeeId String?
+  title      String
+  message    String
+  type       String   @default("info")
+  read       Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  employee   Employee? @relation(fields: [employeeId], references: [employeeId])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  action    String
+  module    String
+  details   String?
+  userId    String?
+  createdAt DateTime @default(now())
+}
+
+model Setting {
+  id    String @id @default(cuid())
+  key   String @unique
+  value String
+}
