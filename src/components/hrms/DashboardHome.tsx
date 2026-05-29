@@ -429,17 +429,17 @@ export function DashboardHome() {
                 initial={{ opacity: 0, x: -10 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: i * 0.1 + 0.3 }}
-                className="flex items-start gap-2 text-sm p-2 rounded-lg bg-muted/30"
+                className="flex items-start gap-2 text-sm p-2 rounded-lg bg-muted/30 min-w-0 overflow-hidden"
               >
                 <span className="text-base shrink-0">{insight.icon}</span>
-                <span className="text-muted-foreground">{insight.text}</span>
+                <span className="text-muted-foreground text-xs leading-relaxed break-words">{insight.text}</span>
               </motion.div>
             ))}
           </div>
         </motion.div>
       )}
 
-      {/* KPI Cards Row — Premium gold-accented */}
+      {/* KPI Cards Row — Premium gold-accented — Fixed overlapping */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         {kpiCards.map((card, i) => {
           const Icon = card.icon;
@@ -453,10 +453,10 @@ export function DashboardHome() {
             >
               <Card className="border-0 shadow-none bg-transparent">
                 <CardContent className="p-3 md:p-4">
-                  <div className="flex items-start justify-between gap-1">
+                  <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0 overflow-hidden">
-                      <p className="text-[10px] md:text-xs text-muted-foreground font-medium truncate">{card.title}</p>
-                      <p className="text-lg md:text-2xl font-bold mt-0.5 truncate">
+                      <p className="text-[10px] md:text-xs text-muted-foreground font-medium truncate-fix">{card.title}</p>
+                      <p className="text-base md:text-xl font-bold mt-0.5 truncate-fix">
                         <AnimatedCounter
                           value={card.value}
                           prefix={card.prefix}
@@ -464,22 +464,22 @@ export function DashboardHome() {
                           decimals={card.decimals || 0}
                         />
                       </p>
-                      <div className="flex items-center gap-1 mt-1">
+                      <div className="flex items-center gap-1 mt-1 min-w-0">
                         {card.trendUp ? (
                           <ArrowUpRight className="w-3 h-3 text-emerald-500 shrink-0" />
                         ) : (
                           <ArrowDownRight className="w-3 h-3 text-amber-500 shrink-0" />
                         )}
-                        <span className="text-[9px] md:text-[10px] text-muted-foreground truncate">{card.trend}</span>
+                        <span className="text-[9px] md:text-[10px] text-muted-foreground truncate-fix">{card.trend}</span>
                       </div>
                       {'extra' in card && card.extra && (
-                        <div className="flex flex-wrap gap-0.5 mt-1 overflow-hidden">
+                        <div className="flex flex-wrap gap-1 mt-1.5 overflow-hidden max-h-[20px]">
                           {card.extra}
                         </div>
                       )}
                     </div>
-                    <div className={`w-9 h-9 md:w-11 md:h-11 rounded-xl ${card.gradient} flex items-center justify-center shrink-0 shadow-lg`}>
-                      <Icon className="w-4 h-4 md:w-5 md:h-5 text-white" />
+                    <div className={`w-8 h-8 md:w-10 md:h-10 rounded-xl ${card.gradient} flex items-center justify-center shrink-0 shadow-lg`}>
+                      <Icon className="w-3.5 h-3.5 md:w-4.5 md:h-4.5 text-white" />
                     </div>
                   </div>
                 </CardContent>

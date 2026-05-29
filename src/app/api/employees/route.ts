@@ -94,7 +94,7 @@ export async function POST(request: NextRequest) {
         aadhaarNumber: body.aadhaarNumber || null,
         pfNumber: body.pfNumber || null,
         esiNumber: body.esiNumber || null,
-        status: 'active',
+        status: body.status || 'Yes',
         reportingManager: body.reportingManager || null,
         emergencyContact: body.emergencyContact || null,
       },

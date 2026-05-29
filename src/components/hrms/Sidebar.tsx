@@ -47,7 +47,7 @@ export function Sidebar() {
       initial={false}
       animate={{ width: sidebarOpen ? 270 : 72 }}
       transition={{ duration: 0.3, ease: 'easeInOut' }}
-      className="relative flex flex-col h-full border-r border-sidebar-border bg-sidebar sidebar-gradient z-20"
+      className="relative flex flex-col h-full border-r border-sidebar-border bg-sidebar sidebar-gradient z-20 shrink-0"
     >
       {/* Logo & Brand — Premium Laxree */}
       <div className="flex items-center gap-3 px-4 h-16 border-b border-sidebar-border overflow-hidden">

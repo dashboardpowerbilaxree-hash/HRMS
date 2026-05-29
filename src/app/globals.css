@@ -160,6 +160,7 @@
   -webkit-backdrop-filter: blur(24px);
   border: 1px solid var(--glass-border);
   border-radius: 1rem;
+  overflow: hidden;
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -322,6 +323,7 @@
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: 1rem;
+  overflow: hidden;
 }
 
 .kpi-card:hover {
@@ -366,6 +368,21 @@
   background-size: 28px 28px;
   pointer-events: none;
   z-index: -1;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   FIX: Prevent text overlapping in tight containers
+   ═══════════════════════════════════════════════════════════ */
+.truncate-fix {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.flex-overflow-fix {
+  min-width: 0;
+  overflow: hidden;
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -488,6 +505,7 @@
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border-bottom: 1px solid oklch(0.25 0.03 70);
+  flex-shrink: 0;
 }
 
 .dark .header-blur {

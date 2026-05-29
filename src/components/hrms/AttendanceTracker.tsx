@@ -463,9 +463,9 @@ export function AttendanceTracker() {
         </Card>
       </motion.div>
 
-      {/* ── Mark Attendance Dialog — Fixed overlapping ── */}
+      {/* ── Mark Attendance Dialog — Fixed overlapping & z-index */}
       <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setForm({ employeeId: '', date: '', checkIn: '', checkOut: '' }); setEmployeeSearch(''); } }}>
-        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto z-[100]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Clock className="w-5 h-5 text-gold" />
@@ -495,14 +495,14 @@ export function AttendanceTracker() {
                       filteredEmployees.slice(0, 20).map((e) => (
                         <button
                           key={e.employeeId}
-                          className="w-full text-left px-3 py-2.5 hover:bg-muted/80 text-sm flex items-center justify-between transition-colors border-b border-border/50 last:border-0"
+                          className="w-full text-left px-3 py-2.5 hover:bg-muted/80 text-sm flex items-center justify-between transition-colors border-b border-border/50 last:border-0 gap-2"
                           onClick={() => { setForm({ ...form, employeeId: e.employeeId }); setEmployeeSearch(''); }}
                         >
                           <div className="flex items-center gap-2 min-w-0 overflow-hidden">
                             <FirmBadge firm={e.department} />
-                            <span className="truncate">{e.fullName}</span>
+                            <span className="truncate-fix">{e.fullName}</span>
                           </div>
-                          <span className="text-xs text-muted-foreground font-mono shrink-0 ml-2">{e.employeeId}</span>
+                          <span className="text-xs text-muted-foreground font-mono shrink-0">{e.employeeId}</span>
                         </button>
                       ))
                     )}
@@ -514,7 +514,7 @@ export function AttendanceTracker() {
                     <div className="w-7 h-7 rounded-full gradient-laxree flex items-center justify-center text-white text-[10px] font-bold shrink-0">
                       {selectedEmployee?.fullName?.charAt(0) || '?'}
                     </div>
-                    <span className="text-sm font-medium truncate">{selectedEmployee?.fullName}</span>
+                    <span className="text-sm font-medium truncate-fix">{selectedEmployee?.fullName}</span>
                     <FirmBadge firm={selectedEmployee?.department || ''} />
                   </div>
                   <Button
