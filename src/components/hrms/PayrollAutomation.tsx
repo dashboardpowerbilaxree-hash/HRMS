@@ -163,7 +163,7 @@ export function PayrollAutomation() {
       const params = new URLSearchParams();
       params.set('month', filterMonth);
       params.set('year', filterYear);
-      if (filterFirm !== 'all') params.set('department', filterFirm);
+      if (filterFirm !== 'all') params.set('firm', filterFirm);
 
       const [payRes, empRes] = await Promise.all([
         fetch(`/api/payroll?${params}`),
@@ -258,7 +258,7 @@ export function PayrollAutomation() {
     setGeneratingAll(true);
     try {
       const body: any = { month: parseInt(filterMonth), year: parseInt(filterYear) };
-      if (filterFirm !== 'all') body.department = filterFirm;
+      if (filterFirm !== 'all') body.firm = filterFirm;
       const res = await fetch('/api/payroll/generate-all', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -551,7 +551,7 @@ export function PayrollAutomation() {
                           </motion.div>
                         </TableCell>
                         <TableCell className="hidden md:table-cell">
-                          <FirmBadge firm={p.employee?.department || ''} />
+                          <FirmBadge firm={p.employee?.firm || p.employee?.department || ''} />
                         </TableCell>
                         <TableCell className="hidden lg:table-cell text-sm whitespace-nowrap">
                           {(p.totalWorkedHrs || p.totalWorkHours || 0) > 0 ? `${(p.totalWorkedHrs || p.totalWorkHours).toFixed(1)}h` : '—'}

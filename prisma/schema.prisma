@@ -88,6 +88,10 @@ model Attendance {
   overtimeHours  Float     @default(0)
   isHoliday      Boolean   @default(false)
   isWeeklyOff    Boolean   @default(false)
+  isSunday       Boolean   @default(false)
+  isPH           Boolean   @default(false)
+  sundayHours    Float     @default(0)
+  phHours        Float     @default(0)
   remarks        String?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
@@ -127,6 +131,7 @@ model Overtime {
   rate        Float    @default(0)
   amount      Float    @default(0)
   isHoliday   Boolean  @default(false)
+  isSunday    Boolean  @default(false)
   status      String   @default("approved")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

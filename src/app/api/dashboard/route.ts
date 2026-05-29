@@ -17,7 +17,7 @@ export async function GET() {
     const todayAttendance = await db.attendance.findMany({
       where: { date: { gte: today, lt: tomorrow }, status: { not: 'absent' } },
     });
-    const presentToday = todayAttendance.filter(a => ['present', 'late', 'half_day'].includes(a.status)).length;
+    const presentToday = todayAttendance.filter(a => ['present', 'late', 'half-day', 'half_day'].includes(a.status)).length;
     const absentToday = Math.max(0, activeEmployees - todayAttendance.length);
     const lateToday = todayAttendance.filter(a => a.lateEntry).length;
 
@@ -78,7 +78,7 @@ export async function GET() {
       const dayAtt = await db.attendance.findMany({ where: { date: { gte: d, lt: nextD } } });
       attendanceTrend.push({
         date: d.toISOString().split('T')[0],
-        present: dayAtt.filter(a => ['present', 'late', 'half_day'].includes(a.status)).length,
+        present: dayAtt.filter(a => ['present', 'late', 'half-day', 'half_day'].includes(a.status)).length,
         absent: dayAtt.filter(a => a.status === 'absent').length,
       });
     }

@@ -72,24 +72,24 @@ export function Header() {
 
   return (
     <header className="header-blur flex items-center justify-between h-16 px-4 md:px-6 z-10">
-      <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setSidebarOpen(!sidebarOpen)}>
+      <div className="flex items-center gap-3 min-w-0 overflow-hidden">
+        <Button variant="ghost" size="icon" className="md:hidden shrink-0" onClick={() => setSidebarOpen(!sidebarOpen)}>
           <Menu className="w-5 h-5" />
         </Button>
-        <div>
-          <h1 className="text-lg font-semibold">{pageTitle[currentPage] || 'Dashboard'}</h1>
-          <p className="text-xs text-muted-foreground hidden sm:flex items-center gap-1.5">
-            <Image src="/laxree-logo.png" alt="" width={12} height={12} className="rounded-sm" />
-            <span>Laxree Group</span>
-            <span className="text-border">|</span>
-            <span>{firmLabel}</span>
-            <span className="text-border">|</span>
-            <span className="text-gold">AI-Powered HRMS</span>
+        <div className="min-w-0 overflow-hidden">
+          <h1 className="text-lg font-semibold truncate">{pageTitle[currentPage] || 'Dashboard'}</h1>
+          <p className="text-xs text-muted-foreground hidden sm:flex items-center gap-1.5 truncate">
+            <Image src="/laxree-logo.png" alt="" width={12} height={12} className="rounded-sm shrink-0" />
+            <span className="truncate">Laxree Group</span>
+            <span className="text-border shrink-0">|</span>
+            <span className="truncate">{firmLabel}</span>
+            <span className="text-border shrink-0">|</span>
+            <span className="text-gold shrink-0">AI-Powered HRMS</span>
           </p>
         </div>
       </div>
 
-      <div className="flex items-center gap-2 md:gap-3">
+      <div className="flex items-center gap-2 md:gap-3 min-w-0">
         {/* Global Search */}
         <div className="relative hidden md:flex">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -102,7 +102,7 @@ export function Header() {
 
         {/* Real-time Clock */}
         <motion.div
-          className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-muted/50 text-xs font-mono text-muted-foreground border border-border/50"
+          className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-muted/50 text-xs font-mono text-muted-foreground border border-border/50 shrink-0"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
         >
@@ -111,21 +111,21 @@ export function Header() {
         </motion.div>
 
         {/* Admin Name Display */}
-        <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gold/5 border border-gold/15">
+        <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gold/5 border border-gold/15 shrink-0">
           <div className="w-6 h-6 rounded-full gradient-laxree flex items-center justify-center text-white text-[9px] font-bold">
             {displayName.charAt(0).toUpperCase()}
           </div>
-          <span className="text-xs font-medium text-gold-gradient">{displayName}</span>
-          <Crown className="w-3 h-3 text-gold" />
+          <span className="text-xs font-medium text-gold-gradient truncate max-w-[100px]">{displayName}</span>
+          <Crown className="w-3 h-3 text-gold shrink-0" />
         </div>
 
         {/* Dark Mode Toggle */}
-        <Button variant="ghost" size="icon" onClick={toggleDarkMode} className="relative hover:bg-gold/5">
+        <Button variant="ghost" size="icon" onClick={toggleDarkMode} className="relative hover:bg-gold/5 shrink-0">
           {darkMode ? <Sun className="w-4 h-4 text-gold" /> : <Moon className="w-4 h-4" />}
         </Button>
 
         {/* Notifications */}
-        <Button variant="ghost" size="icon" className="relative hover:bg-gold/5" onClick={() => setCurrentPage('notifications')}>
+        <Button variant="ghost" size="icon" className="relative hover:bg-gold/5 shrink-0" onClick={() => setCurrentPage('notifications')}>
           <Bell className="w-4 h-4" />
           {notifCount > 0 && (
             <Badge className="absolute -top-1 -right-1 h-4 w-4 p-0 flex items-center justify-center text-[10px] bg-destructive border-0">
@@ -135,7 +135,7 @@ export function Header() {
         </Button>
 
         {/* Logout */}
-        <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive hover:bg-destructive/5" onClick={handleLogout} title="Logout">
+        <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive hover:bg-destructive/5 shrink-0" onClick={handleLogout} title="Logout">
           <LogOut className="w-4 h-4" />
         </Button>
       </div>

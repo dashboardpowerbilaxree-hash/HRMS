@@ -5,9 +5,10 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search') || '';
-    const firm = searchParams.get('firm') || '';
+    const firm = searchParams.get('firm') || searchParams.get('department') || '';
     const location = searchParams.get('location') || '';
     const status = searchParams.get('status') || '';
+    const salaryType = searchParams.get('salaryType') || '';
 
     const where: any = {};
     if (search) {
@@ -20,6 +21,7 @@ export async function GET(request: NextRequest) {
     if (firm) where.firm = firm;
     if (location) where.location = location;
     if (status) where.status = status;
+    if (salaryType) where.salaryType = salaryType;
 
     const employees = await db.employee.findMany({
       where,
@@ -35,7 +37,14 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { fullName, firm, location, salaryType, monthlySalary, shiftStart, shiftEnd, shiftHours } = body;
+    const fullName = body.fullName;
+    const firm = body.firm || body.department;
+    const location = body.location;
+    const salaryType = body.salaryType;
+    const monthlySalary = body.monthlySalary || body.basicSalary || 0;
+    const shiftStart = body.shiftStart;
+    const shiftEnd = body.shiftEnd;
+    const shiftHours = body.shiftHours;
 
     if (!fullName || !firm) {
       return NextResponse.json({ error: 'Name and firm are required' }, { status: 400 });

@@ -7,7 +7,7 @@ export async function GET(request: NextRequest) {
     const month = parseInt(searchParams.get('month') || String(new Date().getMonth() + 1));
     const year = parseInt(searchParams.get('year') || String(new Date().getFullYear()));
     const employeeId = searchParams.get('employeeId') || '';
-    const firm = searchParams.get('firm') || '';
+    const firm = searchParams.get('firm') || searchParams.get('department') || '';
     const location = searchParams.get('location') || '';
 
     const where: any = { month, year };
@@ -28,6 +28,7 @@ export async function GET(request: NextRequest) {
             fullName: true,
             employeeId: true,
             firm: true,
+            department: true,
             designation: true,
             location: true,
             salaryType: true,
@@ -66,7 +67,7 @@ export async function POST(request: NextRequest) {
 
     // Total worked hours from attendance
     const totalWorkedHrs = Math.round(attendance
-      .filter(a => ['present', 'late', 'half_day'].includes(a.status))
+      .filter(a => ['present', 'late', 'half-day', 'half_day'].includes(a.status))
       .reduce((sum, a) => sum + a.totalHours, 0) * 100) / 100;
 
     // Overtime records
@@ -78,7 +79,7 @@ export async function POST(request: NextRequest) {
 
     // Sunday tracking — earned Sundays (1 per 6 working days for Full Time)
     const presentDays = attendance.filter(a => ['present', 'late'].includes(a.status)).length;
-    const halfDays = attendance.filter(a => a.status === 'half_day').length;
+    const halfDays = attendance.filter(a => a.status === 'half-day' || a.status === 'half_day').length;
     const holidayWorked = attendance.filter(a => a.isHoliday).length;
     const weeklyOffWorked = attendance.filter(a => a.isWeeklyOff).length;
 

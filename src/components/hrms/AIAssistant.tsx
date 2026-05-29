@@ -48,7 +48,7 @@ export function AIAssistant() {
       const res = await fetch('/api/ai-assistant', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message, context: 'HRMS Dashboard - NeoCorp Technologies' }),
+        body: JSON.stringify({ message, context: 'HRMS Dashboard - Laxree Group of Companies' }),
       });
       const data = await res.json();
       setMessages(prev => [...prev, { role: 'assistant', content: data.reply || 'I apologize, I couldn\'t process your request.' }]);

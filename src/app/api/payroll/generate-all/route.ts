@@ -3,10 +3,11 @@ import { db } from '@/lib/db';
 
 export async function POST(request: NextRequest) {
   try {
-    const { month, year, firm, location } = await request.json();
+    const { month, year, firm, department, location } = await request.json();
+    const effectiveFirm = firm || department;
 
     const empFilter: any = { status: { notIn: ['inactive', 'No'] } };
-    if (firm) empFilter.firm = firm;
+    if (effectiveFirm) empFilter.firm = effectiveFirm;
     if (location) empFilter.location = location;
 
     const employees = await db.employee.findMany({ where: empFilter });
@@ -25,7 +26,7 @@ export async function POST(request: NextRequest) {
         });
 
         const totalWorkedHrs = Math.round(attendance
-          .filter(a => ['present', 'late', 'half_day'].includes(a.status))
+          .filter(a => ['present', 'late', 'half-day', 'half_day'].includes(a.status))
           .reduce((sum, a) => sum + a.totalHours, 0) * 100) / 100;
 
         const overtimeRecords = await db.overtime.findMany({
@@ -35,7 +36,7 @@ export async function POST(request: NextRequest) {
         const otAmount = Math.round(overtimeRecords.reduce((sum, o) => sum + o.amount, 0) * 100) / 100;
 
         const presentDays = attendance.filter(a => ['present', 'late'].includes(a.status)).length;
-        const halfDays = attendance.filter(a => a.status === 'half_day').length;
+        const halfDays = attendance.filter(a => a.status === 'half-day' || a.status === 'half_day').length;
         const holidayWorked = attendance.filter(a => a.isHoliday).length;
 
         const sundaysEarned = emp.employmentType === 'Full Time' ? Math.floor(presentDays / 6) : 0;

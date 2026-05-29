@@ -230,7 +230,7 @@ export function DashboardHome() {
       trend: `${data.activeEmployees} active`,
       trendUp: true,
       extra: data.firmWiseCount.slice(0, 3).map(f => (
-        <span key={f.firm} className={`${FIRM_BADGE_CLASS[f.firm] || 'firm-badge-lapl'} ml-1 whitespace-nowrap shrink-0`}>{f.firm}: {f.count}</span>
+        <span key={f.firm} className={`${FIRM_BADGE_CLASS[f.firm] || 'firm-badge-lapl'} ml-0.5 whitespace-nowrap shrink-0 text-[9px]`}>{f.firm}: {f.count}</span>
       )),
     },
     {
@@ -453,10 +453,10 @@ export function DashboardHome() {
             >
               <Card className="border-0 shadow-none bg-transparent">
                 <CardContent className="p-3 md:p-4">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1 min-w-0">
+                  <div className="flex items-start justify-between gap-1">
+                    <div className="flex-1 min-w-0 overflow-hidden">
                       <p className="text-[10px] md:text-xs text-muted-foreground font-medium truncate">{card.title}</p>
-                      <p className="text-lg md:text-2xl font-bold mt-0.5">
+                      <p className="text-lg md:text-2xl font-bold mt-0.5 truncate">
                         <AnimatedCounter
                           value={card.value}
                           prefix={card.prefix}
@@ -466,14 +466,14 @@ export function DashboardHome() {
                       </p>
                       <div className="flex items-center gap-1 mt-1">
                         {card.trendUp ? (
-                          <ArrowUpRight className="w-3 h-3 text-emerald-500" />
+                          <ArrowUpRight className="w-3 h-3 text-emerald-500 shrink-0" />
                         ) : (
-                          <ArrowDownRight className="w-3 h-3 text-amber-500" />
+                          <ArrowDownRight className="w-3 h-3 text-amber-500 shrink-0" />
                         )}
-                        <span className="text-[9px] md:text-[10px] text-muted-foreground">{card.trend}</span>
+                        <span className="text-[9px] md:text-[10px] text-muted-foreground truncate">{card.trend}</span>
                       </div>
                       {'extra' in card && card.extra && (
-                        <div className="flex flex-wrap gap-0.5 mt-1">
+                        <div className="flex flex-wrap gap-0.5 mt-1 overflow-hidden">
                           {card.extra}
                         </div>
                       )}

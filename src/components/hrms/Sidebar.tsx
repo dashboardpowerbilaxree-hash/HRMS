@@ -50,7 +50,7 @@ export function Sidebar() {
       className="relative flex flex-col h-full border-r border-sidebar-border bg-sidebar sidebar-gradient z-20"
     >
       {/* Logo & Brand — Premium Laxree */}
-      <div className="flex items-center gap-3 px-4 h-16 border-b border-sidebar-border">
+      <div className="flex items-center gap-3 px-4 h-16 border-b border-sidebar-border overflow-hidden">
         <div className="flex items-center justify-center w-10 h-10 rounded-xl gradient-laxree shrink-0 overflow-hidden shadow-lg">
           <Image
             src="/laxree-logo.png"

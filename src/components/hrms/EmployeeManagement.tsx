@@ -114,8 +114,8 @@ export function EmployeeManagement() {
     try {
       const params = new URLSearchParams();
       if (search) params.set('search', search);
-      const dept = filterFirm !== 'all' ? filterFirm : (selectedFirm || '');
-      if (dept) params.set('department', dept);
+      const firmFilter = filterFirm !== 'all' ? filterFirm : (selectedFirm && selectedFirm !== '__all__' ? selectedFirm : '');
+      if (firmFilter) params.set('firm', firmFilter);
       if (filterLocation !== 'all') params.set('location', filterLocation);
       if (filterStatus !== 'all') params.set('status', filterStatus === 'Active' ? 'Yes' : 'No');
       if (filterSalaryType !== 'all') params.set('salaryType', filterSalaryType === 'Hourly' ? 'hourly' : 'daily');
@@ -156,7 +156,13 @@ export function EmployeeManagement() {
       return;
     }
     try {
-      const payload = { ...form, basicSalary: Number(form.basicSalary), shiftHours: Number(form.shiftHours) };
+      const payload = {
+      ...form,
+      firm: form.department, // API accepts both firm and department
+      monthlySalary: Number(form.basicSalary), // API accepts both monthlySalary and basicSalary
+      basicSalary: Number(form.basicSalary),
+      shiftHours: Number(form.shiftHours),
+    };
       if (editId) {
         const res = await fetch(`/api/employees/${editId}`, {
           method: 'PUT',

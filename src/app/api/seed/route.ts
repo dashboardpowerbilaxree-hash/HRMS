@@ -3,7 +3,11 @@ import { db } from '@/lib/db';
 
 export async function POST() {
   try {
-    // Clean up existing data
+    // Skip seeding if admin already exists
+    const existingAdmin = await db.admin.findFirst();
+    if (existingAdmin) {
+      return NextResponse.json({ message: 'Database already seeded, skipping', skipped: true });
+    }
     await db.notification.deleteMany();
     await db.salaryHistory.deleteMany();
     await db.payroll.deleteMany();
