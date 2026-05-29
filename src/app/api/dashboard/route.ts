@@ -10,8 +10,9 @@ export async function GET() {
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
-    const totalEmployees = await db.employee.count({ where: { status: 'active' } });
-    const activeEmployees = totalEmployees;
+    const totalEmployees = await db.employee.count();
+    const inactiveEmployees = await db.employee.count({ where: { status: { in: ['inactive', 'No'] } } });
+    const activeEmployees = totalEmployees - inactiveEmployees;
 
     const todayAttendance = await db.attendance.findMany({
       where: { date: { gte: today, lt: tomorrow }, status: { not: 'absent' } },
@@ -23,18 +24,27 @@ export async function GET() {
     const monthStart = new Date(year, month - 1, 1);
     const monthEnd = new Date(year, month, 1);
     const overtimeRecords = await db.overtime.findMany({ where: { date: { gte: monthStart, lt: monthEnd } } });
-    const totalOvertimeHours = overtimeRecords.reduce((sum, o) => sum + o.hours, 0);
+    const totalOvertimeHours = Math.round(overtimeRecords.reduce((sum, o) => sum + o.hours, 0) * 10) / 10;
 
     const payrolls = await db.payroll.findMany({ where: { month, year } });
     const monthlyPayrollCost = payrolls.reduce((sum, p) => sum + p.netSalary, 0);
 
     const pendingLeaves = await db.leave.count({ where: { status: 'pending' } });
 
-    const deptCounts = await db.employee.groupBy({ by: ['department'], where: { status: 'active' }, _count: { department: true } });
-    const departmentWiseCount = deptCounts.map(d => ({ department: d.department, count: d._count.department }));
+    // Firm-wise counts
+    const firmCounts = await db.employee.groupBy({ by: ['firm'], _count: { firm: true } });
+    const firmWiseCount = firmCounts.map(f => ({ firm: f.firm, count: f._count.firm }));
+
+    // Location-wise counts
+    const locationCounts = await db.employee.groupBy({ by: ['location'], _count: { location: true } });
+    const locationWiseCount = locationCounts.map(l => ({ location: l.location, count: l._count.location }));
+
+    const firms = await db.firm.findMany();
+    const locations = await db.location.findMany();
 
     const recentNotifications = await db.notification.findMany({ take: 10, orderBy: { createdAt: 'desc' } });
 
+    // Attendance trend (7 days)
     const attendanceTrend = [];
     for (let i = 6; i >= 0; i--) {
       const d = new Date(today);
@@ -49,6 +59,7 @@ export async function GET() {
       });
     }
 
+    // Payroll trend (6 months)
     const payrollTrend = [];
     for (let i = 5; i >= 0; i--) {
       let m = month - i;
@@ -59,12 +70,25 @@ export async function GET() {
     }
 
     return NextResponse.json({
-      totalEmployees, activeEmployees, presentToday, absentToday, lateToday,
-      totalOvertimeHours: Math.round(totalOvertimeHours * 10) / 10,
-      monthlyPayrollCost, pendingLeaves, departmentWiseCount,
-      recentNotifications: recentNotifications, attendanceTrend, payrollTrend,
+      totalEmployees,
+      activeEmployees: totalEmployees,
+      inactiveEmployees,
+      presentToday,
+      absentToday,
+      lateToday,
+      totalOvertimeHours,
+      monthlyPayrollCost,
+      pendingLeaves,
+      firmWiseCount,
+      locationWiseCount,
+      firmsCount: firms.length,
+      locationsCount: locations.length,
+      recentNotifications,
+      attendanceTrend,
+      payrollTrend,
     });
   } catch (error: any) {
+    console.error('Dashboard error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

@@ -3,6 +3,7 @@ import { db } from '@/lib/db';
 
 export async function POST() {
   try {
+    // Clean up existing data
     await db.notification.deleteMany();
     await db.salaryHistory.deleteMany();
     await db.payroll.deleteMany();
@@ -11,115 +12,152 @@ export async function POST() {
     await db.attendance.deleteMany();
     await db.holiday.deleteMany();
     await db.employee.deleteMany();
-    await db.department.deleteMany();
+    await db.firm.deleteMany();
+    await db.location.deleteMany();
+    await db.admin.deleteMany();
     await db.setting.deleteMany();
 
-    const departments = [
-      { name: 'Engineering', code: 'ENG', description: 'Software Engineering Department', head: 'Rajesh Kumar' },
-      { name: 'Marketing', code: 'MKT', description: 'Marketing & Branding Department', head: 'Priya Sharma' },
-      { name: 'Finance', code: 'FIN', description: 'Finance & Accounting Department', head: 'Arun Mehta' },
-      { name: 'Human Resources', code: 'HR', description: 'HR & Administration Department', head: 'Sunita Patel' },
-      { name: 'Operations', code: 'OPS', description: 'Operations & Logistics Department', head: 'Vikram Singh' },
-    ];
-    for (const d of departments) {
-      await db.department.create({ data: d });
-    }
+    // Create Admin User
+    await db.admin.create({
+      data: { username: 'admin', password: 'laxree@2026', name: 'Laxree Admin', role: 'super_admin' },
+    });
 
+    // Create Firms (from Excel data)
+    const firms = [
+      { code: 'LAPL', name: 'Laxree Associates Pvt. Ltd.' },
+      { code: 'LRSL', name: 'Laxree Roofing Solutions Ltd.' },
+      { code: 'SI', name: 'Shree Industries' },
+      { code: 'SDF', name: 'SDF Division' },
+    ];
+    for (const f of firms) await db.firm.create({ data: f });
+
+    // Create Locations
+    const locations = ['Ajmer', 'Jaipur', 'Gurgaon', 'Palra Warehouse', 'Roofing Factory'];
+    for (const l of locations) await db.location.create({ data: { name: l } });
+
+    // Real Employee Data from Payroll Master.xlsx
     const employees = [
-      { fullName: 'Aarav Sharma', mobile: '9876543210', email: 'aarav@company.com', department: 'Engineering', designation: 'Senior Developer', basicSalary: 85000, overtimeRate: 500, shiftStart: '09:00', shiftEnd: '18:00' },
-      { fullName: 'Priya Gupta', mobile: '9876543211', email: 'priya@company.com', department: 'Engineering', designation: 'Full Stack Developer', basicSalary: 75000, overtimeRate: 450, shiftStart: '09:00', shiftEnd: '18:00' },
-      { fullName: 'Rohan Patel', mobile: '9876543212', email: 'rohan@company.com', department: 'Marketing', designation: 'Marketing Manager', basicSalary: 70000, overtimeRate: 400, shiftStart: '09:30', shiftEnd: '18:30' },
-      { fullName: 'Ananya Singh', mobile: '9876543213', email: 'ananya@company.com', department: 'Finance', designation: 'Financial Analyst', basicSalary: 65000, overtimeRate: 380, shiftStart: '09:00', shiftEnd: '18:00' },
-      { fullName: 'Karan Mehta', mobile: '9876543214', email: 'karan@company.com', department: 'Human Resources', designation: 'HR Manager', basicSalary: 72000, overtimeRate: 420, shiftStart: '09:00', shiftEnd: '18:00' },
-      { fullName: 'Deepika Reddy', mobile: '9876543215', email: 'deepika@company.com', department: 'Operations', designation: 'Operations Lead', basicSalary: 68000, overtimeRate: 400, shiftStart: '08:00', shiftEnd: '17:00' },
-      { fullName: 'Arjun Kumar', mobile: '9876543216', email: 'arjun@company.com', department: 'Engineering', designation: 'Backend Developer', basicSalary: 78000, overtimeRate: 480, shiftStart: '09:00', shiftEnd: '18:00' },
-      { fullName: 'Meera Joshi', mobile: '9876543217', email: 'meera@company.com', department: 'Marketing', designation: 'Content Strategist', basicSalary: 55000, overtimeRate: 320, shiftStart: '09:30', shiftEnd: '18:30' },
-      { fullName: 'Vivek Nair', mobile: '9876543218', email: 'vivek@company.com', department: 'Finance', designation: 'Accountant', basicSalary: 50000, overtimeRate: 300, shiftStart: '09:00', shiftEnd: '18:00' },
-      { fullName: 'Sneha Iyer', mobile: '9876543219', email: 'sneha@company.com', department: 'Engineering', designation: 'QA Engineer', basicSalary: 60000, overtimeRate: 350, shiftStart: '09:00', shiftEnd: '18:00' },
-      { fullName: 'Rahul Verma', mobile: '9876543220', email: 'rahul@company.com', department: 'Operations', designation: 'Logistics Coordinator', basicSalary: 45000, overtimeRate: 280, shiftStart: '08:00', shiftEnd: '17:00' },
-      { fullName: 'Pooja Das', mobile: '9876543221', email: 'pooja@company.com', department: 'Human Resources', designation: 'Recruiter', basicSalary: 48000, overtimeRate: 300, shiftStart: '09:00', shiftEnd: '18:00' },
-      { fullName: 'Aditya Rao', mobile: '9876543222', email: 'aditya@company.com', department: 'Engineering', designation: 'DevOps Engineer', basicSalary: 82000, overtimeRate: 500, shiftStart: '09:00', shiftEnd: '18:00' },
-      { fullName: 'Nisha Pillai', mobile: '9876543223', email: 'nishap@company.com', department: 'Marketing', designation: 'Social Media Manager', basicSalary: 52000, overtimeRate: 320, shiftStart: '09:30', shiftEnd: '18:30' },
-      { fullName: 'Sanjay Mishra', mobile: '9876543224', email: 'sanjay@company.com', department: 'Finance', designation: 'Tax Consultant', basicSalary: 62000, overtimeRate: 370, shiftStart: '09:00', shiftEnd: '18:00' },
-      { fullName: 'Kavita Chauhan', mobile: '9876543225', email: 'kavita@company.com', department: 'Operations', designation: 'Project Manager', basicSalary: 78000, overtimeRate: 460, shiftStart: '08:00', shiftEnd: '17:00' },
-      { fullName: 'Manish Tiwari', mobile: '9876543226', email: 'manish@company.com', department: 'Engineering', designation: 'Frontend Developer', basicSalary: 70000, overtimeRate: 420, shiftStart: '09:00', shiftEnd: '18:00' },
-      { fullName: 'Ritu Saxena', mobile: '9876543227', email: 'ritu@company.com', department: 'Human Resources', designation: 'Training Manager', basicSalary: 58000, overtimeRate: 340, shiftStart: '09:00', shiftEnd: '18:00' },
-      { fullName: 'Amit Thakur', mobile: '9876543228', email: 'amit@company.com', department: 'Engineering', designation: 'Data Engineer', basicSalary: 80000, overtimeRate: 490, shiftStart: '09:00', shiftEnd: '18:00' },
-      { fullName: 'Divya Kapoor', mobile: '9876543229', email: 'divya@company.com', department: 'Marketing', designation: 'Brand Manager', basicSalary: 68000, overtimeRate: 400, shiftStart: '09:30', shiftEnd: '18:30' },
+      // SI Firm
+      { employeeId: 'EMP-014', fullName: 'Anamika', firm: 'SI', location: 'Ajmer', salaryType: 'hourly', monthlySalary: 14000, employmentType: 'Full Time', shiftStart: '10:00', shiftEnd: '19:00', shiftHours: 9 },
+      { employeeId: 'EMP-026', fullName: 'Mayank', firm: 'SI', location: 'Ajmer', salaryType: 'hourly', monthlySalary: 10000, employmentType: 'Part Time', shiftStart: '10:00', shiftEnd: '19:00', shiftHours: 9 },
+      { employeeId: 'EMP-033', fullName: 'Radhika Mehra', firm: 'SI', location: 'Ajmer', salaryType: 'hourly', monthlySalary: 12000, employmentType: 'Full Time', shiftStart: '10:00', shiftEnd: '19:00', shiftHours: 9 },
+      { employeeId: 'EMP-501', fullName: 'Arun', firm: 'SI', location: 'Jaipur', salaryType: 'hourly', monthlySalary: 50000, employmentType: 'Full Time', shiftStart: '10:00', shiftEnd: '19:00', shiftHours: 9 },
+      { employeeId: 'EMP-504', fullName: 'Priyanka', firm: 'SI', location: 'Jaipur', salaryType: 'hourly', monthlySalary: 18000, employmentType: 'Full Time', shiftStart: '10:00', shiftEnd: '19:00', shiftHours: 9 },
+      // LRSL Firm
+      { employeeId: 'EMP-007', fullName: 'Khushboo', firm: 'LRSL', location: 'Ajmer', salaryType: 'hourly', monthlySalary: 18000, employmentType: 'Full Time', shiftStart: '10:00', shiftEnd: '19:00', shiftHours: 9 },
+      { employeeId: 'EMP-417', fullName: 'Aditya Sharma', firm: 'LRSL', location: 'Ajmer', salaryType: 'hourly', monthlySalary: 25000, employmentType: 'Full Time', shiftStart: '10:00', shiftEnd: '19:00', shiftHours: 9 },
+      { employeeId: 'EMP-420', fullName: 'Arti Sharma', firm: 'LRSL', location: 'Ajmer', salaryType: 'hourly', monthlySalary: 20000, employmentType: 'Full Time', shiftStart: '10:00', shiftEnd: '19:00', shiftHours: 9 },
+      { employeeId: 'EMP-421', fullName: 'Aayush Sharma', firm: 'LRSL', location: 'Ajmer', salaryType: 'hourly', monthlySalary: 16000, employmentType: 'Full Time', shiftStart: '10:00', shiftEnd: '19:00', shiftHours: 9 },
+      { employeeId: 'EMP-422', fullName: 'Aakash Sangat', firm: 'LRSL', location: 'Ajmer', salaryType: 'hourly', monthlySalary: 15000, employmentType: 'Full Time', shiftStart: '10:00', shiftEnd: '19:00', shiftHours: 9, status: 'inactive' },
+      { employeeId: 'EMP-423', fullName: 'Arjun', firm: 'LRSL', location: 'Ajmer', salaryType: 'hourly', monthlySalary: 23000, employmentType: 'Full Time', shiftStart: '10:00', shiftEnd: '19:00', shiftHours: 9 },
+      { employeeId: 'EMP-424', fullName: 'Sujeet', firm: 'LRSL', location: 'Ajmer', salaryType: 'hourly', monthlySalary: 24000, employmentType: 'Full Time', shiftStart: '10:00', shiftEnd: '19:00', shiftHours: 9 },
+      { employeeId: 'EMP-034', fullName: 'Prakash', firm: 'LRSL', location: 'Ajmer', salaryType: 'hourly', monthlySalary: 60000, employmentType: 'Part Time', shiftStart: '10:00', shiftEnd: '19:00', shiftHours: 9 },
+      { employeeId: 'EMP-415', fullName: 'Ronak Jain', firm: 'LRSL', location: 'Ajmer', salaryType: 'hourly', monthlySalary: 51000, employmentType: 'Full Time', shiftStart: '10:00', shiftEnd: '19:00', shiftHours: 9, status: 'inactive' },
+      // LRSL Roofing Factory
+      { employeeId: 'EMP-302', fullName: 'Lalchand', firm: 'LRSL', location: 'Roofing Factory', salaryType: 'daily', monthlySalary: 15000, dailyRate: 650, employmentType: 'Full Time', shiftStart: '09:00', shiftEnd: '18:00', shiftHours: 9, status: 'inactive' },
+      { employeeId: 'EMP-306', fullName: 'Parkash', firm: 'LRSL', location: 'Roofing Factory', salaryType: 'daily', monthlySalary: 12000, dailyRate: 550, employmentType: 'Full Time', shiftStart: '09:00', shiftEnd: '18:00', shiftHours: 9 },
+      { employeeId: 'EMP-308', fullName: 'Savroopnath', firm: 'LRSL', location: 'Roofing Factory', salaryType: 'daily', monthlySalary: 18000, dailyRate: 750, employmentType: 'Full Time', shiftStart: '09:00', shiftEnd: '18:00', shiftHours: 9 },
+      { employeeId: 'EMP-326', fullName: 'Sitadevi', firm: 'LRSL', location: 'Roofing Factory', salaryType: 'daily', monthlySalary: 10000, dailyRate: 450, employmentType: 'Full Time', shiftStart: '09:00', shiftEnd: '18:00', shiftHours: 9 },
+      { employeeId: 'EMP-327', fullName: 'Ramprasad', firm: 'LRSL', location: 'Roofing Factory', salaryType: 'daily', monthlySalary: 14000, dailyRate: 600, employmentType: 'Full Time', shiftStart: '09:00', shiftEnd: '18:00', shiftHours: 9 },
+      { employeeId: 'EMP-328', fullName: 'Pradhan', firm: 'LRSL', location: 'Roofing Factory', salaryType: 'daily', monthlySalary: 13950, dailyRate: 600, employmentType: 'Full Time', shiftStart: '09:00', shiftEnd: '18:00', shiftHours: 9 },
+      { employeeId: 'EMP-329', fullName: 'Shaitan', firm: 'LRSL', location: 'Roofing Factory', salaryType: 'daily', monthlySalary: 13950, dailyRate: 600, employmentType: 'Full Time', shiftStart: '09:00', shiftEnd: '18:00', shiftHours: 9 },
+      { employeeId: 'EMP-330', fullName: 'Anil', firm: 'LRSL', location: 'Roofing Factory', salaryType: 'daily', monthlySalary: 13950, dailyRate: 600, employmentType: 'Full Time', shiftStart: '09:00', shiftEnd: '18:00', shiftHours: 9 },
+      { employeeId: 'EMP-331', fullName: 'Bhangchand', firm: 'LRSL', location: 'Roofing Factory', salaryType: 'daily', monthlySalary: 16000, dailyRate: 700, employmentType: 'Full Time', shiftStart: '09:00', shiftEnd: '19:00', shiftHours: 10 },
+      { employeeId: 'EMP-332', fullName: 'Raji Devi', firm: 'LRSL', location: 'Roofing Factory', salaryType: 'daily', monthlySalary: 8000, dailyRate: 350, employmentType: 'Part Time', shiftStart: '09:00', shiftEnd: '13:00', shiftHours: 4 },
+      // LAPL Firm
+      { employeeId: 'EMP-041', fullName: 'Kulvinder', firm: 'LAPL', location: 'Gurgaon', salaryType: 'hourly', monthlySalary: 75000, employmentType: 'Full Time', shiftStart: '10:00', shiftEnd: '19:00', shiftHours: 9 },
+      { employeeId: 'EMP-054', fullName: 'Ranveer', firm: 'LAPL', location: 'Gurgaon', salaryType: 'hourly', monthlySalary: 15000, employmentType: 'Full Time', shiftStart: '10:00', shiftEnd: '19:00', shiftHours: 9 },
+      { employeeId: 'EMP-002', fullName: 'Soma', firm: 'LAPL', location: 'Gurgaon', salaryType: 'hourly', monthlySalary: 25000, employmentType: 'Full Time', shiftStart: '10:00', shiftEnd: '19:00', shiftHours: 9 },
+      { employeeId: 'EMP-030', fullName: 'Ruchi', firm: 'LAPL', location: 'Ajmer', salaryType: 'hourly', monthlySalary: 24500, employmentType: 'Full Time', shiftStart: '10:00', shiftEnd: '19:00', shiftHours: 9 },
+      { employeeId: 'EMP-102', fullName: 'Ugam', firm: 'LAPL', location: 'Palra Warehouse', salaryType: 'hourly', monthlySalary: 18000, employmentType: 'Full Time', shiftStart: '10:00', shiftEnd: '20:00', shiftHours: 10 },
+      { employeeId: 'EMP-114', fullName: 'Gajendra', firm: 'LAPL', location: 'Palra Warehouse', salaryType: 'hourly', monthlySalary: 18000, employmentType: 'Full Time', shiftStart: '10:00', shiftEnd: '20:00', shiftHours: 10 },
+      { employeeId: 'EMP-116', fullName: 'Jivanand', firm: 'LAPL', location: 'Palra Warehouse', salaryType: 'hourly', monthlySalary: 15000, employmentType: 'Full Time', shiftStart: '10:00', shiftEnd: '20:00', shiftHours: 10, status: 'inactive' },
+      { employeeId: 'EMP-001', fullName: 'taraChand', firm: 'LAPL', location: 'Palra Warehouse', salaryType: 'hourly', monthlySalary: 15500, employmentType: 'Full Time', shiftStart: '10:00', shiftEnd: '20:00', shiftHours: 10 },
+      { employeeId: 'EMP-016', fullName: 'Mahipal', firm: 'LAPL', location: 'Ajmer', salaryType: 'hourly', monthlySalary: 16500, employmentType: 'Full Time', shiftStart: '10:00', shiftEnd: '20:00', shiftHours: 10, status: 'inactive' },
+      { employeeId: 'EMP-013', fullName: 'Saurabh', firm: 'LAPL', location: 'Ajmer', salaryType: 'hourly', monthlySalary: 22600, employmentType: 'Full Time', shiftStart: '10:00', shiftEnd: '19:00', shiftHours: 9 },
+      { employeeId: 'EMP-021', fullName: 'Kamlesh', firm: 'LAPL', location: 'Ajmer', salaryType: 'hourly', monthlySalary: 17000, employmentType: 'Full Time', shiftStart: '10:00', shiftEnd: '19:00', shiftHours: 9 },
+      { employeeId: 'EMP-018', fullName: 'Sandeep Sawilani', firm: 'LAPL', location: 'Ajmer', salaryType: 'hourly', monthlySalary: 20000, employmentType: 'Full Time', shiftStart: '10:00', shiftEnd: '19:00', shiftHours: 9 },
+      { employeeId: 'EMP-406', fullName: 'Hitesh Tak', firm: 'LAPL', location: 'Ajmer', salaryType: 'hourly', monthlySalary: 27500, employmentType: 'Full Time', shiftStart: '10:00', shiftEnd: '19:00', shiftHours: 9 },
+      // SDF Firm
+      { employeeId: 'EMP-011', fullName: 'Reena', firm: 'SDF', location: 'Ajmer', salaryType: 'hourly', monthlySalary: 5700, employmentType: 'Full Time', shiftStart: '10:00', shiftEnd: '19:00', shiftHours: 9 },
+      { employeeId: 'EMP-012', fullName: 'Raju', firm: 'SDF', location: 'Ajmer', salaryType: 'hourly', monthlySalary: 11150, employmentType: 'Full Time', shiftStart: '10:00', shiftEnd: '20:00', shiftHours: 10 },
+      { employeeId: 'EMP-037', fullName: 'Reetu Sindal', firm: 'SDF', location: 'Ajmer', salaryType: 'hourly', monthlySalary: 10000, employmentType: 'Full Time', shiftStart: '10:00', shiftEnd: '19:00', shiftHours: 9 },
     ];
 
-    for (let i = 0; i < employees.length; i++) {
-      const emp = employees[i];
-      const employeeId = `EMP-${String(i + 1).padStart(3, '0')}`;
-      const joiningDate = new Date(2024, Math.floor(Math.random() * 12), Math.floor(Math.random() * 28) + 1);
+    for (const emp of employees) {
+      const hourlyRate = emp.salaryType === 'hourly'
+        ? Math.round((emp.monthlySalary / (31 * emp.shiftHours)) * 100) / 100
+        : Math.round((emp.dailyRate || emp.monthlySalary / 30) / emp.shiftHours * 100) / 100;
+      const overtimeRate = Math.round(hourlyRate * 1.5 * 100) / 100;
+
       await db.employee.create({
         data: {
-          employeeId,
-          fullName: emp.fullName,
-          mobile: emp.mobile,
-          email: emp.email,
-          department: emp.department,
-          designation: emp.designation,
-          joiningDate,
-          salaryType: 'monthly',
-          basicSalary: emp.basicSalary,
-          perDaySalary: emp.basicSalary / 30,
-          overtimeRate: emp.overtimeRate,
+          employeeId: emp.employeeId,
+          fullName: emp.fullName.trim(),
+          firm: emp.firm,
+          location: emp.location,
+          salaryType: emp.salaryType,
+          monthlySalary: emp.monthlySalary,
+          dailyRate: emp.dailyRate || Math.round(emp.monthlySalary / 30),
+          hourlyRate,
+          overtimeRate,
+          employmentType: emp.employmentType || 'Full Time',
           shiftStart: emp.shiftStart,
           shiftEnd: emp.shiftEnd,
-          shiftHours: 9,
-          status: 'active',
-          pfNumber: i % 3 === 0 ? `PF${String(i + 1).padStart(6, '0')}` : null,
-          esiNumber: i % 4 === 0 ? `ESI${String(i + 1).padStart(8, '0')}` : null,
-          panNumber: `ABCDE${String(1000 + i)}`,
-          aadhaarNumber: `${String(100000000000 + i)}`,
-          bankName: 'State Bank of India',
-          bankAccount: `${String(10000000000 + i)}`,
-          bankIfsc: 'SBIN0001234',
+          shiftHours: emp.shiftHours,
+          status: emp.status === 'inactive' ? 'No' : 'Yes',
+          designation: emp.firm === 'LAPL' ? 'Staff' : emp.firm === 'LRSL' ? 'Worker' : emp.firm === 'SI' ? 'Associate' : 'Helper',
+          department: emp.firm,
+          joiningDate: new Date(2024, Math.floor(Math.random() * 12), Math.floor(Math.random() * 28) + 1),
         },
       });
     }
 
-    const now = new Date();
-    const currentYear = now.getFullYear();
+    // Holidays for 2026
+    const currentYear = 2026;
     const holidays = [
       { name: 'Republic Day', date: new Date(currentYear, 0, 26), type: 'national' },
       { name: 'Holi', date: new Date(currentYear, 2, 14), type: 'festival' },
       { name: 'Good Friday', date: new Date(currentYear, 3, 18), type: 'festival' },
+      { name: 'Eid ul-Fitr', date: new Date(currentYear, 3, 22), type: 'festival' },
+      { name: 'Labour Day', date: new Date(currentYear, 4, 1), type: 'national' },
       { name: 'Independence Day', date: new Date(currentYear, 7, 15), type: 'national' },
       { name: 'Gandhi Jayanti', date: new Date(currentYear, 9, 2), type: 'national' },
       { name: 'Dussehra', date: new Date(currentYear, 9, 22), type: 'festival' },
       { name: 'Diwali', date: new Date(currentYear, 10, 1), type: 'festival' },
+      { name: 'Guru Nanak Jayanti', date: new Date(currentYear, 10, 15), type: 'festival' },
       { name: 'Christmas', date: new Date(currentYear, 11, 25), type: 'festival' },
     ];
-    for (const h of holidays) {
-      await db.holiday.create({ data: h });
-    }
+    for (const h of holidays) await db.holiday.create({ data: h });
 
+    // Generate attendance for May 2026 (past days only)
+    const now = new Date();
+    const may2026 = new Date(2026, 4, 1); // May 1, 2026
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    for (let d = 0; d < Math.min(now.getDate(), 25); d++) {
-      const date = new Date(today);
-      date.setDate(date.getDate() - d);
-      if (date.getDay() === 0) continue;
+    const activeEmployees = employees.filter(e => e.status !== 'inactive');
+
+    for (let d = 1; d <= Math.min(28, now.getDate() > 28 ? 31 : now.getDate()); d++) {
+      const date = new Date(2026, 4, d); // May 2026
+      if (date > today) break;
+      if (date.getDay() === 0) continue; // Skip Sundays
 
       const holidayCheck = await db.holiday.findFirst({
         where: { date: { gte: new Date(date.getFullYear(), date.getMonth(), date.getDate()), lt: new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1) } },
       });
 
-      for (let e = 1; e <= employees.length; e++) {
-        const employeeId = `EMP-${String(e).padStart(3, '0')}`;
+      for (const emp of activeEmployees) {
         const isPresent = Math.random() > 0.08;
         const isLate = Math.random() > 0.8;
-        const hasOT = Math.random() > 0.75;
+        const hasOT = Math.random() > 0.7;
 
         if (holidayCheck) {
           const worked = Math.random() > 0.7;
           if (worked) {
             await db.attendance.create({
               data: {
-                employeeId, date,
-                checkIn: '09:00', checkOut: '18:30',
-                totalHours: 9.5, status: 'holiday',
+                employeeId: emp.employeeId, date,
+                checkIn: emp.shiftStart, checkOut: emp.shiftEnd,
+                totalHours: emp.shiftHours + 0.5, status: 'holiday',
                 lateEntry: false, halfDay: false,
                 overtimeHours: 0.5, isHoliday: true, isWeeklyOff: false,
               },
@@ -129,66 +167,98 @@ export async function POST() {
         }
 
         if (isPresent) {
-          const checkIn = isLate ? `${9 + Math.floor(Math.random() * 2)}:${String(Math.floor(Math.random() * 60)).padStart(2, '0')}` : '09:00';
-          const checkOutHour = hasOT ? 18 + Math.floor(Math.random() * 3) : 18;
-          const checkOut = `${checkOutHour}:${String(Math.floor(Math.random() * 60)).padStart(2, '0')}`;
-          const [ciH, ciM] = checkIn.split(':').map(Number);
-          const [coH, coM] = checkOut.split(':').map(Number);
-          const totalH = Math.max(0, ((coH * 60 + coM) - (ciH * 60 + ciM)) / 60);
-          const otHours = Math.max(0, totalH - 9);
+          const [sh, sm] = emp.shiftStart.split(':').map(Number);
+          const lateMins = isLate ? Math.floor(Math.random() * 60) + 10 : 0;
+          const checkInH = sh + Math.floor((sm + lateMins) / 60);
+          const checkInM = (sm + lateMins) % 60;
+          const checkIn = `${String(checkInH).padStart(2, '0')}:${String(checkInM).padStart(2, '0')}`;
+
+          const otHours = hasOT ? Math.round((Math.random() * 3 + 0.5) * 10) / 10 : 0;
+          const [eh, em] = emp.shiftEnd.split(':').map(Number);
+          const totalMins = (eh * 60 + em) - (sh * 60 + sm) + otHours * 60;
+          const checkOutH = sh + Math.floor(totalMins / 60);
+          const checkOutM = Math.floor(totalMins % 60);
+          const checkOut = `${String(checkOutH).padStart(2, '0')}:${String(checkOutM).padStart(2, '0')}`;
+
+          const totalH = Math.round(((checkOutH * 60 + checkOutM) - (checkInH * 60 + checkInM)) / 60 * 10) / 10;
+          const actualOT = Math.max(0, Math.round((totalH - emp.shiftHours) * 10) / 10);
 
           await db.attendance.create({
             data: {
-              employeeId, date,
+              employeeId: emp.employeeId, date,
               checkIn, checkOut,
-              totalHours: Math.round(totalH * 10) / 10,
+              totalHours: Math.max(0, totalH),
               status: isLate ? 'late' : 'present',
-              lateEntry: isLate,
-              halfDay: false,
-              overtimeHours: Math.round(otHours * 10) / 10,
-              isHoliday: false,
-              isWeeklyOff: false,
+              lateEntry: isLate, halfDay: false,
+              overtimeHours: actualOT, isHoliday: false, isWeeklyOff: false,
             },
           });
+
+          // Create OT record
+          if (actualOT > 0) {
+            const employee = await db.employee.findUnique({ where: { employeeId: emp.employeeId } });
+            if (employee) {
+              await db.overtime.create({
+                data: {
+                  employeeId: emp.employeeId, date,
+                  hours: actualOT, rate: employee.overtimeRate,
+                  amount: Math.round(actualOT * employee.overtimeRate * 100) / 100,
+                  isHoliday: false, status: 'approved',
+                },
+              });
+            }
+          }
         }
       }
     }
 
+    // Sample leaves
     await db.leave.createMany({
       data: [
-        { employeeId: 'EMP-003', type: 'Casual Leave', startDate: new Date(now.getFullYear(), now.getMonth(), 10), endDate: new Date(now.getFullYear(), now.getMonth(), 11), days: 2, reason: 'Personal work', status: 'approved' },
-        { employeeId: 'EMP-007', type: 'Sick Leave', startDate: new Date(now.getFullYear(), now.getMonth(), 15), endDate: new Date(now.getFullYear(), now.getMonth(), 16), days: 2, reason: 'Health issues', status: 'approved' },
-        { employeeId: 'EMP-012', type: 'Earned Leave', startDate: new Date(now.getFullYear(), now.getMonth(), 20), endDate: new Date(now.getFullYear(), now.getMonth(), 22), days: 3, reason: 'Family vacation', status: 'pending' },
-        { employeeId: 'EMP-015', type: 'Casual Leave', startDate: new Date(now.getFullYear(), now.getMonth(), 25), endDate: new Date(now.getFullYear(), now.getMonth(), 25), days: 1, reason: 'Personal work', status: 'pending' },
+        { employeeId: 'EMP-007', type: 'Casual Leave', startDate: new Date(2026, 4, 10), endDate: new Date(2026, 4, 11), days: 2, reason: 'Personal work', status: 'approved' },
+        { employeeId: 'EMP-041', type: 'Sick Leave', startDate: new Date(2026, 4, 15), endDate: new Date(2026, 4, 16), days: 2, reason: 'Health issues', status: 'approved' },
+        { employeeId: 'EMP-012', type: 'Earned Leave', startDate: new Date(2026, 4, 20), endDate: new Date(2026, 4, 22), days: 3, reason: 'Family vacation', status: 'pending' },
+        { employeeId: 'EMP-014', type: 'Casual Leave', startDate: new Date(2026, 4, 25), endDate: new Date(2026, 4, 25), days: 1, reason: 'Personal work', status: 'pending' },
       ],
     });
 
+    // Notifications
     const notifications = [
-      { title: 'Welcome to HRMS', message: 'Your futuristic HR management system is ready!', type: 'system' },
-      { title: 'Payroll Generated', message: 'Monthly payroll has been auto-generated for all employees', type: 'payroll' },
-      { title: 'Leave Request', message: 'New leave request from EMP-012 pending approval', type: 'leave' },
-      { title: 'New Employee', message: 'Welcome Divya Kapoor to the Marketing team', type: 'employee' },
-      { title: 'Holiday Alert', message: 'Republic Day holiday on Jan 26', type: 'holiday' },
+      { title: 'Welcome to Laxree HRMS', message: 'Your futuristic HR management system is ready!', type: 'system' },
+      { title: 'Attendance Alert', message: 'May 2026 attendance data has been synced', type: 'attendance' },
+      { title: 'Leave Request', message: 'New leave request from Raju pending approval', type: 'leave' },
+      { title: 'Holiday Alert', message: 'Labour Day holiday on May 1', type: 'holiday' },
+      { title: 'Payroll Ready', message: 'Monthly payroll is ready for generation', type: 'payroll' },
     ];
-    for (const n of notifications) {
-      await db.notification.create({ data: n });
-    }
+    for (const n of notifications) await db.notification.create({ data: n });
 
+    // Settings
     await db.setting.createMany({
       data: [
-        { key: 'companyName', value: 'NeoCorp Technologies' },
-        { key: 'companyAddress', value: 'Tech Park, Bangalore, India' },
+        { key: 'companyName', value: 'Laxree' },
+        { key: 'companyFullName', value: 'Laxree Group of Companies' },
+        { key: 'companyAddress', value: 'Ajmer, Rajasthan, India' },
         { key: 'currency', value: 'INR' },
         { key: 'pfRate', value: '12' },
         { key: 'esiRate', value: '0.75' },
         { key: 'gracePeriod', value: '15' },
         { key: 'otMultiplier', value: '1.5' },
         { key: 'holidayOTMultiplier', value: '2' },
+        { key: 'salaryFormula', value: 'hourly' },
+        { key: 'sundayRule', value: 'earned_per_6_days' },
       ],
     });
 
-    return NextResponse.json({ message: 'Database seeded successfully', employees: employees.length, departments: departments.length });
+    return NextResponse.json({
+      message: 'Laxree HRMS seeded successfully',
+      employees: employees.length,
+      firms: firms.length,
+      locations: locations.length,
+      holidays: holidays.length,
+      admin: { username: 'admin', password: 'laxree@2026' },
+    });
   } catch (error: any) {
+    console.error('Seed error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

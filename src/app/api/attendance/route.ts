@@ -14,25 +14,64 @@ export async function GET(request: NextRequest) {
     const month = parseInt(searchParams.get('month') || String(new Date().getMonth() + 1));
     const year = parseInt(searchParams.get('year') || String(new Date().getFullYear()));
     const date = searchParams.get('date') || '';
+    const department = searchParams.get('department') || '';
+    const location = searchParams.get('location') || '';
 
     const where: any = {};
     if (employeeId) where.employeeId = employeeId;
     if (date) {
       const d = new Date(date);
-      where.date = { gte: new Date(d.getFullYear(), d.getMonth(), d.getDate()), lt: new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1) };
+      where.date = {
+        gte: new Date(d.getFullYear(), d.getMonth(), d.getDate()),
+        lt: new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1),
+      };
     } else {
       const start = new Date(year, month - 1, 1);
       const end = new Date(year, month, 1);
       where.date = { gte: start, lt: end };
     }
 
+    // Filter by department/location via employee relation
+    const employeeFilter: any = {};
+    if (department) employeeFilter.department = department;
+    if (location) employeeFilter.location = location;
+    if (Object.keys(employeeFilter).length > 0) {
+      where.employee = employeeFilter;
+    }
+
     const records = await db.attendance.findMany({
       where,
-      include: { employee: { select: { fullName: true, employeeId: true, department: true } } },
+      include: {
+        employee: {
+          select: {
+            fullName: true,
+            employeeId: true,
+            department: true,
+            designation: true,
+            location: true,
+            shiftHours: true,
+          },
+        },
+      },
       orderBy: { date: 'desc' },
     });
 
-    return NextResponse.json(records);
+    // Monthly summary
+    const summary = {
+      totalRecords: records.length,
+      present: records.filter(r => r.status === 'present').length,
+      absent: records.filter(r => r.status === 'absent').length,
+      late: records.filter(r => r.lateEntry).length,
+      halfDay: records.filter(r => r.halfDay).length,
+      sundayWorked: records.filter(r => r.isSunday && r.totalHours > 0).length,
+      phWorked: records.filter(r => r.isPH && r.totalHours > 0).length,
+      totalSundayHours: records.reduce((sum, r) => sum + r.sundayHours, 0),
+      totalPHHours: records.reduce((sum, r) => sum + r.phHours, 0),
+      totalOvertimeHours: records.reduce((sum, r) => sum + r.overtimeHours, 0),
+      totalWorkHours: records.reduce((sum, r) => sum + r.totalHours, 0),
+    };
+
+    return NextResponse.json({ records, summary });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
@@ -50,61 +89,156 @@ export async function POST(request: NextRequest) {
 
     const d = new Date(date);
     const dayOfWeek = d.getDay();
-    const isWeeklyOff = dayOfWeek === 0;
 
+    // Auto-detect Sunday (day 0)
+    const isSunday = dayOfWeek === 0;
+    const isWeeklyOff = isSunday;
+
+    // Check if date is a public holiday
     const holidays = await db.holiday.findMany({
       where: {
-        date: { gte: new Date(d.getFullYear(), d.getMonth(), d.getDate()), lt: new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1) },
+        date: {
+          gte: new Date(d.getFullYear(), d.getMonth(), d.getDate()),
+          lt: new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1),
+        },
       },
     });
-    const isHoliday = holidays.length > 0;
+    const isPH = holidays.length > 0;
+    const isHoliday = isPH;
 
     let totalHours = 0;
     let lateEntry = false;
     let halfDay = false;
     let overtimeHours = 0;
+    let sundayHours = 0;
+    let phHours = 0;
     let status = 'present';
 
     if (checkIn && checkOut) {
       totalHours = calcHours(checkIn, checkOut);
+
+      // Late entry detection (grace period of 15 minutes)
       const gracePeriod = 15;
       const [shiftH, shiftM] = employee.shiftStart.split(':').map(Number);
       const [checkInH, checkInM] = checkIn.split(':').map(Number);
       const shiftMinutes = shiftH * 60 + shiftM;
       const checkInMinutes = checkInH * 60 + checkInM;
       lateEntry = checkInMinutes > shiftMinutes + gracePeriod;
+
+      // Half day detection
       halfDay = totalHours < employee.shiftHours / 2;
+
+      // OT calculation: if totalHours > shiftHours, OT = totalHours - shiftHours
       overtimeHours = Math.max(0, totalHours - employee.shiftHours);
-      status = isWeeklyOff ? 'weekly_off' : isHoliday ? 'holiday' : halfDay ? 'half_day' : lateEntry ? 'late' : 'present';
-    } else if (isWeeklyOff) {
-      status = 'weekly_off';
+
+      // Sunday hours: if worked on Sunday, all hours are Sunday hours
+      if (isSunday) {
+        sundayHours = totalHours;
+      }
+
+      // PH hours: if worked on a public holiday, all hours are PH hours
+      if (isPH) {
+        phHours = totalHours;
+      }
+
+      // Determine status
+      if (isSunday) {
+        status = 'weekly-off';
+      } else if (isHoliday) {
+        status = 'holiday';
+      } else if (halfDay) {
+        status = 'half-day';
+      } else if (lateEntry) {
+        status = 'late';
+      } else {
+        status = 'present';
+      }
+    } else if (isSunday) {
+      status = 'weekly-off';
     } else if (isHoliday) {
       status = 'holiday';
     } else {
       status = 'absent';
     }
 
+    // Check for existing attendance record
     const existing = await db.attendance.findFirst({
-      where: { employeeId, date: { gte: new Date(d.getFullYear(), d.getMonth(), d.getDate()), lt: new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1) } },
+      where: {
+        employeeId,
+        date: {
+          gte: new Date(d.getFullYear(), d.getMonth(), d.getDate()),
+          lt: new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1),
+        },
+      },
     });
 
     let record;
     if (existing) {
       record = await db.attendance.update({
         where: { id: existing.id },
-        data: { checkIn, checkOut, totalHours, status, lateEntry, halfDay, overtimeHours, isHoliday, isWeeklyOff, remarks: body.remarks },
+        data: {
+          checkIn,
+          checkOut,
+          totalHours,
+          status,
+          lateEntry,
+          halfDay,
+          overtimeHours,
+          isHoliday,
+          isWeeklyOff,
+          isSunday,
+          isPH,
+          sundayHours,
+          phHours,
+          remarks: body.remarks,
+        },
       });
     } else {
       record = await db.attendance.create({
-        data: { employeeId, date: d, checkIn, checkOut, totalHours, status, lateEntry, halfDay, overtimeHours, isHoliday, isWeeklyOff, remarks: body.remarks },
+        data: {
+          employeeId,
+          date: d,
+          checkIn,
+          checkOut,
+          totalHours,
+          status,
+          lateEntry,
+          halfDay,
+          overtimeHours,
+          isHoliday,
+          isWeeklyOff,
+          isSunday,
+          isPH,
+          sundayHours,
+          phHours,
+          remarks: body.remarks,
+        },
       });
     }
 
+    // Create overtime record if applicable
     if (overtimeHours > 0) {
+      const overtimeRate = employee.overtimeRate;
       await db.overtime.upsert({
         where: { id: `ot-${record.id}` },
-        update: { hours: overtimeHours, rate: employee.overtimeRate, amount: overtimeHours * employee.overtimeRate, isHoliday: isHoliday || isWeeklyOff },
-        create: { id: `ot-${record.id}`, employeeId, date: d, hours: overtimeHours, rate: employee.overtimeRate, amount: overtimeHours * employee.overtimeRate, isHoliday: isHoliday || isWeeklyOff },
+        update: {
+          hours: overtimeHours,
+          rate: overtimeRate,
+          amount: overtimeHours * overtimeRate,
+          isHoliday: isHoliday || isWeeklyOff,
+          isSunday,
+        },
+        create: {
+          id: `ot-${record.id}`,
+          employeeId,
+          date: d,
+          hours: overtimeHours,
+          rate: overtimeRate,
+          amount: overtimeHours * overtimeRate,
+          isHoliday: isHoliday || isWeeklyOff,
+          isSunday,
+          status: 'approved',
+        },
       });
     }
 

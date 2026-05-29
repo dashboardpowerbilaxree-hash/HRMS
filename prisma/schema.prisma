@@ -7,14 +7,29 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model Department {
+model Admin {
+  id        String   @id @default(cuid())
+  username  String   @unique
+  password  String
+  name      String
+  role      String   @default("admin")
+  createdAt DateTime @default(now())
+}
+
+model Firm {
   id          String   @id @default(cuid())
-  name        String   @unique
   code        String   @unique
+  name        String
   description String?
-  head        String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+model Location {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Employee {
@@ -23,16 +38,20 @@ model Employee {
   fullName         String
   mobile           String?
   email            String?
-  department       String
-  designation      String
-  joiningDate      DateTime
-  salaryType       String      @default("monthly")
-  basicSalary      Float       @default(0)
-  perDaySalary     Float       @default(0)
+  firm             String
+  location         String
+  salaryType       String      @default("hourly")
+  monthlySalary    Float       @default(0)
+  dailyRate        Float       @default(0)
+  hourlyRate       Float       @default(0)
   overtimeRate     Float       @default(0)
-  shiftStart       String      @default("09:00")
-  shiftEnd         String      @default("18:00")
+  employmentType   String      @default("Full Time")
+  shiftStart       String      @default("10:00")
+  shiftEnd         String      @default("19:00")
   shiftHours       Float       @default(9)
+  designation      String?
+  department       String?
+  joiningDate      DateTime    @default(now())
   address          String?
   bankName         String?
   bankAccount      String?
@@ -115,32 +134,38 @@ model Overtime {
 }
 
 model Payroll {
-  id              String   @id @default(cuid())
-  employeeId      String
-  month           Int
-  year            Int
-  basicSalary     Float    @default(0)
-  presentDays     Float    @default(0)
-  absentDays      Float    @default(0)
-  holidayDays     Float    @default(0)
-  paidLeaves      Float    @default(0)
-  overtimeAmount  Float    @default(0)
-  bonus           Float    @default(0)
-  incentive       Float    @default(0)
-  pfDeduction     Float    @default(0)
-  esiDeduction    Float    @default(0)
-  tdsDeduction    Float    @default(0)
-  advanceDeduction Float   @default(0)
-  otherDeductions Float    @default(0)
-  grossSalary     Float    @default(0)
-  totalDeductions Float    @default(0)
-  netSalary       Float    @default(0)
-  status          String   @default("generated")
-  generatedAt     DateTime @default(now())
-  approvedBy      String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  employee        Employee @relation(fields: [employeeId], references: [employeeId])
+  id               String   @id @default(cuid())
+  employeeId       String
+  month            Int
+  year             Int
+  monthlySalary    Float    @default(0)
+  hourlyRate       Float    @default(0)
+  totalWorkedHrs   Float    @default(0)
+  otHours          Float    @default(0)
+  otRate           Float    @default(0)
+  otAmount         Float    @default(0)
+  sundayHrs        Float    @default(0)
+  phHours          Float    @default(0)
+  totalHrs         Float    @default(0)
+  presentDays      Float    @default(0)
+  absentDays       Float    @default(0)
+  holidayDays      Float    @default(0)
+  paidLeaves       Float    @default(0)
+  grossSalary      Float    @default(0)
+  tdsDeduction     Float    @default(0)
+  loanDeduction    Float    @default(0)
+  advanceDeduction Float    @default(0)
+  securityDeposit  Float    @default(0)
+  otherDeductions  Float    @default(0)
+  totalDeductions  Float    @default(0)
+  arrear           Float    @default(0)
+  netSalary        Float    @default(0)
+  status           String   @default("generated")
+  generatedAt      DateTime @default(now())
+  approvedBy       String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  employee         Employee @relation(fields: [employeeId], references: [employeeId])
 }
 
 model SalaryHistory {
@@ -154,13 +179,13 @@ model SalaryHistory {
 }
 
 model Notification {
-  id         String   @id @default(cuid())
+  id         String    @id @default(cuid())
   employeeId String?
   title      String
   message    String
-  type       String   @default("info")
-  read       Boolean  @default(false)
-  createdAt  DateTime @default(now())
+  type       String    @default("info")
+  read       Boolean   @default(false)
+  createdAt  DateTime  @default(now())
   employee   Employee? @relation(fields: [employeeId], references: [employeeId])
 }
 

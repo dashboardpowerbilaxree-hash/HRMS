@@ -24,6 +24,15 @@ export async function PUT(request: NextRequest) {
       });
       results.push(setting);
     }
+
+    await db.notification.create({
+      data: {
+        title: 'Settings Updated',
+        message: 'Company settings have been updated',
+        type: 'system',
+      },
+    });
+
     return NextResponse.json(results);
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

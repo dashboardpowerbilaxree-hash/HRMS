@@ -2,12 +2,14 @@
 
 import { useHRMSStore, PageKey } from '@/lib/store';
 import { cn } from '@/lib/utils';
+import Image from 'next/image';
 import {
   LayoutDashboard, Users, Clock, DollarSign, CalendarDays,
   Palmtree, Timer, Building2, BarChart3, Bot, FileText,
-  Settings, Bell, ChevronLeft, ChevronRight, Sparkles
+  Settings, Bell, ChevronLeft, ChevronRight, ShieldCheck, ScrollText, Filter, LogOut
 } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const navItems: { key: PageKey; label: string; icon: any }[] = [
   { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -23,10 +25,22 @@ const navItems: { key: PageKey; label: string; icon: any }[] = [
   { key: 'ai-assistant', label: 'AI Assistant', icon: Bot },
   { key: 'notifications', label: 'Notifications', icon: Bell },
   { key: 'settings', label: 'Settings', icon: Settings },
+  { key: 'admin-panel', label: 'Admin Panel', icon: ShieldCheck },
+  { key: 'audit-logs', label: 'Audit Logs', icon: ScrollText },
+];
+
+const firms = [
+  { value: '', label: 'All Firms' },
+  { value: 'LAPL', label: 'LAPL' },
+  { value: 'LRSL', label: 'LRSL' },
+  { value: 'SI', label: 'SI' },
+  { value: 'SDF', label: 'SDF' },
 ];
 
 export function Sidebar() {
-  const { currentPage, setCurrentPage, sidebarOpen, setSidebarOpen } = useHRMSStore();
+  const { currentPage, setCurrentPage, sidebarOpen, setSidebarOpen, selectedFirm, setSelectedFirm, adminName, logout } = useHRMSStore();
+
+  const displayName = adminName || 'Admin';
 
   return (
     <motion.aside
@@ -35,25 +49,29 @@ export function Sidebar() {
       transition={{ duration: 0.3, ease: 'easeInOut' }}
       className="relative flex flex-col h-full border-r border-border bg-sidebar sidebar-gradient z-20"
     >
-      {/* Logo */}
+      {/* Logo & Brand */}
       <div className="flex items-center gap-3 px-4 h-16 border-b border-border">
-        <div className="flex items-center justify-center w-9 h-9 rounded-lg gradient-primary neon-glow">
-          <Sparkles className="w-5 h-5 text-white" />
+        <div className="flex items-center justify-center w-9 h-9 rounded-lg gradient-laxree neon-glow shrink-0 overflow-hidden">
+          <Image src="/laxree-logo.png" alt="Laxree" width={36} height={36} className="rounded-md" />
         </div>
-        {sidebarOpen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="flex flex-col"
-          >
-            <span className="text-lg font-bold neon-text">NeoHRMS</span>
-            <span className="text-[10px] text-muted-foreground -mt-1">AI-Powered HRMS</span>
-          </motion.div>
-        )}
+        <AnimatePresence>
+          {sidebarOpen && (
+            <motion.div
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -10 }}
+              transition={{ duration: 0.2 }}
+              className="flex flex-col"
+            >
+              <span className="text-lg font-bold neon-text">Laxree</span>
+              <span className="text-[10px] text-muted-foreground -mt-1">HRMS Dashboard</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-1">
+      <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = currentPage === item.key;
@@ -69,15 +87,19 @@ export function Sidebar() {
               )}
             >
               <Icon className={cn('w-5 h-5 shrink-0', isActive && 'text-primary')} />
-              {sidebarOpen && (
-                <motion.span
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="truncate"
-                >
-                  {item.label}
-                </motion.span>
-              )}
+              <AnimatePresence>
+                {sidebarOpen && (
+                  <motion.span
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -10 }}
+                    transition={{ duration: 0.15 }}
+                    className="truncate"
+                  >
+                    {item.label}
+                  </motion.span>
+                )}
+              </AnimatePresence>
               {isActive && sidebarOpen && (
                 <motion.div
                   layoutId="sidebar-active"
@@ -92,23 +114,75 @@ export function Sidebar() {
       {/* Toggle Button */}
       <button
         onClick={() => setSidebarOpen(!sidebarOpen)}
-        className="absolute -right-3 top-20 w-6 h-6 rounded-full bg-card border border-border flex items-center justify-center shadow-md hover:bg-accent transition-colors"
+        className="absolute -right-3 top-20 w-6 h-6 rounded-full bg-card border border-border flex items-center justify-center shadow-md hover:bg-accent transition-colors z-30"
       >
         {sidebarOpen ? <ChevronLeft className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
       </button>
 
-      {/* Footer */}
-      {sidebarOpen && (
-        <div className="px-4 py-3 border-t border-border">
+      {/* Firm Filter & User */}
+      <div className="border-t border-border">
+        {/* Firm Filter */}
+        <AnimatePresence>
+          {sidebarOpen && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.2 }}
+              className="px-3 pt-3"
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <Filter className="w-3 h-3 text-muted-foreground" />
+                <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Firm Filter</span>
+              </div>
+              <Select value={selectedFirm} onValueChange={setSelectedFirm}>
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue placeholder="All Firms" />
+                </SelectTrigger>
+                <SelectContent>
+                  {firms.map((f) => (
+                    <SelectItem key={f.value || '__all__'} value={f.value || '__all__'}>
+                      {f.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* User Avatar & Logout */}
+        <div className="px-3 py-3">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full gradient-primary flex items-center justify-center text-white text-xs font-bold">HR</div>
-            <div className="flex flex-col">
-              <span className="text-xs font-medium">HR Admin</span>
-              <span className="text-[10px] text-muted-foreground">Super Admin</span>
+            <div className="w-8 h-8 rounded-full gradient-laxree flex items-center justify-center text-white text-xs font-bold shrink-0">
+              {displayName.charAt(0).toUpperCase()}
             </div>
+            <AnimatePresence>
+              {sidebarOpen && (
+                <motion.div
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -10 }}
+                  transition={{ duration: 0.2 }}
+                  className="flex flex-col flex-1 min-w-0"
+                >
+                  <span className="text-xs font-medium truncate">{displayName}</span>
+                  <span className="text-[10px] text-muted-foreground">Super Admin</span>
+                </motion.div>
+              )}
+            </AnimatePresence>
+            {sidebarOpen && (
+              <button
+                onClick={logout}
+                className="p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors shrink-0"
+                title="Logout"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         </div>
-      )}
+      </div>
     </motion.aside>
   );
 }

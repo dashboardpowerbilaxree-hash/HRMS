@@ -14,10 +14,10 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "NeoHRMS - AI-Powered HR & Salary Management Dashboard",
-  description: "Futuristic enterprise-grade HR & Salary Management System with AI-powered analytics, automated payroll, and smart workforce management.",
+  title: "Laxree HRMS",
+  description: "Laxree Group of Companies — AI-Powered HR & Salary Management System with smart payroll automation, attendance tracking, and workforce analytics across LAPL, LRSL, SI, and SDF divisions.",
   icons: {
-    icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
+    icon: "/laxree-logo.png",
   },
 };
 

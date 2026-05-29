@@ -1,13 +1,17 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Settings, Save, RefreshCw } from 'lucide-react';
+import { Settings, Save, RefreshCw, Info, Clock, IndianRupee } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
+import { motion } from 'framer-motion';
+import Image from 'next/image';
 
 export function SettingsPanel() {
   const [settings, setSettings] = useState<Record<string, string>>({});
@@ -25,7 +29,7 @@ export function SettingsPanel() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(settings),
     });
-    toast.success('Settings saved');
+    toast.success('Settings saved successfully');
   };
 
   const handleReseed = async () => {
@@ -37,72 +41,210 @@ export function SettingsPanel() {
   const settingGroups = [
     {
       title: 'Company Information',
+      icon: Settings,
       fields: [
-        { key: 'companyName', label: 'Company Name' },
-        { key: 'companyAddress', label: 'Company Address' },
-        { key: 'currency', label: 'Currency' },
+        { key: 'companyName', label: 'Company Name', defaultValue: 'Laxree' },
+        { key: 'companyFullName', label: 'Full Company Name', defaultValue: 'Laxree Group of Companies' },
+        { key: 'companyAddress', label: 'Company Address', defaultValue: 'Ajmer, Rajasthan, India' },
+        { key: 'currency', label: 'Currency', defaultValue: 'INR' },
       ],
     },
     {
       title: 'Payroll Configuration',
+      icon: IndianRupee,
       fields: [
-        { key: 'pfRate', label: 'PF Rate (%)' },
-        { key: 'esiRate', label: 'ESI Rate (%)' },
-        { key: 'gracePeriod', label: 'Late Grace Period (min)' },
-        { key: 'otMultiplier', label: 'OT Multiplier' },
-        { key: 'holidayOTMultiplier', label: 'Holiday OT Multiplier' },
+        { key: 'pfRate', label: 'PF Rate (%)', defaultValue: '12' },
+        { key: 'esiRate', label: 'ESI Rate (%)', defaultValue: '0.75' },
+        { key: 'gracePeriod', label: 'Late Grace Period (min)', defaultValue: '15' },
+        { key: 'otMultiplier', label: 'OT Multiplier', defaultValue: '1.5' },
+        { key: 'holidayOTMultiplier', label: 'Holiday OT Multiplier', defaultValue: '2' },
+      ],
+    },
+    {
+      title: 'Salary Formula Settings',
+      icon: Clock,
+      fields: [
+        { key: 'salaryFormula', label: 'Salary Formula', defaultValue: 'hourly' },
+        { key: 'sundayRule', label: 'Sunday Rule', defaultValue: 'earned_per_6_days' },
       ],
     },
   ];
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+      <motion.div
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3"
+      >
         <div>
-          <h2 className="text-xl font-bold">Settings</h2>
-          <p className="text-sm text-muted-foreground">Configure your HRMS system</p>
+          <h2 className="text-xl font-bold flex items-center gap-2">
+            <Settings className="w-5 h-5 text-primary" />
+            Settings
+          </h2>
+          <p className="text-sm text-muted-foreground">Configure your Laxree HRMS system</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={handleReseed}><RefreshCw className="w-4 h-4 mr-2" /> Reset Demo Data</Button>
-          <Button className="gradient-primary text-white" onClick={handleSave}><Save className="w-4 h-4 mr-2" /> Save Settings</Button>
+          <Button className="gradient-laxree text-white" onClick={handleSave}><Save className="w-4 h-4 mr-2" /> Save Settings</Button>
         </div>
-      </div>
+      </motion.div>
 
-      {settingGroups.map((group) => (
-        <Card key={group.title} className="glass-card border-0">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold">{group.title}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {group.fields.map((field) => (
-                <div key={field.key}>
-                  <Label className="text-xs">{field.label}</Label>
-                  <Input
-                    value={settings[field.key] || ''}
-                    onChange={e => setSettings({ ...settings, [field.key]: e.target.value })}
-                    className="mt-1"
-                  />
+      {/* Laxree Brand Card */}
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.05 }}
+      >
+        <Card className="glass-card border-0">
+          <CardContent className="p-6">
+            <div className="flex items-center gap-4">
+              <div className="w-16 h-16 rounded-2xl gradient-laxree flex items-center justify-center overflow-hidden neon-glow">
+                <Image src="/laxree-logo.png" alt="Laxree" width={52} height={52} className="rounded-xl" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold neon-text">Laxree Group of Companies</h3>
+                <p className="text-sm text-muted-foreground">AI-Powered HRMS Dashboard &middot; Firms: LAPL, LRSL, SI, SDF</p>
+                <div className="flex items-center gap-2 mt-1">
+                  <Badge variant="outline" className="text-[10px]">v2.0</Badge>
+                  <Badge variant="outline" className="text-[10px]">Enterprise</Badge>
+                  <Badge variant="outline" className="text-[10px]">AI Enabled</Badge>
                 </div>
-              ))}
+              </div>
             </div>
           </CardContent>
         </Card>
-      ))}
+      </motion.div>
 
-      <Card className="glass-card border-0">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-semibold">About</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 gap-2 text-sm">
-            <div><span className="text-muted-foreground">Version:</span> 2.0.0</div>
-            <div><span className="text-muted-foreground">License:</span> Enterprise</div>
-            <div><span className="text-muted-foreground">Database:</span> SQLite</div>
-            <div><span className="text-muted-foreground">AI Engine:</span> Active</div>
-          </div>
-        </CardContent>
-      </Card>
+      {settingGroups.map((group, gi) => {
+        const GroupIcon = group.icon;
+        return (
+          <motion.div
+            key={group.title}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 + gi * 0.05 }}
+          >
+            <Card className="glass-card border-0">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                  <GroupIcon className="w-4 h-4 text-primary" />
+                  {group.title}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {group.fields.map((field) => (
+                    <div key={field.key}>
+                      <Label className="text-xs">{field.label}</Label>
+                      {field.key === 'salaryFormula' ? (
+                        <Select
+                          value={settings[field.key] || field.defaultValue}
+                          onValueChange={(v) => setSettings({ ...settings, [field.key]: v })}
+                        >
+                          <SelectTrigger className="mt-1">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="hourly">Hourly Rate Based</SelectItem>
+                            <SelectItem value="daily">Daily Rate Based</SelectItem>
+                            <SelectItem value="monthly">Monthly Fixed</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      ) : field.key === 'sundayRule' ? (
+                        <Select
+                          value={settings[field.key] || field.defaultValue}
+                          onValueChange={(v) => setSettings({ ...settings, [field.key]: v })}
+                        >
+                          <SelectTrigger className="mt-1">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="earned_per_6_days">Earned per 6 working days</SelectItem>
+                            <SelectItem value="fixed">Fixed weekly off</SelectItem>
+                            <SelectItem value="compensatory">Compensatory off</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <Input
+                          value={settings[field.key] || field.defaultValue || ''}
+                          onChange={e => setSettings({ ...settings, [field.key]: e.target.value })}
+                          className="mt-1"
+                        />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        );
+      })}
+
+      {/* Salary Formula Info Card */}
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.3 }}
+      >
+        <Card className="glass-card border-0">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <Info className="w-4 h-4 text-primary" />
+              Laxree Salary Formula Reference
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2 text-sm text-muted-foreground">
+              <div className="flex items-start gap-2">
+                <Badge variant="outline" className="text-[9px] h-4 px-1.5 mt-0.5 shrink-0">Hourly</Badge>
+                <span>Gross = Total Worked Hours × Hourly Rate + OT Amount</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <Badge variant="outline" className="text-[9px] h-4 px-1.5 mt-0.5 shrink-0">Net</Badge>
+                <span>Net = Gross + Arrear − Total Deductions</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <Badge variant="outline" className="text-[9px] h-4 px-1.5 mt-0.5 shrink-0">Daily</Badge>
+                <span>Net = (Daily Rate × Days Present) + Sunday Amt + PH Amt − Deductions</span>
+              </div>
+              <Separator />
+              <p className="text-xs">
+                Hourly Rate = Monthly Salary ÷ (Shift Hours × Days in Month) &nbsp;|&nbsp;
+                OT Rate = Hourly Rate × {settings.otMultiplier || '1.5'} &nbsp;|&nbsp;
+                Holiday OT = Hourly Rate × {settings.holidayOTMultiplier || '2'}
+              </p>
+              <p className="text-xs">
+                Sunday Rule: {settings.sundayRule === 'earned_per_6_days' ? 'Earned per 6 working days' :
+                  settings.sundayRule === 'fixed' ? 'Fixed weekly off' : 'Compensatory off'}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </motion.div>
+
+      {/* About */}
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.35 }}
+      >
+        <Card className="glass-card border-0">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold">About</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-2 text-sm">
+              <div><span className="text-muted-foreground">System:</span> Laxree HRMS</div>
+              <div><span className="text-muted-foreground">Version:</span> 2.0.0</div>
+              <div><span className="text-muted-foreground">License:</span> Enterprise</div>
+              <div><span className="text-muted-foreground">Database:</span> SQLite</div>
+              <div><span className="text-muted-foreground">AI Engine:</span> Active</div>
+              <div><span className="text-muted-foreground">Firms:</span> LAPL, LRSL, SI, SDF</div>
+            </div>
+          </CardContent>
+        </Card>
+      </motion.div>
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-export type PageKey = 'dashboard' | 'employees' | 'attendance' | 'payroll' | 'leaves' | 'holidays' | 'overtime' | 'departments' | 'reports' | 'ai-assistant' | 'salary-slip' | 'settings' | 'notifications' | 'employee-profile';
+export type PageKey = 'dashboard' | 'employees' | 'attendance' | 'payroll' | 'leaves' | 'holidays' | 'overtime' | 'departments' | 'reports' | 'ai-assistant' | 'salary-slip' | 'settings' | 'notifications' | 'employee-profile' | 'admin-panel' | 'audit-logs';
 
 interface HRMSStore {
   currentPage: PageKey;
@@ -11,6 +11,18 @@ interface HRMSStore {
   setSelectedEmployeeId: (id: string | null) => void;
   darkMode: boolean;
   toggleDarkMode: () => void;
+  selectedFirm: string;
+  setSelectedFirm: (firm: string) => void;
+  selectedLocation: string;
+  setSelectedLocation: (location: string) => void;
+  // Admin auth state
+  isLoggedIn: boolean;
+  setIsLoggedIn: (loggedIn: boolean) => void;
+  adminName: string;
+  setAdminName: (name: string) => void;
+  adminRole: string;
+  setAdminRole: (role: string) => void;
+  logout: () => void;
 }
 
 export const useHRMSStore = create<HRMSStore>((set) => ({
@@ -29,5 +41,22 @@ export const useHRMSStore = create<HRMSStore>((set) => ({
       document.documentElement.classList.remove('dark');
     }
     return { darkMode: newDark };
+  }),
+  selectedFirm: '',
+  setSelectedFirm: (firm) => set({ selectedFirm: firm }),
+  selectedLocation: '',
+  setSelectedLocation: (location) => set({ selectedLocation: location }),
+  // Admin auth
+  isLoggedIn: false,
+  setIsLoggedIn: (loggedIn) => set({ isLoggedIn: loggedIn }),
+  adminName: '',
+  setAdminName: (name) => set({ adminName: name }),
+  adminRole: '',
+  setAdminRole: (role) => set({ adminRole: role }),
+  logout: () => set({
+    isLoggedIn: false,
+    adminName: '',
+    adminRole: '',
+    currentPage: 'dashboard',
   }),
 }));

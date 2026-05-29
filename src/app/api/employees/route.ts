@@ -5,20 +5,21 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search') || '';
-    const department = searchParams.get('department') || '';
-    const status = searchParams.get('status') || 'active';
+    const firm = searchParams.get('firm') || '';
+    const location = searchParams.get('location') || '';
+    const status = searchParams.get('status') || '';
 
     const where: any = {};
-    if (status) where.status = status;
-    if (department) where.department = department;
     if (search) {
       where.OR = [
         { fullName: { contains: search } },
         { employeeId: { contains: search } },
-        { email: { contains: search } },
-        { designation: { contains: search } },
+        { mobile: { contains: search } },
       ];
     }
+    if (firm) where.firm = firm;
+    if (location) where.location = location;
+    if (status) where.status = status;
 
     const employees = await db.employee.findMany({
       where,
@@ -34,38 +35,48 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
+    const { fullName, firm, location, salaryType, monthlySalary, shiftStart, shiftEnd, shiftHours } = body;
 
-    const lastEmployee = await db.employee.findFirst({
+    if (!fullName || !firm) {
+      return NextResponse.json({ error: 'Name and firm are required' }, { status: 400 });
+    }
+
+    // Auto-generate employee ID
+    const lastEmp = await db.employee.findFirst({
+      where: { employeeId: { startsWith: 'EMP-' } },
       orderBy: { employeeId: 'desc' },
     });
-
-    let nextNum = 1;
-    if (lastEmployee) {
-      const match = lastEmployee.employeeId.match(/EMP-(\d+)/);
-      if (match) nextNum = parseInt(match[1]) + 1;
-    }
+    const nextNum = lastEmp ? parseInt(lastEmp.employeeId.replace('EMP-', '')) + 1 : 1;
     const employeeId = `EMP-${String(nextNum).padStart(3, '0')}`;
 
-    const perDaySalary = body.salaryType === 'monthly'
-      ? (body.basicSalary || 0) / 30
-      : body.perDaySalary || 0;
+    const sh = shiftHours || 9;
+    const daysInMonth = 31;
+    const hourlyRate = salaryType === 'hourly'
+      ? Math.round((monthlySalary / (sh * daysInMonth)) * 100) / 100
+      : Math.round(((body.dailyRate || monthlySalary / 30) / sh) * 100) / 100;
+    const overtimeRate = Math.round(hourlyRate * 1.5 * 100) / 100;
+    const dailyRate = body.dailyRate || Math.round(monthlySalary / 30);
 
     const employee = await db.employee.create({
       data: {
         employeeId,
-        fullName: body.fullName,
+        fullName: fullName.trim(),
         mobile: body.mobile || null,
         email: body.email || null,
-        department: body.department,
-        designation: body.designation,
-        joiningDate: new Date(body.joiningDate),
-        salaryType: body.salaryType || 'monthly',
-        basicSalary: body.basicSalary || 0,
-        perDaySalary,
-        overtimeRate: body.overtimeRate || 0,
-        shiftStart: body.shiftStart || '09:00',
-        shiftEnd: body.shiftEnd || '18:00',
-        shiftHours: body.shiftHours || 9,
+        firm,
+        location: location || 'Ajmer',
+        salaryType: salaryType || 'hourly',
+        monthlySalary: monthlySalary || 0,
+        dailyRate,
+        hourlyRate,
+        overtimeRate,
+        employmentType: body.employmentType || 'Full Time',
+        shiftStart: shiftStart || '10:00',
+        shiftEnd: shiftEnd || '19:00',
+        shiftHours: sh,
+        designation: body.designation || null,
+        department: firm,
+        joiningDate: body.joiningDate ? new Date(body.joiningDate) : new Date(),
         address: body.address || null,
         bankName: body.bankName || null,
         bankAccount: body.bankAccount || null,
@@ -77,14 +88,13 @@ export async function POST(request: NextRequest) {
         status: 'active',
         reportingManager: body.reportingManager || null,
         emergencyContact: body.emergencyContact || null,
-        profilePhoto: body.profilePhoto || null,
       },
     });
 
     await db.notification.create({
       data: {
         title: 'New Employee Added',
-        message: `${employee.fullName} (${employee.employeeId}) joined ${employee.department}`,
+        message: `${fullName} (${employeeId}) joined ${firm} at ${location || 'Ajmer'}`,
         type: 'employee',
       },
     });
