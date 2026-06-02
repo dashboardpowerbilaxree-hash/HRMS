@@ -115,6 +115,34 @@ export function SalarySlipGenerator() {
   const firmDetails = firms.find(f => f.code === firmCode);
   const firmFullName = FIRM_NAMES[firmCode] || firmDetails?.name || 'Laxree Group of Companies';
 
+  // ── Helper: Download XLSX workbook reliably ──
+  const downloadWorkbook = async (wb: any, filename: string) => {
+    try {
+      const XLSX = await import('xlsx-js-style');
+      try {
+        // Method 1: Direct writeFile (works in most browsers)
+        XLSX.writeFile(wb, filename);
+      } catch {
+        // Method 2: Blob-based download fallback
+        const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+        const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        }, 100);
+      }
+    } catch (e2) {
+      toast.error('Download failed. Please try again.');
+      console.error('Excel download error:', e2);
+    }
+  };
+
   // ── Professional Excel Export (Beautiful & Colorful) ──
   const handleExportExcel = async () => {
     if (!slip?.payroll) return;
@@ -236,8 +264,8 @@ export function SalarySlipGenerator() {
     ];
     XLSX.utils.book_append_sheet(wb, ws, 'Salary Slip');
 
-    XLSX.writeFile(wb, `Payslip_${e.fullName}_${months[month - 1]}_${year}.xlsx`);
-    toast.success('Payslip Excel exported successfully');
+    await downloadWorkbook(wb, `Payslip_${e.fullName}_${months[month - 1]}_${year}.xlsx`);
+    toast.success('Payslip Excel downloaded successfully!');
   };
 
   // ── Print Handler (Professional format) ──
@@ -249,6 +277,11 @@ export function SalarySlipGenerator() {
     const baseSalary = p.baseSalary != null ? p.baseSalary : Math.round((p.monthlySalary - ((p.monthlySalary / (new Date(year, month, 0).getDate())) * p.absentDays)) * 100) / 100;
     const totalEarnings = p.grossSalary + (p.bonus || 0) + (p.incentive || 0) + (p.arrear || 0);
 
+    // Get the logo URL for the company
+    const firmLogoUrl = FIRM_LOGOS[firmCode] || '/laxree-logo.png';
+    // Build absolute URL for the logo in the print window
+    const logoAbsUrl = `${window.location.origin}${firmLogoUrl}`;
+
     const printWin = window.open('', '_blank', 'width=800,height=1000');
     if (!printWin) return;
     printWin.document.write(`<!DOCTYPE html><html><head><title>Salary Slip - ${e.fullName}</title>
@@ -258,7 +291,8 @@ export function SalarySlipGenerator() {
       body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 11px; color: #222; background: #fff; }
       .payslip { max-width: 750px; margin: 0 auto; border: 2px solid #D4A843; border-radius: 8px; overflow: hidden; }
       .header { background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%); color: #D4A843; padding: 18px 24px; display: flex; align-items: center; gap: 16px; }
-      .header .logo { width: 56px; height: 56px; background: #D4A843; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 900; color: #1a1a1a; }
+      .header .logo { width: 56px; height: 56px; background: #D4A843; border-radius: 10px; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+      .header .logo img { width: 100%; height: 100%; object-fit: contain; border-radius: 8px; }
       .header h1 { font-size: 17px; font-weight: 700; letter-spacing: 0.5px; margin-bottom: 2px; }
       .header p { font-size: 11px; color: #aaa; }
       .divider { height: 3px; background: linear-gradient(90deg, #D4A843, #f0d78c, #D4A843); }
@@ -289,7 +323,7 @@ export function SalarySlipGenerator() {
     </style></head><body>
     <div class="payslip">
       <div class="header">
-        <div class="logo">L</div>
+        <div class="logo"><img src="${logoAbsUrl}" alt="${firmCode}" /></div>
         <div>
           <h1>${firmFullName}</h1>
           <p>Salary Slip for the month of ${months[month - 1]} ${year}</p>

@@ -181,3 +181,25 @@ Stage Summary:
 - Fetches employee-specific data when employee name or ID is mentioned
 - Renders markdown responses with tables, bold, bullet points, and headers
 - Enhanced UI with data-driven suggestions, live data indicator, and better chat experience
+---
+Task ID: 1
+Agent: Main Agent
+Task: Fix monthly attendance Export Excel, beautify exports, fix salary slip logo, add clear all, fix scrolling
+
+Work Log:
+- Added downloadWorkbook() helper function with dual fallback: XLSX.writeFile() → Blob-based download → error toast
+- Changed all XLSX.writeFile() calls to use the new downloadWorkbook() helper (both AttendanceTracker and SalarySlipGenerator)
+- Fixed monthly attendance scrolling: Changed from only showing records with data to showing ALL 30/31 days of the month with day names, color-coded Sundays, sticky headers, and proper overflow-y scroll with 60vh max height
+- Added "Clear All" button with double-confirmation dialog in the daily attendance tab
+- Created /api/attendance/clear-all DELETE endpoint that clears attendance records and associated overtime records
+- Tested clear-all API: successfully cleared 655 attendance records
+- Fixed salary slip print logo: Changed from text "L" to actual company logo image using absolute URL
+- Updated firm logos in database: LAPL→/logos/lapl.jpg, LRSL→/logos/lrsl.jpg, SI→/logos/si.png, SDF→/logos/sdf.png
+- Rebuilt the project successfully and restarted the server
+
+Stage Summary:
+- Export Excel now uses Blob-based download fallback for reliability
+- Monthly attendance shows all days of the month with scrolling
+- Clear All button added to daily attendance tab
+- Salary slip print shows actual company logo
+- Firm logos updated in database to correct paths

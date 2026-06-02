@@ -445,6 +445,34 @@ export function AttendanceTracker() {
     border: { bottom: { style: 'thin' as const, color: { rgb: 'E5E7EB' } } },
   });
 
+  // ── Helper: Download XLSX workbook reliably ──
+  const downloadWorkbook = async (wb: any, filename: string) => {
+    try {
+      const XLSX = await import('xlsx-js-style');
+      try {
+        // Method 1: Direct writeFile (works in most browsers)
+        XLSX.writeFile(wb, filename);
+      } catch {
+        // Method 2: Blob-based download fallback
+        const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+        const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        }, 100);
+      }
+    } catch (e2) {
+      toast.error('Download failed. Please try again.');
+      console.error('Excel download error:', e2);
+    }
+  };
+
   // ── Export Daily Attendance as Beautiful Excel ──
   const handleExportDailyExcel = async () => {
     if (filteredRecords.length === 0) {
@@ -555,8 +583,8 @@ export function AttendanceTracker() {
     ws2['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 1 } }];
     XLSX.utils.book_append_sheet(wb, ws2, 'Summary');
 
-    XLSX.writeFile(wb, `Daily_Attendance_${MONTHS[parseInt(filterMonth) - 1]}_${filterYear}.xlsx`);
-    toast.success('Excel exported successfully');
+    await downloadWorkbook(wb, `Daily_Attendance_${MONTHS[parseInt(filterMonth) - 1]}_${filterYear}.xlsx`);
+    toast.success('Daily Attendance Excel downloaded successfully!');
   };
 
   // ── Export Monthly Attendance Register as Beautiful Excel ──
@@ -756,8 +784,8 @@ export function AttendanceTracker() {
     ];
     XLSX.utils.book_append_sheet(wb, ws2, 'Summary');
 
-    XLSX.writeFile(wb, `Monthly_Attendance_${s.employee.fullName}_${s.monthName}_${s.year}.xlsx`);
-    toast.success('Monthly Attendance Excel exported successfully');
+    await downloadWorkbook(wb, `Monthly_Attendance_${s.employee.fullName}_${s.monthName}_${s.year}.xlsx`);
+    toast.success('Monthly Attendance Excel downloaded successfully!');
   };
 
   // ── Convert Excel serial date to YYYY-MM-DD ──
@@ -1266,6 +1294,29 @@ export function AttendanceTracker() {
             <Button variant="outline" size="sm" className="h-9 gap-1.5 shrink-0" onClick={handleExportDailyExcel}>
               <FileDown className="w-3.5 h-3.5" /> Export Excel
             </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9 gap-1.5 shrink-0 border-red-500/30 hover:border-red-500/60 hover:bg-red-500/5 text-red-500"
+              onClick={async () => {
+                if (!confirm('Are you sure you want to CLEAR ALL attendance records? This cannot be undone!')) return;
+                if (!confirm('FINAL WARNING: All attendance data will be permanently deleted. Continue?')) return;
+                try {
+                  const res = await fetch('/api/attendance/clear-all', { method: 'DELETE' });
+                  if (res.ok) {
+                    const data = await res.json();
+                    toast.success(`Cleared ${data.deletedCount} attendance records`);
+                    loadData();
+                  } else {
+                    toast.error('Failed to clear attendance records');
+                  }
+                } catch {
+                  toast.error('Failed to clear attendance records');
+                }
+              }}
+            >
+              <Trash2 className="w-3.5 h-3.5" /> Clear All
+            </Button>
           </motion.div>
 
           {/* ── Attendance Table ── */}
@@ -1491,43 +1542,78 @@ export function AttendanceTracker() {
 
                   <Separator />
 
-                  {/* Daily Records Table */}
-                  {monthlySummary.records.length > 0 && (
-                    <div>
-                      <h4 className="text-sm font-semibold mb-2 flex items-center gap-1.5">
-                        <ChevronRight className="w-4 h-4 text-gold" />
-                        Daily Attendance Breakdown
-                      </h4>
-                      <div className="overflow-y-auto max-h-[70vh] rounded-lg" style={{ WebkitOverflowScrolling: 'touch' }}>
-                        <Table>
-                          <TableHeader>
-                            <TableRow className="hover:bg-transparent">
-                              <TableHead className="text-xs">Date</TableHead>
-                              <TableHead className="text-xs">In</TableHead>
-                              <TableHead className="text-xs">Out</TableHead>
-                              <TableHead className="text-xs">Hrs</TableHead>
-                              <TableHead className="text-xs">Status</TableHead>
-                              <TableHead className="text-xs">OT</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {monthlySummary.records.map((rec) => (
-                              <TableRow key={rec.id} className="hover:bg-muted/30">
-                                <TableCell className="text-xs whitespace-nowrap">
-                                  {new Date(rec.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
-                                </TableCell>
-                                <TableCell className="text-xs font-mono">{rec.checkIn || '—'}</TableCell>
-                                <TableCell className="text-xs font-mono">{rec.checkOut || '—'}</TableCell>
-                                <TableCell className="text-xs font-medium">{rec.totalHours > 0 ? `${formatHours(rec.totalHours)}h` : '—'}</TableCell>
-                                <TableCell><StatusBadge status={rec.status} /></TableCell>
-                                <TableCell className="text-xs">{rec.overtimeHours > 0 ? `${formatHours(rec.overtimeHours)}h` : '—'}</TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </div>
+                  {/* Daily Records Table — Full scrollable */}
+                  <div>
+                    <h4 className="text-sm font-semibold mb-2 flex items-center gap-1.5">
+                      <ChevronRight className="w-4 h-4 text-gold" />
+                      Daily Attendance Breakdown ({monthlySummary.records.length} days)
+                    </h4>
+                    <div
+                      className="rounded-lg border border-border/50"
+                      style={{
+                        maxHeight: '60vh',
+                        overflowY: 'auto',
+                        WebkitOverflowScrolling: 'touch',
+                        scrollBehavior: 'smooth',
+                      }}
+                    >
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="hover:bg-transparent sticky top-0 bg-card z-10">
+                            <TableHead className="text-xs">Date</TableHead>
+                            <TableHead className="text-xs">Day</TableHead>
+                            <TableHead className="text-xs">In</TableHead>
+                            <TableHead className="text-xs">Out</TableHead>
+                            <TableHead className="text-xs">Hrs</TableHead>
+                            <TableHead className="text-xs">Status</TableHead>
+                            <TableHead className="text-xs">OT</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {(() => {
+                            const daysInMonth = new Date(monthlySummary.year, monthlySummary.month, 0).getDate();
+                            const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+                            const rows = [];
+                            for (let day = 1; day <= daysInMonth; day++) {
+                              const dateStr = `${monthlySummary.year}-${String(monthlySummary.month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                              const dateObj = new Date(dateStr + 'T00:00:00');
+                              const dayName = dayNames[dateObj.getDay()];
+                              const rec = monthlySummary.records.find((r: any) => {
+                                const rDate = new Date(r.date);
+                                return rDate.getFullYear() === monthlySummary.year && rDate.getMonth() + 1 === monthlySummary.month && rDate.getDate() === day;
+                              });
+                              const isSunday = dateObj.getDay() === 0;
+                              rows.push(
+                                <TableRow
+                                  key={day}
+                                  className={`${isSunday ? 'bg-blue-500/5' : 'hover:bg-muted/30'} transition-colors`}
+                                >
+                                  <TableCell className="text-xs whitespace-nowrap font-medium">
+                                    {dateObj.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+                                  </TableCell>
+                                  <TableCell className={`text-xs ${isSunday ? 'text-blue-500 font-bold' : ''}`}>{dayName}</TableCell>
+                                  <TableCell className="text-xs font-mono">{rec?.checkIn || '—'}</TableCell>
+                                  <TableCell className="text-xs font-mono">{rec?.checkOut || '—'}</TableCell>
+                                  <TableCell className="text-xs font-medium">{rec && rec.totalHours > 0 ? `${formatHours(rec.totalHours)}h` : '—'}</TableCell>
+                                  <TableCell>
+                                    {rec ? (
+                                      <StatusBadge status={rec.status} />
+                                    ) : isSunday ? (
+                                      <StatusBadge status="weekly-off" />
+                                    ) : (
+                                      <span className="text-xs text-muted-foreground italic">No Record</span>
+                                    )}
+                                  </TableCell>
+                                  <TableCell className="text-xs">{rec && rec.overtimeHours > 0 ? `${formatHours(rec.overtimeHours)}h` : '—'}</TableCell>
+                                </TableRow>
+                              );
+                            }
+                            return rows;
+                          })()}
+                        </TableBody>
+                      </Table>
                     </div>
-                  )}
+                  </div>
                 </CardContent>
               </Card>
             </motion.div>
