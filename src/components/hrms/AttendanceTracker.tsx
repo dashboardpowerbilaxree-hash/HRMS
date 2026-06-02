@@ -401,7 +401,7 @@ export function AttendanceTracker() {
 
   useEffect(() => { loadMonthlySummary(); }, [loadMonthlySummary]);
 
-  // ── Styling helpers for Excel ──
+  // ── Styling helpers for Excel (Beautiful & Eye-Catching) ──
   const GOLD = 'D4A843';
   const DARK = '1A1A1A';
   const WHITE = 'FFFFFF';
@@ -415,58 +415,77 @@ export function AttendanceTracker() {
   const LIGHT_GREEN = 'ECFDF5';
   const LIGHT_RED = 'FEF2F2';
   const LIGHT_AMBER = 'FFFBEB';
+  const LIGHT_BLUE = 'DBEAFE';
+  const LIGHT_PURPLE = 'F3E8FF';
+  const DEEP_BLUE = '1E3A5F';
+  const TEAL = '0D9488';
+  const CORAL = 'F43F5E';
+
+  // Full border helper
+  const fullBorder = (color: string = 'B0B0B0', style: 'thin' | 'medium' = 'thin') => ({
+    top: { style, color: { rgb: color } },
+    bottom: { style, color: { rgb: color } },
+    left: { style, color: { rgb: color } },
+    right: { style, color: { rgb: color } },
+  });
+  const goldBorder = {
+    top: { style: 'medium' as const, color: { rgb: GOLD } },
+    bottom: { style: 'medium' as const, color: { rgb: GOLD } },
+    left: { style: 'medium' as const, color: { rgb: GOLD } },
+    right: { style: 'medium' as const, color: { rgb: GOLD } },
+  };
 
   const styleHeader = (rgb: string = DARK) => ({
-    font: { bold: true, color: { rgb: GOLD }, sz: 14 },
+    font: { bold: true, color: { rgb: GOLD }, sz: 16 },
     fill: { fgColor: { rgb } },
-    alignment: { horizontal: 'center' as const },
+    alignment: { horizontal: 'center' as const, vertical: 'center' as const },
+    border: goldBorder,
   });
-  const styleSubHeader = (rgb: string = DARK) => ({
-    font: { bold: true, color: { rgb: WHITE }, sz: 11 },
+  const styleSubHeader = (rgb: string = DEEP_BLUE) => ({
+    font: { bold: true, color: { rgb: WHITE }, sz: 12 },
     fill: { fgColor: { rgb } },
-    alignment: { horizontal: 'center' as const },
+    alignment: { horizontal: 'center' as const, vertical: 'center' as const },
+    border: fullBorder('FFFFFF', 'medium'),
   });
-  const styleColHeader = (rgb: string = EMERALD) => ({
+  const styleColHeader = (rgb: string = TEAL) => ({
     font: { bold: true, color: { rgb: WHITE }, sz: 10 },
     fill: { fgColor: { rgb } },
     alignment: { horizontal: 'center' as const, vertical: 'center' as const, wrapText: true },
-    border: { bottom: { style: 'medium' as const, color: { rgb: GOLD } } },
+    border: fullBorder(WHITE, 'medium'),
   });
   const styleData = (bg?: string) => ({
-    font: { sz: 10 },
+    font: { sz: 10, color: { rgb: '333333' } },
     fill: bg ? { fgColor: { rgb: bg } } : undefined,
     alignment: { horizontal: 'center' as const, vertical: 'center' as const },
-    border: { bottom: { style: 'thin' as const, color: { rgb: 'E5E7EB' } } },
+    border: fullBorder('D0D0D0'),
   });
   const styleBold = (rgb: string = DARK, bg?: string) => ({
     font: { bold: true, color: { rgb }, sz: 10 },
     fill: bg ? { fgColor: { rgb: bg } } : undefined,
     alignment: { horizontal: 'center' as const, vertical: 'center' as const },
-    border: { bottom: { style: 'thin' as const, color: { rgb: 'E5E7EB' } } },
+    border: fullBorder('D0D0D0'),
   });
 
-  // ── Helper: Download XLSX workbook reliably ──
+  // ── Helper: Download XLSX workbook reliably (always uses blob approach) ──
   const downloadWorkbook = async (wb: any, filename: string) => {
     try {
       const XLSX = await import('xlsx-js-style');
-      try {
-        // Method 1: Direct writeFile (works in most browsers)
-        XLSX.writeFile(wb, filename);
-      } catch {
-        // Method 2: Blob-based download fallback
-        const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-        const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        document.body.appendChild(a);
+      const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      // Use setTimeout to ensure the element is in the DOM
+      setTimeout(() => {
         a.click();
         setTimeout(() => {
           document.body.removeChild(a);
           URL.revokeObjectURL(url);
-        }, 100);
-      }
+        }, 250);
+      }, 50);
     } catch (e2) {
       toast.error('Download failed. Please try again.');
       console.error('Excel download error:', e2);

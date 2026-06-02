@@ -32,6 +32,27 @@ const FIRM_LOGOS: Record<string, string> = {
   SDF: '/logos/sdf.png',
 };
 
+const FIRM_ADDRESSES: Record<string, string> = {
+  LAPL: 'Gurgaon, Haryana, India',
+  LRSL: 'Roofing Factory, India',
+  SI: 'Ajmer, Rajasthan, India',
+  SDF: 'Palra Warehouse, India',
+};
+
+const FIRM_PHONES: Record<string, string> = {
+  LAPL: '+919251683663',
+  LRSL: '+919251683663',
+  SI: '+919251683663',
+  SDF: '+919251683663',
+};
+
+const FIRM_EMAILS: Record<string, string> = {
+  LAPL: 'hr@laxree.com',
+  LRSL: 'hr@laxrereoofing.com',
+  SI: 'hr@smarthinternational.com',
+  SDF: 'hr@sangrahdecor.com',
+};
+
 // ── Convert decimal hours to HH.MM display format ──
 function formatHours(decimal: number): string {
   if (!decimal || decimal === 0) return '0.00';
@@ -48,11 +69,35 @@ function getFirmFromEmployeeId(employeeId: string): string {
   if (id.startsWith('LRSL')) return 'LRSL';
   if (id.startsWith('SI-') || id.startsWith('SI0')) return 'SI';
   if (id.startsWith('SDF')) return 'SDF';
-  return ''; // fallback to existing department/firm
+  return '';
 }
 
 function FirmBadge({ f }: { f: string }) {
   return <span className={FIRM_BADGE_CLASS[f] || 'firm-badge-lapl'}>{f}</span>;
+}
+
+// ── Convert number to words (Indian format) ──
+function numberToWords(num: number): string {
+  if (num === 0) return 'Zero';
+  const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine',
+    'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+  const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+
+  function convert(n: number): string {
+    if (n < 20) return ones[n];
+    if (n < 100) return tens[Math.floor(n / 10)] + (n % 10 ? ' ' + ones[n % 10] : '');
+    if (n < 1000) return ones[Math.floor(n / 100)] + ' Hundred' + (n % 100 ? ' and ' + convert(n % 100) : '');
+    if (n < 100000) return convert(Math.floor(n / 1000)) + ' Thousand' + (n % 1000 ? ' ' + convert(n % 1000) : '');
+    if (n < 10000000) return convert(Math.floor(n / 100000)) + ' Lakh' + (n % 100000 ? ' ' + convert(n % 100000) : '');
+    return convert(Math.floor(n / 10000000)) + ' Crore' + (n % 10000000 ? ' ' + convert(n % 10000000) : '');
+  }
+
+  const rupees = Math.floor(num);
+  const paise = Math.round((num - rupees) * 100);
+  let result = 'Rupees ' + convert(rupees);
+  if (paise > 0) result += ' and ' + convert(paise) + ' Paise';
+  result += ' Only';
+  return result;
 }
 
 interface FirmDetails {
@@ -67,7 +112,7 @@ interface FirmDetails {
 export function SalarySlipGenerator() {
   const { selectedEmployeeId } = useHRMSStore();
   const [employeeId, setEmployeeId] = useState(selectedEmployeeId || '');
-  const [employees, setEmployees] = useState<{ employeeId: string; fullName: string; department: string; firm: string; location: string; salaryType: string }[]>([]);
+  const [employees, setEmployees] = useState<{ employeeId: string; fullName: string; department: string; firm: string; location: string; salaryType: string; mobile?: string; email?: string; address?: string }[]>([]);
   const [month, setMonth] = useState(new Date().getMonth() + 1);
   const [year, setYear] = useState(new Date().getFullYear());
   const [slip, setSlip] = useState<any>(null);
@@ -114,283 +159,358 @@ export function SalarySlipGenerator() {
   const firmCode = (slip?.employee?.employeeId ? getFirmFromEmployeeId(slip.employee.employeeId) : '') || slip?.employee?.department || slip?.employee?.firm || '';
   const firmDetails = firms.find(f => f.code === firmCode);
   const firmFullName = FIRM_NAMES[firmCode] || firmDetails?.name || 'Laxree Group of Companies';
+  const firmAddress = FIRM_ADDRESSES[firmCode] || firmDetails?.address || '';
+  const firmPhone = FIRM_PHONES[firmCode] || firmDetails?.contactPhone || '+919251683663';
+  const firmEmail = FIRM_EMAILS[firmCode] || firmDetails?.contactEmail || 'hr@laxree.com';
+  const firmLogo = FIRM_LOGOS[firmCode] || '/laxree-logo.png';
 
-  // ── Helper: Download XLSX workbook reliably ──
+  // ── Helper: Download XLSX workbook reliably (always uses blob approach) ──
   const downloadWorkbook = async (wb: any, filename: string) => {
     try {
       const XLSX = await import('xlsx-js-style');
-      try {
-        // Method 1: Direct writeFile (works in most browsers)
-        XLSX.writeFile(wb, filename);
-      } catch {
-        // Method 2: Blob-based download fallback
-        const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-        const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        document.body.appendChild(a);
+      const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      setTimeout(() => {
         a.click();
         setTimeout(() => {
           document.body.removeChild(a);
           URL.revokeObjectURL(url);
-        }, 100);
-      }
+        }, 250);
+      }, 50);
     } catch (e2) {
       toast.error('Download failed. Please try again.');
       console.error('Excel download error:', e2);
     }
   };
 
-  // ── Professional Excel Export (Beautiful & Colorful) ──
+  // ── Professional Excel Export (Beautiful & Colorful — Matching Payslip Format) ──
   const handleExportExcel = async () => {
     if (!slip?.payroll) return;
     const XLSX = await import('xlsx-js-style');
     const p = slip.payroll;
     const e = slip.employee;
-    const fd = firmDetails;
     const baseSalary = p.baseSalary != null ? p.baseSalary : Math.round((p.monthlySalary - ((p.monthlySalary / (new Date(year, month, 0).getDate())) * p.absentDays)) * 100) / 100;
-    const totalEarnings = p.grossSalary + (p.bonus || 0) + (p.incentive || 0) + (p.arrear || 0);
     const perDayRate = Math.round((p.monthlySalary / (new Date(year, month, 0).getDate())) * 100) / 100;
+    const totalEarnings = p.grossSalary + (p.bonus || 0) + (p.incentive || 0) + (p.arrear || 0);
 
-    const GOLD = 'D4A843'; const DARK = '1A1A1A'; const WHITE = 'FFFFFF';
-    const EMERALD = '059669'; const RED = 'DC2626'; const LIGHT_BG = 'FFF8E7';
-    const LIGHT_GREEN = 'ECFDF5'; const LIGHT_RED = 'FEF2F2';
+    // Color constants
+    const BLUE = '1E3A5F';
+    const LIGHT_BLUE = 'DBEAFE';
+    const WHITE = 'FFFFFF';
+    const BLACK = '1A1A1A';
+    const EMERALD = '059669';
+    const RED = 'DC2626';
+    const GOLD = 'D4A843';
+    const TEAL = '0D9488';
+    const LIGHT_GREEN = 'ECFDF5';
+    const LIGHT_RED = 'FEF2F2';
+    const LIGHT_GOLD = 'FFF8E7';
 
-    const hdr = { font: { bold: true, color: { rgb: GOLD }, sz: 14 }, fill: { fgColor: { rgb: DARK } }, alignment: { horizontal: 'center' as const } };
-    const subhdr = (rgb: string = DARK) => ({ font: { bold: true, color: { rgb: WHITE }, sz: 11 }, fill: { fgColor: { rgb } }, alignment: { horizontal: 'center' as const } });
-    const sectionTitle = { font: { bold: true, color: { rgb: GOLD }, sz: 10 }, fill: { fgColor: { rgb: '2D2D2D' } } };
-    const label = { font: { sz: 10, color: { rgb: '666666' } } };
-    const value = (bg?: string) => ({ font: { bold: true, sz: 10 }, fill: bg ? { fgColor: { rgb: bg } } : undefined });
-    const netStyle = { font: { bold: true, color: { rgb: GOLD }, sz: 14 }, fill: { fgColor: { rgb: DARK } }, alignment: { horizontal: 'center' as const } };
+    const fullBorder = (color: string = 'B0B0B0', style: 'thin' | 'medium' = 'thin') => ({
+      top: { style, color: { rgb: color } },
+      bottom: { style, color: { rgb: color } },
+      left: { style, color: { rgb: color } },
+      right: { style, color: { rgb: color } },
+    });
 
     const wb = XLSX.utils.book_new();
 
-    // ── Payslip Sheet ──
+    // ── Payslip Sheet in the exact format user wants ──
     const data: any[][] = [
-      [firmFullName],
-      ['SALARY SLIP'],
-      [`Month: ${months[month - 1]} ${year}`, '', '', `Date: ${new Date().toLocaleDateString('en-IN')}`],
+      // Row 1: Title
+      ['SALARY SLIP FORMAT'],
+      // Row 2: Company Information Header
+      ['Salary Slip', '', '', '', 'COMPANY LOGO'],
+      // Row 3: Company Info section header
+      ['Company Information', '', '', '', ''],
+      // Rows 4-7: Company details
+      ['Company Name :', firmFullName, '', '', ''],
+      ['Company Address :', firmAddress, '', '', ''],
+      ['Company Phone no :', firmPhone, '', '', ''],
+      ['Company Email Address :', firmEmail, '', '', ''],
+      // Row 8: Employee Information header
+      ['Employee Information', '', '', '', ''],
+      // Rows 9-12: Employee details
+      ['Employee Name :', e.fullName, '', '', ''],
+      ['Employee Address :', e.address || e.location || 'N/A', '', '', ''],
+      ['Employee Phone no :', e.mobile || 'N/A', '', '', ''],
+      ['Employee Email ID :', e.email || 'N/A', '', '', ''],
+      // Row 13: blank
       [],
-      ['Employee Details'],
-      ['Employee Name', e.fullName, '', 'Employee Code', e.employeeId],
-      ['Company', `${firmCode} - ${firmFullName}`, '', 'Location', e.location || 'N/A'],
-      ['Designation', e.designation || 'N/A', '', 'Salary Type', (e.salaryType || 'hourly').charAt(0).toUpperCase() + (e.salaryType || 'hourly').slice(1)],
+      // Row 14: Earnings/Deductions header
+      ['Earnings', 'Amount', '', 'Deductions', 'Amount'],
+      // Rows 15-23: Earnings & Deductions rows
+      ['Basic', baseSalary.toLocaleString('en-IN'), '', 'Provident Fund', '0'],
+      ['HRA', '0', '', 'ESI', '0'],
+      ['Special Allowance', '0', '', 'Professional Tax', '0'],
+      ['Gross Salary', p.grossSalary.toLocaleString('en-IN'), '', 'Salary Advance', (p.advanceDeduction || 0).toLocaleString('en-IN')],
+      ['Other Earnings', (p.arrear || 0).toLocaleString('en-IN'), '', 'TDS', (p.tdsDeduction || 0).toLocaleString('en-IN')],
+      ['Incentives', (p.incentive || 0).toLocaleString('en-IN'), '', 'Loan', (p.loanDeduction || 0).toLocaleString('en-IN')],
+      ['Bonus', (p.bonus || 0).toLocaleString('en-IN'), '', 'Security Deposit', (p.securityDeposit || 0).toLocaleString('en-IN')],
+      ['Over Time Pay', (p.otAmount || 0).toLocaleString('en-IN'), '', 'Other Deduction', (p.otherDeductions || 0).toLocaleString('en-IN')],
+      ['Total Earnings', totalEarnings.toLocaleString('en-IN'), '', 'Net Pay', p.netSalary.toLocaleString('en-IN')],
+      // Row 24: blank
       [],
-      ['Work Details'],
-      ['Hourly Rate', (p.hourlyRate || 0).toFixed(2), '', 'Regular Hours', formatHours((p.totalWorkedHrs || 0) - (p.otHours || 0))],
-      ['Sunday Hours', formatHours(p.sundayHrs || 0), '', 'PH Hours', formatHours(p.phHours || 0)],
-      ['Total Worked Hrs', formatHours(p.totalWorkedHrs || 0), '', 'OT Hours', formatHours(p.otHours || 0)],
-      ['Present Days', p.presentDays || 0, '', 'Absent Days', p.absentDays || 0],
+      // Row 25: In Words
+      ['In Words :', numberToWords(p.netSalary), '', '', ''],
+      // Row 26: blank
       [],
-      ['Earnings', '', '', 'Deductions', ''],
-      ['Base Salary', baseSalary.toLocaleString('en-IN'), '', 'TDS', (p.tdsDeduction || 0).toLocaleString('en-IN')],
-      ['OT Amount', (p.otAmount || 0).toLocaleString('en-IN'), '', 'Loan', (p.loanDeduction || 0).toLocaleString('en-IN')],
-      ['Bonus', (p.bonus || 0).toLocaleString('en-IN'), '', 'Advance', (p.advanceDeduction || 0).toLocaleString('en-IN')],
-      ['Incentive', (p.incentive || 0).toLocaleString('en-IN'), '', 'Security Deposit', (p.securityDeposit || 0).toLocaleString('en-IN')],
-      ['Arrear', (p.arrear || 0).toLocaleString('en-IN'), '', 'Others', (p.otherDeductions || 0).toLocaleString('en-IN')],
-      ['Total Earnings', totalEarnings.toLocaleString('en-IN'), '', 'Total Deductions', (p.totalDeductions || 0).toLocaleString('en-IN')],
+      // Row 27: Signature section
+      ['Prepared By :', '', '', 'Received By :', ''],
+      // Row 28: blank
       [],
-      ['', '', '', 'NET SALARY', p.netSalary.toLocaleString('en-IN')],
-      [],
-      ['Formula: Base Salary = Monthly Salary − (Per Day Rate × Absent Days) | Per Day Rate = Monthly Salary ÷ Days in Month | OT = OT Hrs × Hourly Rate (1x)'],
+      // Row 29: Footer
       [`This is a computer-generated payslip by ${firmFullName}`],
+      [`Formula: Base = Monthly - (PerDay x Absent) | PerDay = Monthly / Days in Month | OT = OT Hrs x Hourly Rate (1x)`],
     ];
 
     const ws = XLSX.utils.aoa_to_sheet(data);
-
-    // Apply beautiful styling
     const cols5 = ['A','B','C','D','E'];
-    // Row 1: Company name header
-    cols5.forEach(c => { if (ws[`${c}1`]) ws[`${c}1`].s = hdr; });
-    // Row 2: SALARY SLIP
-    cols5.forEach(c => { if (ws[`${c}2`]) ws[`${c}2`].s = subhdr('2D2D2D'); });
-    // Row 3: Month/Date info
-    ['A','D'].forEach(c => { if (ws[`${c}3`]) ws[`${c}3`].s = { font: { italic: true, sz: 9, color: { rgb: 'CCCCCC' } }, fill: { fgColor: { rgb: '2D2D2D' } } }; });
-    // Row 5: Employee Details section title
-    ['A','D'].forEach(c => { if (ws[`${c}5`]) ws[`${c}5`].s = sectionTitle; });
-    // Rows 6-8: Employee data
-    for (const r of [6,7,8]) {
-      if (ws[`A${r}`]) ws[`A${r}`].s = label;
-      if (ws[`B${r}`]) ws[`B${r}`].s = value(LIGHT_BG);
-      if (ws[`D${r}`]) ws[`D${r}`].s = label;
-      if (ws[`E${r}`]) ws[`E${r}`].s = value(LIGHT_BG);
+
+    // Row 1: Title
+    cols5.forEach(c => { if (ws[`${c}1`]) ws[`${c}1`].s = { font: { bold: true, color: { rgb: BLACK }, sz: 18 }, alignment: { horizontal: 'center' as const }, border: fullBorder(BLACK, 'medium') }; });
+
+    // Row 2: Salary Slip / Company Logo
+    if (ws['A2']) ws['A2'].s = { font: { bold: true, color: { rgb: WHITE }, sz: 14 }, fill: { fgColor: { rgb: BLUE } }, alignment: { horizontal: 'center' as const }, border: fullBorder(BLUE, 'medium') };
+    if (ws['B2']) ws['B2'].s = { font: { bold: true, color: { rgb: WHITE }, sz: 14 }, fill: { fgColor: { rgb: BLUE } }, border: fullBorder(BLUE, 'medium') };
+    if (ws['D2']) ws['D2'].s = { font: { bold: true, color: { rgb: WHITE }, sz: 10 }, fill: { fgColor: { rgb: BLUE } }, alignment: { horizontal: 'center' as const }, border: fullBorder(BLUE, 'medium') };
+    if (ws['E2']) ws['E2'].s = { font: { bold: true, color: { rgb: WHITE }, sz: 10 }, fill: { fgColor: { rgb: BLUE } }, alignment: { horizontal: 'center' as const }, border: fullBorder(BLUE, 'medium') };
+
+    // Row 3: Company Information section header
+    cols5.forEach(c => { if (ws[`${c}3`]) ws[`${c}3`].s = { font: { bold: true, color: { rgb: WHITE }, sz: 11 }, fill: { fgColor: { rgb: BLUE } }, border: fullBorder(BLUE) }; });
+
+    // Rows 4-7: Company details (light blue background)
+    for (const r of [4, 5, 6, 7]) {
+      if (ws[`A${r}`]) ws[`A${r}`].s = { font: { bold: true, sz: 10, color: { rgb: BLACK } }, fill: { fgColor: { rgb: LIGHT_BLUE } }, border: fullBorder('90B8E0') };
+      if (ws[`B${r}`]) ws[`B${r}`].s = { font: { sz: 10 }, fill: { fgColor: { rgb: LIGHT_BLUE } }, border: fullBorder('90B8E0') };
     }
-    // Row 10: Work Details section title
-    ['A','D'].forEach(c => { if (ws[`${c}10`]) ws[`${c}10`].s = sectionTitle; });
-    // Rows 11-14: Work data
-    for (const r of [11,12,13,14]) {
-      if (ws[`A${r}`]) ws[`A${r}`].s = label;
-      if (ws[`B${r}`]) ws[`B${r}`].s = value(LIGHT_BG);
-      if (ws[`D${r}`]) ws[`D${r}`].s = label;
-      if (ws[`E${r}`]) ws[`E${r}`].s = value(LIGHT_BG);
+
+    // Row 8: Employee Information header
+    cols5.forEach(c => { if (ws[`${c}8`]) ws[`${c}8`].s = { font: { bold: true, color: { rgb: BLACK }, sz: 11 }, fill: { fgColor: { rgb: 'E8E8E8' } }, border: fullBorder('999999') }; });
+
+    // Rows 9-12: Employee details (white background)
+    for (const r of [9, 10, 11, 12]) {
+      if (ws[`A${r}`]) ws[`A${r}`].s = { font: { bold: true, sz: 10, color: { rgb: BLACK } }, border: fullBorder('CCCCCC') };
+      if (ws[`B${r}`]) ws[`B${r}`].s = { font: { sz: 10 }, border: fullBorder('CCCCCC') };
     }
-    // Row 16: Earnings/Deductions header
-    if (ws['A16']) ws['A16'].s = subhdr(EMERALD);
-    if (ws['D16']) ws['D16'].s = subhdr(RED);
-    if (ws['B16']) ws['B16'].s = subhdr(EMERALD);
-    if (ws['E16']) ws['E16'].s = subhdr(RED);
-    // Rows 17-21: Earnings/Deductions data
-    for (const r of [17,18,19,20,21]) {
-      const bg = (r - 17) % 2 === 0 ? LIGHT_GREEN : undefined;
-      const bgR = (r - 17) % 2 === 0 ? LIGHT_RED : undefined;
-      if (ws[`A${r}`]) ws[`A${r}`].s = { font: { sz: 10 } };
-      if (ws[`B${r}`]) ws[`B${r}`].s = value(bg);
-      if (ws[`D${r}`]) ws[`D${r}`].s = { font: { sz: 10 } };
-      if (ws[`E${r}`]) ws[`E${r}`].s = value(bgR);
+
+    // Row 14: Earnings/Deductions header
+    if (ws['A14']) ws['A14'].s = { font: { bold: true, color: { rgb: WHITE }, sz: 11 }, fill: { fgColor: { rgb: EMERALD } }, alignment: { horizontal: 'center' as const }, border: fullBorder(EMERALD, 'medium') };
+    if (ws['B14']) ws['B14'].s = { font: { bold: true, color: { rgb: WHITE }, sz: 11 }, fill: { fgColor: { rgb: EMERALD } }, alignment: { horizontal: 'center' as const }, border: fullBorder(EMERALD, 'medium') };
+    if (ws['D14']) ws['D14'].s = { font: { bold: true, color: { rgb: WHITE }, sz: 11 }, fill: { fgColor: { rgb: RED } }, alignment: { horizontal: 'center' as const }, border: fullBorder(RED, 'medium') };
+    if (ws['E14']) ws['E14'].s = { font: { bold: true, color: { rgb: WHITE }, sz: 11 }, fill: { fgColor: { rgb: RED } }, alignment: { horizontal: 'center' as const }, border: fullBorder(RED, 'medium') };
+
+    // Rows 15-23: Earnings/Deductions data (alternating colors)
+    for (let i = 0; i < 9; i++) {
+      const r = 15 + i;
+      const isEven = i % 2 === 0;
+      const earnBg = isEven ? LIGHT_GREEN : LIGHT_GOLD;
+      const dedBg = isEven ? LIGHT_RED : 'FFF0F0';
+      const isTotal = i === 8; // last row
+
+      if (ws[`A${r}`]) ws[`A${r}`].s = { font: { sz: 10, bold: isTotal, color: { rgb: isTotal ? EMERALD : BLACK } }, fill: { fgColor: { rgb: earnBg } }, border: fullBorder(isTotal ? EMERALD : 'C0C0C0', isTotal ? 'medium' : 'thin') };
+      if (ws[`B${r}`]) ws[`B${r}`].s = { font: { sz: 10, bold: isTotal, color: { rgb: isTotal ? EMERALD : BLACK } }, fill: { fgColor: { rgb: earnBg } }, alignment: { horizontal: 'right' as const }, border: fullBorder(isTotal ? EMERALD : 'C0C0C0', isTotal ? 'medium' : 'thin') };
+      if (ws[`D${r}`]) ws[`D${r}`].s = { font: { sz: 10, bold: isTotal, color: { rgb: isTotal ? RED : BLACK } }, fill: { fgColor: { rgb: dedBg } }, border: fullBorder(isTotal ? RED : 'C0C0C0', isTotal ? 'medium' : 'thin') };
+      if (ws[`E${r}`]) ws[`E${r}`].s = { font: { sz: 10, bold: isTotal, color: { rgb: isTotal ? RED : BLACK } }, fill: { fgColor: { rgb: dedBg } }, alignment: { horizontal: 'right' as const }, border: fullBorder(isTotal ? RED : 'C0C0C0', isTotal ? 'medium' : 'thin') };
     }
-    // Row 22: Totals
-    if (ws['A22']) ws['A22'].s = { font: { bold: true, sz: 10 }, fill: { fgColor: { rgb: LIGHT_GREEN } } };
-    if (ws['B22']) ws['B22'].s = { font: { bold: true, sz: 11, color: { rgb: EMERALD } }, fill: { fgColor: { rgb: LIGHT_GREEN } } };
-    if (ws['D22']) ws['D22'].s = { font: { bold: true, sz: 10 }, fill: { fgColor: { rgb: LIGHT_RED } } };
-    if (ws['E22']) ws['E22'].s = { font: { bold: true, sz: 11, color: { rgb: RED } }, fill: { fgColor: { rgb: LIGHT_RED } } };
-    // Row 24: NET SALARY
-    if (ws['D24']) ws['D24'].s = netStyle;
-    if (ws['E24']) ws['E24'].s = { font: { bold: true, color: { rgb: GOLD }, sz: 16 }, fill: { fgColor: { rgb: DARK } }, alignment: { horizontal: 'center' as const } };
-    // Rows 26-27: Footer
-    cols5.forEach(c => { if (ws[`${c}26`]) ws[`${c}26`].s = { font: { italic: true, sz: 8, color: { rgb: '999999' } } }; });
-    cols5.forEach(c => { if (ws[`${c}27`]) ws[`${c}27`].s = { font: { italic: true, sz: 8, color: { rgb: '999999' } } }; });
+
+    // Row 25: In Words (blue bg)
+    if (ws['A25']) ws['A25'].s = { font: { bold: true, sz: 10, color: { rgb: BLUE } }, fill: { fgColor: { rgb: LIGHT_BLUE } }, border: fullBorder(BLUE) };
+    if (ws['B25']) ws['B25'].s = { font: { italic: true, sz: 10, color: { rgb: BLUE } }, fill: { fgColor: { rgb: LIGHT_BLUE } }, border: fullBorder(BLUE) };
+
+    // Row 27: Signature section (blue bg)
+    cols5.forEach(c => { if (ws[`${c}27`]) ws[`${c}27`].s = { font: { bold: true, sz: 10, color: { rgb: WHITE } }, fill: { fgColor: { rgb: BLUE } }, border: fullBorder(BLUE) }; });
+
+    // Rows 29-30: Footer
+    cols5.forEach(c => { if (ws[`${c}29`]) ws[`${c}29`].s = { font: { italic: true, sz: 8, color: { rgb: '888888' } } }; });
+    cols5.forEach(c => { if (ws[`${c}30`]) ws[`${c}30`].s = { font: { italic: true, sz: 8, color: { rgb: '888888' } } }; });
 
     ws['!cols'] = [
-      { wch: 20 }, { wch: 25 }, { wch: 5 }, { wch: 20 }, { wch: 25 },
+      { wch: 22 }, { wch: 28 }, { wch: 4 }, { wch: 22 }, { wch: 28 },
     ];
     ws['!merges'] = [
       { s: { r: 0, c: 0 }, e: { r: 0, c: 4 } },
-      { s: { r: 1, c: 0 }, e: { r: 1, c: 4 } },
-      { s: { r: 23, c: 3 }, e: { r: 23, c: 4 } },
-      { s: { r: 25, c: 0 }, e: { r: 25, c: 4 } },
-      { s: { r: 26, c: 0 }, e: { r: 26, c: 4 } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: 1 } },
+      { s: { r: 1, c: 3 }, e: { r: 1, c: 4 } },
+      { s: { r: 2, c: 0 }, e: { r: 2, c: 4 } },
+      { s: { r: 3, c: 1 }, e: { r: 3, c: 4 } },
+      { s: { r: 4, c: 1 }, e: { r: 4, c: 4 } },
+      { s: { r: 5, c: 1 }, e: { r: 5, c: 4 } },
+      { s: { r: 6, c: 1 }, e: { r: 6, c: 4 } },
+      { s: { r: 7, c: 0 }, e: { r: 7, c: 4 } },
+      { s: { r: 8, c: 1 }, e: { r: 8, c: 4 } },
+      { s: { r: 9, c: 1 }, e: { r: 9, c: 4 } },
+      { s: { r: 10, c: 1 }, e: { r: 10, c: 4 } },
+      { s: { r: 11, c: 1 }, e: { r: 11, c: 4 } },
+      { s: { r: 13, c: 2 }, e: { r: 13, c: 2 } },
+      { s: { r: 24, c: 1 }, e: { r: 24, c: 4 } },
+      { s: { r: 28, c: 0 }, e: { r: 28, c: 4 } },
+      { s: { r: 29, c: 0 }, e: { r: 29, c: 4 } },
     ];
     XLSX.utils.book_append_sheet(wb, ws, 'Salary Slip');
+
+    // ── Sheet 2: Detailed Breakdown ──
+    const detailData: any[][] = [
+      [firmFullName],
+      ['SALARY BREAKDOWN — ' + months[month - 1] + ' ' + year],
+      [],
+      ['Employee Details'],
+      ['Name', e.fullName, '', 'Code', e.employeeId],
+      ['Company', `${firmCode} - ${firmFullName}`, '', 'Location', e.location || 'N/A'],
+      ['Designation', e.designation || 'N/A', '', 'Salary Type', (e.salaryType || 'hourly').charAt(0).toUpperCase() + (e.salaryType || 'hourly').slice(1)],
+      [],
+      ['Salary Calculation'],
+      ['Monthly Salary', p.monthlySalary.toLocaleString('en-IN'), '', 'Days in Month', new Date(year, month, 0).getDate()],
+      ['Per Day Rate', perDayRate.toLocaleString('en-IN'), '', 'Absent Days', p.absentDays || 0],
+      ['Base Salary (Monthly - PerDay x Absent)', baseSalary.toLocaleString('en-IN'), '', 'Present Days', p.presentDays || 0],
+      ['Hourly Rate', (p.hourlyRate || 0).toFixed(2), '', 'Shift Hours', formatHours(e.shiftHours || 9)],
+      [],
+      ['Hours Breakdown'],
+      ['Total Worked Hrs', formatHours(p.totalWorkedHrs || 0), '', 'OT Hours', formatHours(p.otHours || 0)],
+      ['Sunday Hours', formatHours(p.sundayHrs || 0), '', 'PH Hours', formatHours(p.phHours || 0)],
+      ['OT Rate (1x normal)', (p.otRate || 0).toFixed(2), '', 'OT Amount', (p.otAmount || 0).toLocaleString('en-IN')],
+    ];
+
+    const ws2 = XLSX.utils.aoa_to_sheet(detailData);
+    const cols = ['A','B','C','D','E'];
+    // Style
+    cols.forEach(c => { if (ws2[`${c}1`]) ws2[`${c}1`].s = { font: { bold: true, color: { rgb: GOLD }, sz: 14 }, fill: { fgColor: { rgb: BLACK } }, alignment: { horizontal: 'center' as const }, border: fullBorder(GOLD, 'medium') }; });
+    cols.forEach(c => { if (ws2[`${c}2`]) ws2[`${c}2`].s = { font: { bold: true, color: { rgb: WHITE }, sz: 11 }, fill: { fgColor: { rgb: BLUE } }, alignment: { horizontal: 'center' as const }, border: fullBorder(BLUE) }; });
+    ['A','D'].forEach(c => { if (ws2[`${c}4`]) ws2[`${c}4`].s = { font: { bold: true, color: { rgb: GOLD }, sz: 10 }, fill: { fgColor: { rgb: '2D2D2D' } } }; });
+    for (const r of [5,6,7]) {
+      if (ws2[`A${r}`]) ws2[`A${r}`].s = { font: { sz: 10, color: { rgb: '666666' } } };
+      if (ws2[`B${r}`]) ws2[`B${r}`].s = { font: { bold: true, sz: 10 }, fill: { fgColor: { rgb: LIGHT_GOLD } } };
+      if (ws2[`D${r}`]) ws2[`D${r}`].s = { font: { sz: 10, color: { rgb: '666666' } } };
+      if (ws2[`E${r}`]) ws2[`E${r}`].s = { font: { bold: true, sz: 10 }, fill: { fgColor: { rgb: LIGHT_GOLD } } };
+    }
+    ['A','D'].forEach(c => { if (ws2[`${c}9`]) ws2[`${c}9`].s = { font: { bold: true, color: { rgb: GOLD }, sz: 10 }, fill: { fgColor: { rgb: '2D2D2D' } } }; });
+    for (const r of [10,11,12,13]) {
+      if (ws2[`A${r}`]) ws2[`A${r}`].s = { font: { sz: 10, color: { rgb: '666666' } } };
+      if (ws2[`B${r}`]) ws2[`B${r}`].s = { font: { bold: true, sz: 10 }, fill: { fgColor: { rgb: LIGHT_BLUE } } };
+      if (ws2[`D${r}`]) ws2[`D${r}`].s = { font: { sz: 10, color: { rgb: '666666' } } };
+      if (ws2[`E${r}`]) ws2[`E${r}`].s = { font: { bold: true, sz: 10 }, fill: { fgColor: { rgb: LIGHT_BLUE } } };
+    }
+    ['A','D'].forEach(c => { if (ws2[`${c}15`]) ws2[`${c}15`].s = { font: { bold: true, color: { rgb: GOLD }, sz: 10 }, fill: { fgColor: { rgb: '2D2D2D' } } }; });
+    for (const r of [16,17,18]) {
+      if (ws2[`A${r}`]) ws2[`A${r}`].s = { font: { sz: 10, color: { rgb: '666666' } } };
+      if (ws2[`B${r}`]) ws2[`B${r}`].s = { font: { bold: true, sz: 10 }, fill: { fgColor: { rgb: LIGHT_GOLD } } };
+      if (ws2[`D${r}`]) ws2[`D${r}`].s = { font: { sz: 10, color: { rgb: '666666' } } };
+      if (ws2[`E${r}`]) ws2[`E${r}`].s = { font: { bold: true, sz: 10 }, fill: { fgColor: { rgb: LIGHT_GOLD } } };
+    }
+
+    ws2['!cols'] = [{ wch: 32 }, { wch: 22 }, { wch: 4 }, { wch: 22 }, { wch: 22 }];
+    ws2['!merges'] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 4 } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: 4 } },
+    ];
+    XLSX.utils.book_append_sheet(wb, ws2, 'Breakdown');
 
     await downloadWorkbook(wb, `Payslip_${e.fullName}_${months[month - 1]}_${year}.xlsx`);
     toast.success('Payslip Excel downloaded successfully!');
   };
 
-  // ── Print Handler (Professional format) ──
+  // ── Print Handler (Professional Blue-White Format matching user's desired layout) ──
   const handlePrint = () => {
     if (!slip?.payroll || !slipRef.current) return;
     const p = slip.payroll;
     const e = slip.employee;
-    const fd = firmDetails;
     const baseSalary = p.baseSalary != null ? p.baseSalary : Math.round((p.monthlySalary - ((p.monthlySalary / (new Date(year, month, 0).getDate())) * p.absentDays)) * 100) / 100;
     const totalEarnings = p.grossSalary + (p.bonus || 0) + (p.incentive || 0) + (p.arrear || 0);
+    const perDayRate = Math.round((p.monthlySalary / (new Date(year, month, 0).getDate())) * 100) / 100;
 
-    // Get the logo URL for the company
-    const firmLogoUrl = FIRM_LOGOS[firmCode] || '/laxree-logo.png';
-    // Build absolute URL for the logo in the print window
-    const logoAbsUrl = `${window.location.origin}${firmLogoUrl}`;
+    const logoAbsUrl = `${window.location.origin}${firmLogo}`;
 
     const printWin = window.open('', '_blank', 'width=800,height=1000');
     if (!printWin) return;
     printWin.document.write(`<!DOCTYPE html><html><head><title>Salary Slip - ${e.fullName}</title>
     <style>
-      @page { size: A4; margin: 12mm; }
+      @page { size: A4; margin: 10mm; }
       * { margin: 0; padding: 0; box-sizing: border-box; }
       body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 11px; color: #222; background: #fff; }
-      .payslip { max-width: 750px; margin: 0 auto; border: 2px solid #D4A843; border-radius: 8px; overflow: hidden; }
-      .header { background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%); color: #D4A843; padding: 18px 24px; display: flex; align-items: center; gap: 16px; }
-      .header .logo { width: 56px; height: 56px; background: #D4A843; border-radius: 10px; overflow: hidden; display: flex; align-items: center; justify-content: center; }
-      .header .logo img { width: 100%; height: 100%; object-fit: contain; border-radius: 8px; }
-      .header h1 { font-size: 17px; font-weight: 700; letter-spacing: 0.5px; margin-bottom: 2px; }
-      .header p { font-size: 11px; color: #aaa; }
-      .divider { height: 3px; background: linear-gradient(90deg, #D4A843, #f0d78c, #D4A843); }
-      .section { padding: 12px 24px; }
-      .section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #D4A843; margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid #e8dcc8; }
-      .emp-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px 16px; }
-      .emp-grid .item { font-size: 10px; padding: 3px 0; }
-      .emp-grid .item .label { color: #888; font-size: 9px; display: block; }
-      .emp-grid .item .value { font-weight: 600; font-size: 11px; }
-      .work-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
-      .work-box { background: #f8f5ef; border: 1px solid #e8dcc8; padding: 8px 10px; border-radius: 6px; text-align: center; }
-      .work-box .label { font-size: 9px; color: #888; display: block; }
-      .work-box .value { font-size: 14px; font-weight: 700; color: #1a1a1a; }
-      .salary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
-      .salary-col h3 { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; padding-bottom: 4px; }
-      .earnings h3 { color: #2e7d32; border-bottom: 2px solid #2e7d32; }
-      .deductions h3 { color: #c62828; border-bottom: 2px solid #c62828; }
-      .row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 10px; border-bottom: 1px dotted #eee; }
-      .row.total { font-weight: 700; border-top: 2px solid #333; border-bottom: none; padding-top: 6px; margin-top: 4px; font-size: 12px; }
-      .net-bar { background: linear-gradient(135deg, #1a1a1a, #2d2d2d); padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; border-top: 3px solid #D4A843; }
-      .net-bar .left { color: #aaa; font-size: 10px; }
-      .net-bar .right { text-align: right; }
-      .net-bar .right .label { font-size: 10px; color: #aaa; display: block; }
-      .net-bar .right .value { font-size: 26px; font-weight: 800; color: #D4A843; }
-      .footer { padding: 10px 24px; text-align: center; font-size: 9px; color: #999; border-top: 1px solid #eee; }
-      .signature { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; padding: 20px 24px 10px; }
-      .signature .sig-line { border-top: 1px solid #999; padding-top: 4px; text-align: center; font-size: 9px; color: #888; }
+      .payslip { max-width: 750px; margin: 0 auto; border: 2px solid #1E3A5F; border-radius: 8px; overflow: hidden; }
+      .title { text-align: center; font-size: 20px; font-weight: 800; padding: 10px; color: #1A1A1A; border-bottom: 2px solid #1E3A5F; }
+      .company-header { background: #1E3A5F; color: white; padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; }
+      .company-header .left h2 { font-size: 16px; font-weight: 700; margin-bottom: 2px; }
+      .company-header .left p { font-size: 10px; color: #b0c4de; }
+      .company-header .logo-box { width: 70px; height: 70px; background: white; border-radius: 8px; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+      .company-header .logo-box img { width: 100%; height: 100%; object-fit: contain; }
+      .section-header { background: #1E3A5F; color: white; padding: 6px 20px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
+      .info-grid { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; padding: 10px 20px; background: #DBEAFE; }
+      .info-grid .label { font-weight: 600; font-size: 10px; color: #1E3A5F; }
+      .info-grid .value { font-size: 10px; }
+      .emp-section { background: white; }
+      .emp-section .info-grid { background: #f8f9fa; }
+      .table-section { padding: 0; }
+      table { width: 100%; border-collapse: collapse; }
+      th { background: #059669; color: white; font-size: 11px; font-weight: 700; padding: 8px 12px; text-align: left; }
+      th.ded { background: #DC2626; }
+      td { padding: 6px 12px; font-size: 10px; border-bottom: 1px solid #e5e7eb; }
+      tr:nth-child(even) td { background: #ECFDF5; }
+      tr:nth-child(even) td.ded-cell { background: #FEF2F2; }
+      tr.total-row td { font-weight: 700; border-top: 2px solid #333; background: #f0fdf4 !important; font-size: 12px; }
+      tr.total-row td.ded-cell { background: #fef2f2 !important; color: #DC2626; }
+      tr.total-row td.earn-total { color: #059669; }
+      .net-pay-row td { font-weight: 800; background: #FEF2F2 !important; color: #DC2626; font-size: 13px; border-top: 2px solid #DC2626; }
+      .in-words { padding: 8px 20px; background: #DBEAFE; font-size: 10px; color: #1E3A5F; }
+      .in-words .label { font-weight: 700; }
+      .in-words .value { font-style: italic; }
+      .signature-section { background: #1E3A5F; color: white; padding: 12px 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
+      .sig-line { border-top: 1px solid white; padding-top: 4px; text-align: center; font-size: 9px; margin-top: 20px; }
+      .footer { padding: 6px 20px; text-align: center; font-size: 8px; color: #999; border-top: 1px solid #eee; }
     </style></head><body>
     <div class="payslip">
-      <div class="header">
-        <div class="logo"><img src="${logoAbsUrl}" alt="${firmCode}" /></div>
-        <div>
-          <h1>${firmFullName}</h1>
-          <p>Salary Slip for the month of ${months[month - 1]} ${year}</p>
+      <div class="title">SALARY SLIP FORMAT</div>
+      <div class="company-header">
+        <div class="left">
+          <h2>Salary Slip</h2>
+          <p>Company Information</p>
+        </div>
+        <div class="logo-box"><img src="${logoAbsUrl}" alt="${firmCode}" /></div>
+      </div>
+      <div class="info-grid">
+        <span class="label">Company Name :</span><span class="value">${firmFullName}</span>
+        <span class="label">Company Address :</span><span class="value">${firmAddress}</span>
+        <span class="label">Company Phone no :</span><span class="value">${firmPhone}</span>
+        <span class="label">Company Email Address :</span><span class="value">${firmEmail}</span>
+      </div>
+      <div class="section-header">Employee Information</div>
+      <div class="emp-section">
+        <div class="info-grid">
+          <span class="label">Employee Name :</span><span class="value">${e.fullName}</span>
+          <span class="label">Employee Address :</span><span class="value">${e.address || e.location || 'N/A'}</span>
+          <span class="label">Employee Phone no :</span><span class="value">${e.mobile || 'N/A'}</span>
+          <span class="label">Employee Email ID :</span><span class="value">${e.email || 'N/A'}</span>
         </div>
       </div>
-      <div class="divider"></div>
-      <div class="section">
-        <div class="section-title">Employee Information</div>
-        <div class="emp-grid">
-          <div class="item"><span class="label">Employee Name</span><span class="value">${e.fullName}</span></div>
-          <div class="item"><span class="label">Employee Code</span><span class="value">${e.employeeId}</span></div>
-          <div class="item"><span class="label">Company</span><span class="value">${firmCode} - ${firmFullName}</span></div>
-          <div class="item"><span class="label">Location</span><span class="value">${e.location || 'N/A'}</span></div>
-          <div class="item"><span class="label">Designation</span><span class="value">${e.designation || 'N/A'}</span></div>
-          <div class="item"><span class="label">Salary Type</span><span class="value">${(e.salaryType || 'hourly').charAt(0).toUpperCase() + (e.salaryType || 'hourly').slice(1)}</span></div>
-          ${fd ? `
-          <div class="item"><span class="label">Address</span><span class="value">${fd.address || 'N/A'}</span></div>
-          <div class="item"><span class="label">Phone</span><span class="value">${fd.contactPhone || 'N/A'}</span></div>
-          <div class="item"><span class="label">Email</span><span class="value">${fd.contactEmail || 'N/A'}</span></div>
-          ` : ''}
-        </div>
+      <div class="table-section">
+        <table>
+          <tr><th>Earnings</th><th>Amount</th><th class="ded">Deductions</th><th class="ded">Amount</th></tr>
+          <tr><td>Basic</td><td>₹${baseSalary.toLocaleString('en-IN')}</td><td class="ded-cell">Provident Fund</td><td class="ded-cell">₹0</td></tr>
+          <tr><td>HRA</td><td>₹0</td><td class="ded-cell">ESI</td><td class="ded-cell">₹0</td></tr>
+          <tr><td>Special Allowance</td><td>₹0</td><td class="ded-cell">Professional Tax</td><td class="ded-cell">₹0</td></tr>
+          <tr><td>Gross Salary</td><td>₹${p.grossSalary.toLocaleString('en-IN')}</td><td class="ded-cell">Salary Advance</td><td class="ded-cell">₹${(p.advanceDeduction || 0).toLocaleString('en-IN')}</td></tr>
+          <tr><td>Other Earnings</td><td>₹${(p.arrear || 0).toLocaleString('en-IN')}</td><td class="ded-cell">TDS</td><td class="ded-cell">₹${(p.tdsDeduction || 0).toLocaleString('en-IN')}</td></tr>
+          <tr><td>Incentives</td><td>₹${(p.incentive || 0).toLocaleString('en-IN')}</td><td class="ded-cell">Loan</td><td class="ded-cell">₹${(p.loanDeduction || 0).toLocaleString('en-IN')}</td></tr>
+          <tr><td>Bonus</td><td>₹${(p.bonus || 0).toLocaleString('en-IN')}</td><td class="ded-cell">Security Deposit</td><td class="ded-cell">₹${(p.securityDeposit || 0).toLocaleString('en-IN')}</td></tr>
+          <tr><td>Over Time Pay</td><td>₹${(p.otAmount || 0).toLocaleString('en-IN')}</td><td class="ded-cell">Other Deduction</td><td class="ded-cell">₹${(p.otherDeductions || 0).toLocaleString('en-IN')}</td></tr>
+          <tr class="total-row"><td class="earn-total">Total Earnings</td><td class="earn-total">₹${totalEarnings.toLocaleString('en-IN')}</td><td class="ded-cell net-pay-label">Net Pay</td><td class="ded-cell" style="font-size:14px;font-weight:800;color:#1E3A5F;">₹${p.netSalary.toLocaleString('en-IN')}</td></tr>
+        </table>
       </div>
-      <div class="section">
-        <div class="section-title">Attendance & Work Summary</div>
-        <div class="work-grid">
-          <div class="work-box"><span class="label">Present Days</span><span class="value">${p.presentDays || 0}</span></div>
-          <div class="work-box"><span class="label">Absent Days</span><span class="value" style="color:#c62828">${p.absentDays || 0}</span></div>
-          <div class="work-box"><span class="label">Worked Hours</span><span class="value">${formatHours(p.totalWorkedHrs || 0)}h</span></div>
-          <div class="work-box"><span class="label">OT Hours</span><span class="value" style="color:#00838f">${formatHours(p.otHours || 0)}h</span></div>
-          <div class="work-box"><span class="label">Hourly Rate</span><span class="value">₹${(p.hourlyRate || 0).toFixed(2)}</span></div>
-        </div>
+      <div class="in-words">
+        <span class="label">In Words : </span><span class="value">${numberToWords(p.netSalary)}</span>
       </div>
-      <div class="section">
-        <div class="salary-grid">
-          <div class="salary-col earnings">
-            <h3>Earnings</h3>
-            <div class="row"><span>Base Salary</span><span>₹${baseSalary.toLocaleString('en-IN')}</span></div>
-            <div class="row"><span>OT Amount (${formatHours(p.otHours || 0)}h @ ₹${(p.otRate || 0).toFixed(2)}/hr)</span><span>₹${(p.otAmount || 0).toLocaleString('en-IN')}</span></div>
-            <div class="row"><span>Bonus</span><span>₹${(p.bonus || 0).toLocaleString('en-IN')}</span></div>
-            <div class="row"><span>Incentive</span><span>₹${(p.incentive || 0).toLocaleString('en-IN')}</span></div>
-            <div class="row"><span>Arrear</span><span>₹${(p.arrear || 0).toLocaleString('en-IN')}</span></div>
-            <div class="row total"><span>Total Earnings</span><span>₹${totalEarnings.toLocaleString('en-IN')}</span></div>
-          </div>
-          <div class="salary-col deductions">
-            <h3>Deductions</h3>
-            <div class="row"><span>TDS</span><span>₹${(p.tdsDeduction || 0).toLocaleString('en-IN')}</span></div>
-            <div class="row"><span>Loan</span><span>₹${(p.loanDeduction || 0).toLocaleString('en-IN')}</span></div>
-            <div class="row"><span>Advance</span><span>₹${(p.advanceDeduction || 0).toLocaleString('en-IN')}</span></div>
-            <div class="row"><span>Security Deposit</span><span>₹${(p.securityDeposit || 0).toLocaleString('en-IN')}</span></div>
-            <div class="row"><span>Others</span><span>₹${(p.otherDeductions || 0).toLocaleString('en-IN')}</span></div>
-            <div class="row total"><span>Total Deductions</span><span>₹${(p.totalDeductions || 0).toLocaleString('en-IN')}</span></div>
-          </div>
-        </div>
-      </div>
-      <div class="net-bar">
-        <div class="left">Base Salary = Monthly Salary − (Per Day Rate × Absent Days) | Per Day Rate = Monthly ÷ Days in Month | OT = OT Hrs × Hourly Rate (1x)</div>
-        <div class="right">
-          <span class="label">NET SALARY</span>
-          <span class="value">₹${p.netSalary.toLocaleString('en-IN')}</span>
-        </div>
-      </div>
-      <div class="signature">
-        <div class="sig-line">Employee Signature</div>
-        <div class="sig-line">Authorized Signatory</div>
+      <div class="signature-section">
+        <div class="sig-line">Prepared By</div>
+        <div class="sig-line">Received By</div>
       </div>
       <div class="footer">
-        This is a computer-generated payslip by ${firmFullName}. For queries contact HR at hr@laxree.com
+        This is a computer-generated payslip by ${firmFullName}. For queries contact HR at ${firmPhone}
       </div>
     </div>
     <script>window.onload=function(){window.print();}</script>
@@ -399,6 +519,10 @@ export function SalarySlipGenerator() {
   };
 
   const firm = (slip?.employee?.employeeId ? getFirmFromEmployeeId(slip.employee.employeeId) : '') || slip?.employee?.department || slip?.employee?.firm || '';
+  const p = slip?.payroll;
+  const e = slip?.employee;
+  const baseSalaryCalc = p ? (p.baseSalary != null ? p.baseSalary : Math.round((p.monthlySalary - ((p.monthlySalary / (new Date(year, month, 0).getDate())) * p.absentDays)) * 100) / 100) : 0;
+  const totalEarningsCalc = p ? p.grossSalary + (p.bonus || 0) + (p.incentive || 0) + (p.arrear || 0) : 0;
 
   return (
     <div className="space-y-4">
@@ -412,14 +536,14 @@ export function SalarySlipGenerator() {
             <FileText className="w-5 h-5 text-gold" />
             Salary Slip Generator
           </h2>
-          <p className="text-sm text-muted-foreground">Auto-generated salary slips with Laxree formula calculations</p>
+          <p className="text-sm text-muted-foreground">Professional payslips with company branding</p>
         </div>
       </motion.div>
 
       <div className="flex flex-wrap gap-3">
         <Select value={employeeId} onValueChange={setEmployeeId}>
           <SelectTrigger className="w-64"><SelectValue placeholder="Select Employee" /></SelectTrigger>
-          <SelectContent>{employees.map(e => <SelectItem key={e.employeeId} value={e.employeeId}>{e.fullName} ({e.employeeId})</SelectItem>)}</SelectContent>
+          <SelectContent>{employees.map(emp => <SelectItem key={emp.employeeId} value={emp.employeeId}>{emp.fullName} ({emp.employeeId})</SelectItem>)}</SelectContent>
         </Select>
         <Select value={String(month)} onValueChange={v => setMonth(Number(v))}>
           <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
@@ -442,138 +566,112 @@ export function SalarySlipGenerator() {
       </div>
 
       {slip?.payroll ? (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-        >
-          <Card className="glass-card card-gold-hover border-0" ref={slipRef}>
-            <CardHeader className="text-center pb-2">
-              {/* Company Header with Firm Logo */}
-              <div className="flex items-center justify-center gap-3 mb-2">
-                {(() => {
-                  const logoSrc = FIRM_LOGOS[firmCode];
-                  return logoSrc ? (
-                    <div className="w-14 h-14 rounded-xl overflow-hidden border-2 border-gold/30 bg-white p-1">
-                      <Image src={logoSrc} alt={firmCode} width={48} height={48} className="w-full h-full object-contain" />
-                    </div>
-                  ) : (
-                    <div className="w-12 h-12 rounded-xl gradient-laxree flex items-center justify-center overflow-hidden">
-                      <Image src="/laxree-logo.png" alt="Laxree" width={40} height={40} className="rounded-lg" />
-                    </div>
-                  );
-                })()}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+          <Card className="border-2 border-blue-900/30 dark:border-blue-500/20 overflow-hidden" ref={slipRef}>
+            {/* ═══ SALARY SLIP FORMAT — Blue-White Professional ═══ */}
+            <div className="bg-white dark:bg-card">
+              {/* Title */}
+              <div className="text-center py-2 border-b-2 border-[#1E3A5F] dark:border-blue-500">
+                <h2 className="text-xl font-extrabold text-[#1E3A5F] dark:text-blue-400 tracking-wide">SALARY SLIP FORMAT</h2>
+              </div>
+
+              {/* Company Header with Logo */}
+              <div className="bg-[#1E3A5F] dark:bg-blue-900 px-5 py-3 flex items-center justify-between">
                 <div>
-                  <CardTitle className="text-lg">{firmFullName}</CardTitle>
-                  <p className="text-xs text-muted-foreground">Salary Slip - {months[month - 1]} {year}</p>
+                  <h3 className="text-white font-bold text-base">Salary Slip</h3>
+                  <p className="text-blue-200 text-xs">Company Information</p>
+                </div>
+                <div className="w-16 h-16 bg-white rounded-lg overflow-hidden flex items-center justify-center p-1">
+                  <img src={firmLogo} alt={firmCode} className="w-full h-full object-contain" />
                 </div>
               </div>
 
-              {/* Company Details */}
-              {firmDetails && (
-                <div className="flex items-center justify-center gap-4 text-[10px] text-muted-foreground flex-wrap">
-                  {firmDetails.address && (
-                    <span className="flex items-center gap-1">
-                      <MapPin className="w-3 h-3" /> {firmDetails.address}
-                    </span>
-                  )}
-                  {firmDetails.contactPhone && (
-                    <span className="flex items-center gap-1">
-                      <Phone className="w-3 h-3" /> {firmDetails.contactPhone}
-                    </span>
-                  )}
-                  {firmDetails.contactEmail && (
-                    <span className="flex items-center gap-1">
-                      <Mail className="w-3 h-3" /> {firmDetails.contactEmail}
-                    </span>
-                  )}
-                </div>
-              )}
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Employee Info */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-y-2 text-sm">
-                <div><span className="text-muted-foreground">Employee:</span> <span className="font-medium">{slip.employee.fullName}</span></div>
-                <div><span className="text-muted-foreground">ID:</span> <span className="font-medium font-mono">{slip.employee.employeeId}</span></div>
-                <div><span className="text-muted-foreground">Company:</span> <FirmBadge f={firm} /></div>
-                <div><span className="text-muted-foreground">Location:</span> <span className="font-medium">{slip.employee.location}</span></div>
-                <div><span className="text-muted-foreground">Designation:</span> <span className="font-medium">{slip.employee.designation}</span></div>
-                <div><span className="text-muted-foreground">Salary Type:</span> <span className="font-medium capitalize">{slip.employee.salaryType}</span></div>
+              {/* Company Info Grid */}
+              <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 px-5 py-3 bg-blue-50 dark:bg-blue-950/30 text-sm">
+                <span className="font-semibold text-[#1E3A5F] dark:text-blue-400">Company Name :</span>
+                <span>{firmFullName}</span>
+                <span className="font-semibold text-[#1E3A5F] dark:text-blue-400">Company Address :</span>
+                <span>{firmAddress}</span>
+                <span className="font-semibold text-[#1E3A5F] dark:text-blue-400">Company Phone no :</span>
+                <span>{firmPhone}</span>
+                <span className="font-semibold text-[#1E3A5F] dark:text-blue-400">Company Email Address :</span>
+                <span>{firmEmail}</span>
               </div>
-              <Separator />
 
-              {/* Work Summary Boxes */}
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-                <div className="p-2.5 rounded-lg bg-muted/30 text-center">
-                  <p className="text-[10px] text-muted-foreground">Present Days</p>
-                  <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400">{slip.payroll.presentDays || 0}</p>
-                </div>
-                <div className="p-2.5 rounded-lg bg-muted/30 text-center">
-                  <p className="text-[10px] text-muted-foreground">Absent Days</p>
-                  <p className="text-sm font-bold text-red-500">{slip.payroll.absentDays || 0}</p>
-                </div>
-                <div className="p-2.5 rounded-lg bg-muted/30 text-center">
-                  <p className="text-[10px] text-muted-foreground">Hourly Rate</p>
-                  <p className="text-sm font-bold">{(slip.payroll.hourlyRate || 0).toFixed(2)}</p>
-                </div>
-                <div className="p-2.5 rounded-lg bg-muted/30 text-center">
-                  <p className="text-[10px] text-muted-foreground">Worked Hrs</p>
-                  <p className="text-sm font-bold">{formatHours(slip.payroll.totalWorkedHrs || 0)}h</p>
-                </div>
-                <div className="p-2.5 rounded-lg bg-muted/30 text-center">
-                  <p className="text-[10px] text-muted-foreground">OT Hours</p>
-                  <p className="text-sm font-bold text-cyan-600 dark:text-cyan-400">{formatHours(slip.payroll.otHours || 0)}h</p>
-                </div>
+              {/* Employee Information Header */}
+              <div className="bg-[#1E3A5F] dark:bg-blue-900 px-5 py-1.5">
+                <h3 className="text-white font-bold text-xs uppercase tracking-wider">Employee Information</h3>
               </div>
-              <Separator />
 
-              {/* Earnings & Deductions */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <h4 className="font-semibold text-sm mb-2 text-emerald-600 dark:text-emerald-400">Earnings</h4>
-                  <div className="space-y-1 text-sm">
-                    <div className="flex justify-between"><span>Base Salary</span><span>₹{(() => { const bs = slip.payroll.baseSalary != null ? slip.payroll.baseSalary : Math.round((slip.payroll.monthlySalary - ((slip.payroll.monthlySalary / (new Date(year, month, 0).getDate())) * slip.payroll.absentDays)) * 100) / 100; return bs.toLocaleString('en-IN'); })()}</span></div>
-                    <div className="flex justify-between"><span>OT Amount ({formatHours(slip.payroll.otHours || 0)}h)</span><span>₹{(slip.payroll.otAmount || 0).toLocaleString('en-IN')}</span></div>
-                    <div className="flex justify-between"><span>Bonus</span><span>₹{(slip.payroll.bonus || 0).toLocaleString('en-IN')}</span></div>
-                    <div className="flex justify-between"><span>Incentive</span><span>₹{(slip.payroll.incentive || 0).toLocaleString('en-IN')}</span></div>
-                    <div className="flex justify-between"><span>Arrear</span><span>₹{(slip.payroll.arrear || 0).toLocaleString('en-IN')}</span></div>
-                    <Separator />
-                    <div className="flex justify-between font-bold"><span>Total Earnings</span><span className="text-emerald-600 dark:text-emerald-400">₹{(slip.payroll.grossSalary + (slip.payroll.bonus || 0) + (slip.payroll.incentive || 0) + (slip.payroll.arrear || 0)).toLocaleString('en-IN')}</span></div>
-                  </div>
-                </div>
-                <div>
-                  <h4 className="font-semibold text-sm mb-2 text-red-500">Deductions</h4>
-                  <div className="space-y-1 text-sm">
-                    <div className="flex justify-between"><span>TDS</span><span>₹{(slip.payroll.tdsDeduction || 0).toLocaleString('en-IN')}</span></div>
-                    <div className="flex justify-between"><span>Loan</span><span>₹{(slip.payroll.loanDeduction || 0).toLocaleString('en-IN')}</span></div>
-                    <div className="flex justify-between"><span>Advance</span><span>₹{(slip.payroll.advanceDeduction || 0).toLocaleString('en-IN')}</span></div>
-                    <div className="flex justify-between"><span>Security Deposit</span><span>₹{(slip.payroll.securityDeposit || 0).toLocaleString('en-IN')}</span></div>
-                    <div className="flex justify-between"><span>Others</span><span>₹{(slip.payroll.otherDeductions || 0).toLocaleString('en-IN')}</span></div>
-                    <Separator />
-                    <div className="flex justify-between font-bold"><span>Total Deductions</span><span className="text-red-500">₹{(slip.payroll.totalDeductions || 0).toLocaleString('en-IN')}</span></div>
-                  </div>
-                </div>
+              {/* Employee Info Grid */}
+              <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 px-5 py-3 bg-gray-50 dark:bg-muted/20 text-sm">
+                <span className="font-semibold text-[#1E3A5F] dark:text-blue-400">Employee Name :</span>
+                <span>{e.fullName}</span>
+                <span className="font-semibold text-[#1E3A5F] dark:text-blue-400">Employee Address :</span>
+                <span>{e.address || e.location || 'N/A'}</span>
+                <span className="font-semibold text-[#1E3A5F] dark:text-blue-400">Employee Phone no :</span>
+                <span>{e.mobile || 'N/A'}</span>
+                <span className="font-semibold text-[#1E3A5F] dark:text-blue-400">Employee Email ID :</span>
+                <span>{e.email || 'N/A'}</span>
               </div>
-              <Separator />
 
-              {/* Net Salary - Prominent */}
-              <div className="p-4 rounded-xl bg-gradient-to-r from-gold/10 via-gold/5 to-gold/10 border border-gold/20">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs text-muted-foreground">Net Salary</p>
-                    <p className="text-2xl font-bold text-gold">₹{slip.payroll.netSalary.toLocaleString('en-IN')}</p>
-                  </div>
-                  <div className="text-right text-[10px] text-muted-foreground">
-                    <p>Base Salary = Monthly Salary − (Per Day Rate × Absent Days) | Per Day Rate = Monthly ÷ Days in Month | OT = OT Hrs × Hourly Rate (1x)</p>
-                    <p className="mt-1">{firmFullName}</p>
-                  </div>
-                </div>
+              {/* Earnings & Deductions Table */}
+              <div className="px-5 py-3">
+                <table className="w-full text-sm border-collapse">
+                  <thead>
+                    <tr>
+                      <th className="bg-emerald-600 text-white px-3 py-2 text-left font-bold">Earnings</th>
+                      <th className="bg-emerald-600 text-white px-3 py-2 text-left font-bold">Amount</th>
+                      <th className="bg-red-600 text-white px-3 py-2 text-left font-bold">Deductions</th>
+                      <th className="bg-red-600 text-white px-3 py-2 text-left font-bold">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[
+                      { earn: 'Basic', earnVal: baseSalaryCalc, ded: 'Provident Fund', dedVal: 0 },
+                      { earn: 'HRA', earnVal: 0, ded: 'ESI', dedVal: 0 },
+                      { earn: 'Special Allowance', earnVal: 0, ded: 'Professional Tax', dedVal: 0 },
+                      { earn: 'Gross Salary', earnVal: p.grossSalary, ded: 'Salary Advance', dedVal: p.advanceDeduction || 0 },
+                      { earn: 'Other Earnings', earnVal: p.arrear || 0, ded: 'TDS', dedVal: p.tdsDeduction || 0 },
+                      { earn: 'Incentives', earnVal: p.incentive || 0, ded: 'Loan', dedVal: p.loanDeduction || 0 },
+                      { earn: 'Bonus', earnVal: p.bonus || 0, ded: 'Security Deposit', dedVal: p.securityDeposit || 0 },
+                      { earn: 'Over Time Pay', earnVal: p.otAmount || 0, ded: 'Other Deduction', dedVal: p.otherDeductions || 0 },
+                    ].map((row, idx) => (
+                      <tr key={idx} className={idx % 2 === 0 ? 'bg-emerald-50 dark:bg-emerald-950/20' : ''}>
+                        <td className={`px-3 py-1.5 border-b border-gray-200 ${idx % 2 === 0 ? 'bg-emerald-50 dark:bg-emerald-950/20' : ''}`}>{row.earn}</td>
+                        <td className={`px-3 py-1.5 border-b border-gray-200 text-right ${idx % 2 === 0 ? 'bg-emerald-50 dark:bg-emerald-950/20' : ''}`}>₹{row.earnVal.toLocaleString('en-IN')}</td>
+                        <td className={`px-3 py-1.5 border-b border-gray-200 ${idx % 2 === 0 ? 'bg-red-50 dark:bg-red-950/20' : ''}`}>{row.ded}</td>
+                        <td className={`px-3 py-1.5 border-b border-gray-200 text-right ${idx % 2 === 0 ? 'bg-red-50 dark:bg-red-950/20' : ''}`}>₹{row.dedVal.toLocaleString('en-IN')}</td>
+                      </tr>
+                    ))}
+                    {/* Total Earnings / Net Pay row */}
+                    <tr className="border-t-2 border-gray-800 dark:border-gray-300">
+                      <td className="px-3 py-2 font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-950/40">Total Earnings</td>
+                      <td className="px-3 py-2 font-bold text-emerald-700 dark:text-emerald-400 text-right bg-emerald-100 dark:bg-emerald-950/40">₹{totalEarningsCalc.toLocaleString('en-IN')}</td>
+                      <td className="px-3 py-2 font-bold text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-950/40">Net Pay</td>
+                      <td className="px-3 py-2 font-extrabold text-[#1E3A5F] dark:text-blue-400 text-right bg-red-100 dark:bg-red-950/40 text-lg">₹{p.netSalary.toLocaleString('en-IN')}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              {/* In Words */}
+              <div className="mx-5 mb-3 px-4 py-2 bg-blue-50 dark:bg-blue-950/30 rounded text-sm">
+                <span className="font-bold text-[#1E3A5F] dark:text-blue-400">In Words : </span>
+                <span className="italic text-[#1E3A5F] dark:text-blue-300">{numberToWords(p.netSalary)}</span>
+              </div>
+
+              {/* Signature Section */}
+              <div className="bg-[#1E3A5F] dark:bg-blue-900 px-5 py-4 grid grid-cols-2 gap-10">
+                <div className="mt-8 pt-2 border-t border-white/50 text-center text-white text-xs">Prepared By</div>
+                <div className="mt-8 pt-2 border-t border-white/50 text-center text-white text-xs">Received By</div>
               </div>
 
               {/* Footer */}
-              <div className="text-center text-[10px] text-muted-foreground pt-2 border-t border-dashed">
-                This is a computer-generated payslip. For queries contact Laxree HR at <a href="mailto:hr@laxree.com" className="text-gold hover:underline">hr@laxree.com</a>
+              <div className="text-center text-[9px] text-muted-foreground py-2 border-t border-dashed">
+                This is a computer-generated payslip by {firmFullName}. For queries contact HR at {firmPhone}
               </div>
-            </CardContent>
+            </div>
           </Card>
         </motion.div>
       ) : (
