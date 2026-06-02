@@ -58,7 +58,14 @@ export default function Error({
 
         <div className="flex items-center gap-3 mt-2">
           <Button
-            onClick={() => reset()}
+            onClick={() => {
+              // Full reload to clear cached chunks
+              if (error?.message?.includes('chunk') || error?.message?.includes('module')) {
+                window.location.reload();
+              } else {
+                reset();
+              }
+            }}
             className="gradient-laxree text-white gap-2 btn-gold-glow"
           >
             <RefreshCw className="w-4 h-4" />
@@ -66,7 +73,7 @@ export default function Error({
           </Button>
           <Button
             variant="outline"
-            onClick={() => window.location.href = '/'}
+            onClick={() => { window.location.href = '/'; }}
             className="border-gold/20 hover:border-gold/40 hover:bg-gold/5"
           >
             Go to Login
