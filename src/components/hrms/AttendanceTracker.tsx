@@ -457,7 +457,7 @@ export function AttendanceTracker() {
     toast.success('Excel exported successfully');
   };
 
-  // ── Export Monthly Summary as Excel ──
+  // ── Export Monthly Attendance Register as Excel ──
   const handleExportExcel = async () => {
     if (!monthlySummary) return;
     const XLSX = await import('xlsx');
@@ -465,107 +465,131 @@ export function AttendanceTracker() {
     const wb = XLSX.utils.book_new();
 
     const firmFullName = s.employee.firmFullName || FIRM_NAMES[s.employee.firm] || s.employee.firm;
-    const hourlyRate = s.calculatedHourlyRate || s.employee.hourlyRate || 0;
-    const perDayRate = s.perDayRate || 0;
-    const monthlySalary = s.employee.monthlySalary || 0;
-    // OT at normal hourly rate (1x), NOT 1.5x
-    const otRate = hourlyRate;
-    const workedHrsDecimal = Math.round(s.totalWorkHours * 100) / 100;
-    const otHrsDecimal = Math.round(s.totalOvertimeHours * 100) / 100;
-    const sundayHrsDecimal = Math.round(s.totalSundayHours * 100) / 100;
-    const phHrsDecimal = Math.round(s.totalPHHours * 100) / 100;
-    const totalHrsDecimal = Math.round((s.totalHrsInclSundayPH || (s.totalWorkHours + s.totalSundayHours + s.totalPHHours)) * 100) / 100;
-    // Use calculated salary from API (new formula: baseSalary = monthlySalary - perDayRate × absentDays)
-    const baseSalary = s.calculatedBaseSalary || Math.round((monthlySalary - (perDayRate * s.absentDays)) * 100) / 100;
-    const otAmount = s.calculatedOtAmount || Math.round(otHrsDecimal * otRate * 100) / 100;
-    const estimatedSalary = s.calculatedGrossSalary || Math.round((baseSalary + otAmount) * 100) / 100;
+    const firmCode = getFirmFromEmployeeId(s.employee.employeeId) || s.employee.firm || s.employee.department;
 
-    // Summary sheet — Professional format with full company name
-    const summaryData: any[][] = [
+    // ═══════════════════════════════════════════════════
+    // SHEET 1: Monthly Attendance Register (Day-by-Day)
+    // ═══════════════════════════════════════════════════
+    const headerRows: any[][] = [
       [firmFullName],
-      ['Monthly Attendance Summary'],
-      [`Month: ${s.monthName} ${s.year}`, '', '', `Generated: ${new Date().toLocaleString('en-IN')}`],
+      ['MONTHLY ATTENDANCE REGISTER'],
+      [`Employee: ${s.employee.fullName} (${s.employee.employeeId})`, '', '', `Month: ${s.monthName} ${s.year}`, '', '', `Generated: ${new Date().toLocaleString('en-IN')}`],
+      [`Company: ${firmFullName}`, '', '', `Location: ${s.employee.location}`, '', '', `Designation: ${s.employee.designation || 'N/A'}`],
+      [`Shift Hours: ${formatHours(s.employee.shiftHours)} hrs`, '', '', `Department: ${s.employee.department || 'N/A'}`],
       [],
-      ['Employee Name', s.employee.fullName],
-      ['Employee Code', s.employee.employeeId],
-      ['Company', firmFullName],
-      ['Location', s.employee.location],
-      ['Department', s.employee.department || ''],
-      ['Designation', s.employee.designation || ''],
-      ['Working Days', s.totalWorkingDays],
-      [],
-      ['Days Present', 'Days Absent', 'Half Days', 'AL', 'UL', 'PH', 'Total Hrs Worked', 'OT Hrs', 'Sundays Earned', 'Sunday Hrs', 'Total Hrs (incl. Sunday + PH)'],
-      [
-        s.presentDays,
-        s.absentDays,
-        s.halfDays,
-        s.annualLeaves || 0,
-        s.unpaidLeaves || 0,
-        s.holidayDays,
-        formatHours(workedHrsDecimal),
-        formatHours(otHrsDecimal),
-        s.sundaysEarned || 0,
-        formatHours(s.sundayEarnedHours || s.totalSundayHours),
-        formatHours(totalHrsDecimal),
-      ],
-      [],
-      ['Additional Info'],
-      ['Weekly Offs', s.weeklyOffs],
-      ['Sundays', s.sundays],
-      ['Late Entries', s.lateEntries],
-      ['Early Outs', s.earlyOuts || 0],
-      ['PH Hours', formatHours(phHrsDecimal)],
-      ['Shift Hours', formatHours(s.employee.shiftHours)],
-      [],
-      ['Salary Calculation'],
-      ['Per Day Rate', perDayRate ? `₹${perDayRate.toFixed(2)}` : 'N/A', '', 'Days in Month', `${s.daysInMonth}`],
-      ['Hourly Rate', hourlyRate ? `₹${hourlyRate.toFixed(2)}` : 'N/A', '', 'Shift Hours', formatHours(s.employee.shiftHours)],
-      ['Base Salary', `₹${baseSalary.toFixed(2)}`, '', 'Absent Days', `${s.absentDays}`],
-      ['OT Hours', `${formatHours(otHrsDecimal)} hrs`, '', 'OT Amount (1x rate)', otRate ? `₹${otAmount.toFixed(2)}` : 'N/A'],
-      ['Sunday Hours', `${formatHours(sundayHrsDecimal)} hrs`, '', 'PH Hours', formatHours(phHrsDecimal)],
-      ['Estimated Gross Salary', hourlyRate ? `₹${estimatedSalary.toFixed(2)}` : 'N/A'],
-      [],
-      ['Monthly Salary (Fixed)', monthlySalary ? `₹${monthlySalary.toLocaleString('en-IN')}` : 'N/A'],
-      [],
-      ['Note: Base Salary = Monthly Salary − (Per Day Rate × Absent Days). Per Day Rate = Monthly Salary ÷ Days in Month (31/30/28). OT = OT Hours × Hourly Rate (1x normal rate, NOT 1.5x). Final salary may vary based on deductions and approvals.'],
     ];
-    const ws1 = XLSX.utils.aoa_to_sheet(summaryData);
-    ws1['!cols'] = [
-      { wch: 22 }, { wch: 35 }, { wch: 10 }, { wch: 18 }, { wch: 20 },
-      { wch: 8 }, { wch: 18 }, { wch: 10 }, { wch: 16 }, { wch: 12 }, { wch: 26 },
-    ];
-    // Merge header cells
-    ws1['!merges'] = [
-      { s: { r: 0, c: 0 }, e: { r: 0, c: 10 } },
-      { s: { r: 1, c: 0 }, e: { r: 1, c: 10 } },
-      { s: { r: 30, c: 0 }, e: { r: 30, c: 10 } },
-    ];
-    XLSX.utils.book_append_sheet(wb, ws1, 'Summary');
+    const ws1 = XLSX.utils.aoa_to_sheet(headerRows);
 
-    // Daily records sheet
-    if (s.records.length > 0) {
-      const dailyData = s.records.map(r => ({
-        Date: new Date(r.date).toLocaleDateString('en-IN'),
-        'Check In': r.checkIn || '-',
-        'Check Out': r.checkOut || '-',
-        Hours: r.totalHours > 0 ? formatHours(r.totalHours) : '0.00',
-        Status: r.status.charAt(0).toUpperCase() + r.status.slice(1).replace('-', ' '),
-        'OT Hours': r.overtimeHours > 0 ? formatHours(r.overtimeHours) : '0.00',
-        'Sunday Hrs': r.sundayHours > 0 ? formatHours(r.sundayHours) : '0.00',
-        'PH Hrs': r.phHours > 0 ? formatHours(r.phHours) : '0.00',
-        Late: r.lateEntry ? 'Yes' : '',
-        'Early Out': r.earlyOut ? 'Yes' : '',
-      }));
-      const ws2 = XLSX.utils.json_to_sheet(dailyData);
-      ws2['!cols'] = [
-        { wch: 14 }, { wch: 10 }, { wch: 10 }, { wch: 8 }, { wch: 12 },
-        { wch: 10 }, { wch: 12 }, { wch: 10 }, { wch: 8 }, { wch: 10 },
-      ];
-      XLSX.utils.book_append_sheet(wb, ws2, 'Daily Records');
+    // Add day-by-day attendance data starting from row 7
+    const dayHeaders = [
+      'S.No', 'Date', 'Day', 'Check In', 'Check Out', 'Total Hrs',
+      'Status', 'OT Hrs', 'Sunday Hrs', 'PH Hrs', 'Late', 'Early Out',
+    ];
+    const dayRows: any[][] = [dayHeaders];
+
+    // Generate all days of the month
+    const daysInMonth = new Date(s.year, s.month, 0).getDate();
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dateStr = `${s.year}-${String(s.month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      const dateObj = new Date(dateStr + 'T00:00:00');
+      const dayName = dayNames[dateObj.getDay()];
+      const isSunday = dateObj.getDay() === 0;
+
+      // Find matching record
+      const rec = s.records.find((r: any) => {
+        const rDate = new Date(r.date);
+        return rDate.getFullYear() === s.year && rDate.getMonth() + 1 === s.month && rDate.getDate() === day;
+      });
+
+      if (rec) {
+        dayRows.push([
+          day,
+          dateObj.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
+          dayName,
+          rec.checkIn || '-',
+          rec.checkOut || '-',
+          rec.totalHours > 0 ? formatHours(rec.totalHours) : '0.00',
+          rec.status.charAt(0).toUpperCase() + rec.status.slice(1).replace('-', ' '),
+          rec.overtimeHours > 0 ? formatHours(rec.overtimeHours) : '0.00',
+          rec.sundayHours > 0 ? formatHours(rec.sundayHours) : '0.00',
+          rec.phHours > 0 ? formatHours(rec.phHours) : '0.00',
+          rec.lateEntry ? 'Yes' : '',
+          rec.earlyOut ? 'Yes' : '',
+        ]);
+      } else {
+        // No record for this day - mark as Sunday or blank
+        dayRows.push([
+          day,
+          dateObj.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
+          dayName,
+          '-', '-', isSunday ? '0.00' : '-',
+          isSunday ? 'Weekly Off' : 'No Record',
+          '0.00', '0.00', '0.00', '', '',
+        ]);
+      }
     }
 
-    XLSX.writeFile(wb, `Attendance_${s.employee.fullName}_${s.monthName}_${s.year}.xlsx`);
-    toast.success('Excel exported successfully');
+    XLSX.utils.sheet_add_aoa(ws1, dayRows, { origin: 'A7' });
+
+    ws1['!cols'] = [
+      { wch: 6 },   // S.No
+      { wch: 16 },  // Date
+      { wch: 12 },  // Day
+      { wch: 10 },  // Check In
+      { wch: 10 },  // Check Out
+      { wch: 10 },  // Total Hrs
+      { wch: 14 },  // Status
+      { wch: 10 },  // OT Hrs
+      { wch: 12 },  // Sunday Hrs
+      { wch: 10 },  // PH Hrs
+      { wch: 8 },   // Late
+      { wch: 10 },  // Early Out
+    ];
+    ws1['!merges'] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 11 } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: 11 } },
+    ];
+
+    XLSX.utils.book_append_sheet(wb, ws1, 'Attendance Register');
+
+    // ═══════════════════════════════════════════════════
+    // SHEET 2: Monthly Summary
+    // ═══════════════════════════════════════════════════
+    const summaryData: any[][] = [
+      [firmFullName],
+      ['Attendance Summary'],
+      [`Employee: ${s.employee.fullName} (${s.employee.employeeId})`, '', '', `Month: ${s.monthName} ${s.year}`],
+      [],
+      ['Category', 'Count', '', 'Category', 'Count'],
+      ['Days Present', s.presentDays, '', 'Days Absent', s.absentDays],
+      ['Half Days', s.halfDays, '', 'Annual Leaves', s.annualLeaves || 0],
+      ['Unpaid Leaves', s.unpaidLeaves || 0, '', 'Public Holidays', s.holidayDays],
+      ['Working Days', s.totalWorkingDays, '', 'Weekly Offs', s.weeklyOffs],
+      ['Sundays', s.sundays, '', 'Sundays Earned', s.sundaysEarned || 0],
+      ['Late Entries', s.lateEntries, '', 'Early Outs', s.earlyOuts || 0],
+      [],
+      ['Hours Breakdown'],
+      ['Total Work Hours', formatHours(s.totalWorkHours)],
+      ['OT Hours', formatHours(s.totalOvertimeHours)],
+      ['Sunday Hours', formatHours(s.totalSundayHours)],
+      ['PH Hours', formatHours(s.totalPHHours)],
+      ['Total Hrs (incl. Sunday + PH)', formatHours(s.totalHrsInclSundayPH || (s.totalWorkHours + s.totalSundayHours + s.totalPHHours))],
+      ['Shift Hours', formatHours(s.employee.shiftHours)],
+    ];
+    const ws2 = XLSX.utils.aoa_to_sheet(summaryData);
+    ws2['!cols'] = [
+      { wch: 26 }, { wch: 14 }, { wch: 6 }, { wch: 26 }, { wch: 14 },
+    ];
+    ws2['!merges'] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 4 } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: 4 } },
+    ];
+    XLSX.utils.book_append_sheet(wb, ws2, 'Summary');
+
+    XLSX.writeFile(wb, `Monthly_Attendance_${s.employee.fullName}_${s.monthName}_${s.year}.xlsx`);
+    toast.success('Monthly Attendance Excel exported successfully');
   };
 
   // ── Convert Excel serial date to YYYY-MM-DD ──
@@ -1296,7 +1320,7 @@ export function AttendanceTracker() {
                         <ChevronRight className="w-4 h-4 text-gold" />
                         Daily Attendance Breakdown
                       </h4>
-                      <ScrollArea className="max-h-[35vh]">
+                      <ScrollArea className="max-h-[70vh]">
                         <Table>
                           <TableHeader>
                             <TableRow className="hover:bg-transparent">
