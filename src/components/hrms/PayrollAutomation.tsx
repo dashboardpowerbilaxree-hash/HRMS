@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import {
   IndianRupee, Zap, DollarSign, Users, Info,
-  CalendarDays, Building2, Search, FileText, TrendingDown,
+  CalendarDays, Building2, Search, FileText, TrendingDown, Clock,
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -26,6 +26,25 @@ const FIRM_BADGE_CLASS: Record<string, string> = {
   SDF: 'firm-badge-sdf',
   Roofing: 'firm-badge-roofing',
 };
+
+// ── Convert decimal hours to HH.MM display format ──
+function formatHours(decimal: number): string {
+  if (!decimal || decimal === 0) return '0.00';
+  const hours = Math.floor(decimal);
+  const minutes = Math.round((decimal - hours) * 60);
+  if (minutes >= 60) return `${hours + 1}.00`;
+  return `${hours}.${String(minutes).padStart(2, '0')}`;
+}
+
+// ── Get firm code from employee ID prefix ──
+function getFirmFromEmployeeId(employeeId: string): string {
+  const id = employeeId.toUpperCase();
+  if (id.startsWith('LAPL')) return 'LAPL';
+  if (id.startsWith('LRSL')) return 'LRSL';
+  if (id.startsWith('SI-') || id.startsWith('SI0')) return 'SI';
+  if (id.startsWith('SDF')) return 'SDF';
+  return ''; // fallback to existing department/firm
+}
 
 const FIRMS = ['LAPL', 'LRSL', 'SI', 'SDF'];
 const MONTHS = [
@@ -70,6 +89,9 @@ interface PayrollRecord {
     salaryType: string;
   };
   // Compat fields
+  baseSalary?: number;
+  perDaySalary?: number;
+  daysInMonth?: number;
   basicSalary: number;
   totalWorkHours: number;
   salaryPerHour: number;
@@ -210,17 +232,38 @@ export function PayrollAutomation() {
   }, [employees, form.employeeId]);
 
   // ── Salary preview calculation ──
+  // Uses baseSalary (= monthlySalary − perDaySalary × absentDays) as the starting point
+  // Net = baseSalary + OT + Sunday + PH + bonus + incentive + arrear − totalDeductions
   const salaryPreview = useMemo(() => {
     if (!selectedEmp) return null;
     const existing = payrolls.find((p) => p.employeeId === form.employeeId);
     if (!existing) return null;
 
-    const gross = existing.grossSalary + form.bonus + form.incentive;
-    const deductions = existing.totalDeductions + form.tdsDeduction + form.loanDeduction + form.advanceDeduction + form.securityDeposit;
-    const net = gross + form.arrear - deductions;
+    // Base Salary from the payroll's computed field (monthlySalary − perDay × absentDays)
+    const baseSalary = existing.baseSalary != null
+      ? existing.baseSalary
+      : Math.round((existing.monthlySalary - ((existing.monthlySalary / (existing.daysInMonth || new Date(parseInt(filterYear), parseInt(filterMonth), 0).getDate())) * existing.absentDays)) * 100) / 100;
 
-    return { gross: Math.round(gross * 100) / 100, deductions: Math.round(deductions * 100) / 100, net: Math.round(net * 100) / 100, arrear: form.arrear };
-  }, [selectedEmp, form, payrolls]);
+    // Gross includes OT, Sunday, PH on top of baseSalary
+    const grossSalary = existing.grossSalary;
+
+    // Deductions: form values are the TOTAL deductions (not additions to existing)
+    // The payroll API replaces deductions with form values
+    const totalDeductions = Math.round((form.tdsDeduction + form.loanDeduction + form.advanceDeduction + form.securityDeposit) * 100) / 100;
+
+    // Net = grossSalary + bonus + incentive + arrear − totalDeductions
+    const net = Math.round((grossSalary + form.bonus + form.incentive + form.arrear - totalDeductions) * 100) / 100;
+
+    return {
+      baseSalary: Math.round(baseSalary * 100) / 100,
+      grossSalary: Math.round(grossSalary * 100) / 100,
+      bonus: form.bonus,
+      incentive: form.incentive,
+      arrear: form.arrear,
+      deductions: totalDeductions,
+      net,
+    };
+  }, [selectedEmp, form, payrolls, filterMonth, filterYear]);
 
   // ── Generate One ──
   const handleGenerateOne = async () => {
@@ -294,6 +337,14 @@ export function PayrollAutomation() {
       format: 'currency',
     },
     {
+      title: 'Total OT Hours',
+      value: totalOTHours,
+      icon: Clock,
+      gradient: 'gradient-warning',
+      color: 'text-cyan-500',
+      isHours: true,
+    },
+    {
       title: 'Total Deductions',
       value: totalDeductions,
       icon: TrendingDown,
@@ -334,7 +385,7 @@ export function PayrollAutomation() {
             Payroll Automation
           </h2>
           <p className="text-sm text-muted-foreground">
-            Laxree Formula: Net = (Worked Hrs × Hourly Rate) + OT Amount + Arrear − Deductions
+            Per Day = Monthly Salary ÷ Days in Month (31/30/28) | OT at normal hourly rate (1x)
           </p>
         </div>
         <div className="flex gap-2">
@@ -432,8 +483,10 @@ export function PayrollAutomation() {
                     <p className="text-xl font-bold">
                       {card.format === 'currency' ? (
                         <AnimatedCounter value={card.value} prefix="₹" decimals={0} />
+                      ) : card.isHours ? (
+                        <span>{formatHours(card.value)}h</span>
                       ) : (
-                        <AnimatedCounter value={card.value} />
+                        <AnimatedCounter value={card.value} suffix={'suffix' in card ? (card as any).suffix : ''} decimals={'decimals' in card ? (card as any).decimals : 0} />
                       )}
                     </p>
                   </div>
@@ -459,20 +512,32 @@ export function PayrollAutomation() {
             <p className="text-sm font-semibold">Laxree Payroll Formula</p>
             <div className="space-y-1 text-xs text-muted-foreground">
               <p className="flex items-center gap-2">
+                <Badge variant="outline" className="text-[9px] h-4 px-1.5">Rate</Badge>
+                <span>Per Day Rate = Monthly Salary ÷ Days in Month (31, 30, or 28)</span>
+              </p>
+              <p className="flex items-center gap-2">
                 <Badge variant="outline" className="text-[9px] h-4 px-1.5">Hourly</Badge>
-                <span>Gross = Total Worked Hrs × Hourly Rate + OT Amount</span>
+                <span>Hourly Rate = Per Day Rate ÷ Shift Hours</span>
+              </p>
+              <p className="flex items-center gap-2">
+                <Badge variant="outline" className="text-[9px] h-4 px-1.5">Base</Badge>
+                <span>Base Salary = Monthly Salary − (Per Day Rate × Absent Days)</span>
+              </p>
+              <p className="flex items-center gap-2">
+                <Badge variant="outline" className="text-[9px] h-4 px-1.5">OT</Badge>
+                <span>OT Amount = OT Hours × Hourly Rate (1x normal rate, NOT 1.5x)</span>
+              </p>
+              <p className="flex items-center gap-2">
+                <Badge variant="outline" className="text-[9px] h-4 px-1.5">Gross</Badge>
+                <span>Gross = Base Salary + OT Amount</span>
               </p>
               <p className="flex items-center gap-2">
                 <Badge variant="outline" className="text-[9px] h-4 px-1.5">Net</Badge>
-                <span>Net = Gross + Arrear − Total Deductions</span>
-              </p>
-              <p className="flex items-center gap-2">
-                <Badge variant="outline" className="text-[9px] h-4 px-1.5">Daily</Badge>
-                <span>Net = (Daily Rate × Days Present) + Sunday Amt + PH Amt − Deductions</span>
+                <span>Net = Gross + Bonus + Incentive + Arrear − Total Deductions</span>
               </p>
             </div>
             <p className="text-[10px] text-muted-foreground">
-              Salary/Hour = Monthly Salary ÷ (Shift Hours × Days in Month) &nbsp;|&nbsp; OT Rate = Hourly Rate × 1.5 &nbsp;|&nbsp; Deductions = TDS + Loan + Advance + Security Deposit
+              Full attendance = Full monthly salary + OT &nbsp;|&nbsp; Sundays are paid automatically
             </p>
           </div>
         </div>
@@ -551,17 +616,17 @@ export function PayrollAutomation() {
                           </motion.div>
                         </TableCell>
                         <TableCell className="hidden md:table-cell">
-                          <FirmBadge firm={p.employee?.firm || p.employee?.department || ''} />
+                          <FirmBadge firm={getFirmFromEmployeeId(p.employeeId) || p.employee?.firm || p.employee?.department || ''} />
                         </TableCell>
                         <TableCell className="hidden lg:table-cell text-sm whitespace-nowrap">
-                          {(p.totalWorkedHrs || p.totalWorkHours || 0) > 0 ? `${(p.totalWorkedHrs || p.totalWorkHours).toFixed(1)}h` : '—'}
+                          {(p.totalWorkedHrs || p.totalWorkHours || 0) > 0 ? `${formatHours(p.totalWorkedHrs || p.totalWorkHours || 0)}h` : '—'}
                         </TableCell>
                         <TableCell className="hidden xl:table-cell text-sm font-mono whitespace-nowrap">
                           {(p.hourlyRate || p.salaryPerHour || 0) > 0 ? `₹${(p.hourlyRate || p.salaryPerHour).toFixed(2)}` : '—'}
                         </TableCell>
                         <TableCell className="hidden lg:table-cell text-sm whitespace-nowrap">
                           {(p.otHours || 0) > 0 ? (
-                            <span className="text-cyan-600 dark:text-cyan-400 font-medium">{p.otHours}h</span>
+                            <span className="text-cyan-600 dark:text-cyan-400 font-medium">{formatHours(p.otHours)}h</span>
                           ) : '—'}
                         </TableCell>
                         <TableCell className="hidden sm:table-cell text-sm whitespace-nowrap">
@@ -571,12 +636,12 @@ export function PayrollAutomation() {
                         </TableCell>
                         <TableCell className="hidden lg:table-cell text-sm whitespace-nowrap">
                           {(p.sundayHrs || 0) > 0 ? (
-                            <span className="text-blue-600 dark:text-blue-400 font-medium">{p.sundayHrs}h</span>
+                            <span className="text-blue-600 dark:text-blue-400 font-medium">{formatHours(p.sundayHrs)}h</span>
                           ) : '—'}
                         </TableCell>
                         <TableCell className="hidden lg:table-cell text-sm whitespace-nowrap">
                           {(p.phHours || 0) > 0 ? (
-                            <span className="text-purple-600 dark:text-purple-400 font-medium">{p.phHours}h</span>
+                            <span className="text-purple-600 dark:text-purple-400 font-medium">{formatHours(p.phHours)}h</span>
                           ) : '—'}
                         </TableCell>
                         <TableCell className="text-sm whitespace-nowrap">
@@ -676,7 +741,7 @@ export function PayrollAutomation() {
                 <Info className="w-3.5 h-3.5 text-gold shrink-0" />
                 <span>
                   <strong>{selectedEmp.salaryType}</strong> worker &middot; Monthly: ₹{selectedEmp.basicSalary.toLocaleString('en-IN')}
-                  {selectedEmp.salaryType === 'Hourly' && ` · Shift: ${selectedEmp.shiftHours}h`}
+                  {selectedEmp.salaryType === 'Hourly' && ` · Shift: ${formatHours(selectedEmp.shiftHours)}h`}
                 </span>
               </div>
             )}
@@ -752,10 +817,22 @@ export function PayrollAutomation() {
             {salaryPreview && (
               <div className="p-3 rounded-lg bg-muted/50 border space-y-1.5">
                 <p className="text-xs font-semibold text-muted-foreground">Calculated Salary Preview</p>
-                <div className="grid grid-cols-4 gap-2 text-center">
+                <div className="grid grid-cols-4 sm:grid-cols-7 gap-2 text-center">
+                  <div>
+                    <p className="text-[10px] text-muted-foreground">Base Salary</p>
+                    <p className="text-sm font-bold text-cyan-600 dark:text-cyan-400">₹{salaryPreview.baseSalary.toLocaleString('en-IN')}</p>
+                  </div>
                   <div>
                     <p className="text-[10px] text-muted-foreground">Gross</p>
-                    <p className="text-sm font-bold text-cyan-600 dark:text-cyan-400">₹{salaryPreview.gross.toLocaleString('en-IN')}</p>
+                    <p className="text-sm font-bold text-cyan-600 dark:text-cyan-400">₹{salaryPreview.grossSalary.toLocaleString('en-IN')}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-muted-foreground">Bonus</p>
+                    <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400">₹{salaryPreview.bonus.toLocaleString('en-IN')}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-muted-foreground">Incentive</p>
+                    <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400">₹{salaryPreview.incentive.toLocaleString('en-IN')}</p>
                   </div>
                   <div>
                     <p className="text-[10px] text-muted-foreground">Arrear</p>
@@ -770,6 +847,7 @@ export function PayrollAutomation() {
                     <p className="text-sm font-bold text-gold">₹{salaryPreview.net.toLocaleString('en-IN')}</p>
                   </div>
                 </div>
+                <p className="text-[9px] text-muted-foreground text-center">Base = Monthly − (PerDay × Absent) | PerDay = Monthly ÷ Days in Month | OT = OT Hrs × Hourly Rate (1x) | Net = Gross + Bonus + Incentive + Arrear − Deductions</p>
               </div>
             )}
 

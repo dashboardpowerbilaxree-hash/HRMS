@@ -59,9 +59,10 @@ export async function GET(request: NextRequest) {
     // Monthly summary
     const summary = {
       totalRecords: records.length,
-      present: records.filter(r => r.status === 'present').length,
+      present: records.filter(r => ['present', 'late', 'early-out'].includes(r.status)).length,
       absent: records.filter(r => r.status === 'absent').length,
       late: records.filter(r => r.lateEntry).length,
+      earlyOuts: records.filter(r => r.earlyOut).length,
       halfDay: records.filter(r => r.halfDay).length,
       sundayWorked: records.filter(r => r.isSunday && r.totalHours > 0).length,
       phWorked: records.filter(r => r.isPH && r.totalHours > 0).length,
@@ -108,6 +109,7 @@ export async function POST(request: NextRequest) {
 
     let totalHours = 0;
     let lateEntry = false;
+    let earlyOut = false;
     let halfDay = false;
     let overtimeHours = 0;
     let sundayHours = 0;
@@ -125,11 +127,18 @@ export async function POST(request: NextRequest) {
       const checkInMinutes = checkInH * 60 + checkInM;
       lateEntry = checkInMinutes > shiftMinutes + gracePeriod;
 
+      // Early out detection: if checkOut is before shift end time
+      const [shiftEndH, shiftEndM] = employee.shiftEnd.split(':').map(Number);
+      const [checkOutH, checkOutM] = checkOut.split(':').map(Number);
+      const shiftEndMinutes = shiftEndH * 60 + shiftEndM;
+      const checkOutMinutes = checkOutH * 60 + checkOutM;
+      earlyOut = checkOutMinutes < shiftEndMinutes;
+
       // Half day detection
       halfDay = totalHours < employee.shiftHours / 2;
 
       // OT calculation: if totalHours > shiftHours, OT = totalHours - shiftHours
-      overtimeHours = Math.max(0, totalHours - employee.shiftHours);
+      overtimeHours = Math.max(0, Math.round((totalHours - employee.shiftHours) * 100) / 100);
 
       // Sunday hours: if worked on Sunday, all hours are Sunday hours
       if (isSunday) {
@@ -148,8 +157,12 @@ export async function POST(request: NextRequest) {
         status = 'holiday';
       } else if (halfDay) {
         status = 'half-day';
+      } else if (lateEntry && earlyOut) {
+        status = 'late'; // Late takes priority but earlyOut flag is still set
       } else if (lateEntry) {
         status = 'late';
+      } else if (earlyOut) {
+        status = 'early-out';
       } else {
         status = 'present';
       }
@@ -182,6 +195,7 @@ export async function POST(request: NextRequest) {
           totalHours,
           status,
           lateEntry,
+          earlyOut,
           halfDay,
           overtimeHours,
           isHoliday,
@@ -203,6 +217,7 @@ export async function POST(request: NextRequest) {
           totalHours,
           status,
           lateEntry,
+          earlyOut,
           halfDay,
           overtimeHours,
           isHoliday,
@@ -216,15 +231,18 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Create overtime record if applicable
+    // Create overtime record if applicable (OT at normal hourly rate, NOT 1.5x)
     if (overtimeHours > 0) {
-      const overtimeRate = employee.overtimeRate;
+      // Calculate normal hourly rate: monthlySalary / (daysInMonth × shiftHours)
+      const daysInMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+      const normalHourlyRate = Math.round((employee.monthlySalary / (daysInMonth * employee.shiftHours)) * 100) / 100;
+      const otAmount = Math.round(overtimeHours * normalHourlyRate * 100) / 100;
       await db.overtime.upsert({
         where: { id: `ot-${record.id}` },
         update: {
           hours: overtimeHours,
-          rate: overtimeRate,
-          amount: overtimeHours * overtimeRate,
+          rate: normalHourlyRate,
+          amount: otAmount,
           isHoliday: isHoliday || isWeeklyOff,
           isSunday,
         },
@@ -233,8 +251,8 @@ export async function POST(request: NextRequest) {
           employeeId,
           date: d,
           hours: overtimeHours,
-          rate: overtimeRate,
-          amount: overtimeHours * overtimeRate,
+          rate: normalHourlyRate,
+          amount: otAmount,
           isHoliday: isHoliday || isWeeklyOff,
           isSunday,
           status: 'approved',

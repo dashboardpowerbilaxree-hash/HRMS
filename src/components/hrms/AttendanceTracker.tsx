@@ -1,19 +1,23 @@
 'use client';
 
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { motion } from 'framer-motion';
 import {
   Clock, CheckCircle, XCircle, AlertTriangle, Timer,
-  CalendarDays, Search, Building2, Info, MapPin, X
+  CalendarDays, Search, Building2, Info, MapPin, X,
+  Upload, FileSpreadsheet, Pencil, Trash2,
+  Download, FileDown, ChevronRight, Users
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
 
 // ── Firm badge class map ──
@@ -24,6 +28,33 @@ const FIRM_BADGE_CLASS: Record<string, string> = {
   SDF: 'firm-badge-sdf',
   Roofing: 'firm-badge-roofing',
 };
+
+const FIRM_NAMES: Record<string, string> = {
+  LAPL: 'LAXREE AMENITIES PVT LTD',
+  LRSL: 'LAXREE ROOFING SOLUTION',
+  SI: 'SMARTH INTERNATIONAL',
+  SDF: 'SANGRAH DECOR & FURNITURE',
+};
+
+// ── Convert decimal hours to HH.MM display format ──
+// e.g., 6.25 → "6.15", 9.5 → "9.30", 8.0 → "8.00"
+function formatHours(decimal: number): string {
+  if (!decimal || decimal === 0) return '0.00';
+  const hours = Math.floor(decimal);
+  const minutes = Math.round((decimal - hours) * 60);
+  if (minutes >= 60) return `${hours + 1}.00`;
+  return `${hours}.${String(minutes).padStart(2, '0')}`;
+}
+
+// ── Get firm code from employee ID prefix ──
+function getFirmFromEmployeeId(employeeId: string): string {
+  const id = employeeId.toUpperCase();
+  if (id.startsWith('LAPL')) return 'LAPL';
+  if (id.startsWith('LRSL')) return 'LRSL';
+  if (id.startsWith('SI-') || id.startsWith('SI0')) return 'SI';
+  if (id.startsWith('SDF')) return 'SDF';
+  return ''; // fallback to existing department/firm
+}
 
 const FIRMS = ['LAPL', 'LRSL', 'SI', 'SDF'];
 const LOCATIONS = ['Ajmer', 'Gurgaon', 'Palra Warehouse', 'Jaipur', 'Roofing Factory'];
@@ -42,6 +73,7 @@ interface AttendanceRecord {
   totalHours: number;
   status: string;
   lateEntry: boolean;
+  earlyOut: boolean;
   halfDay: boolean;
   overtimeHours: number;
   isSunday: boolean;
@@ -55,6 +87,56 @@ interface AttendanceRecord {
     designation: string;
     location: string;
   };
+}
+
+// ── Monthly Summary Type ──
+interface MonthlySummary {
+  employee: {
+    fullName: string;
+    employeeId: string;
+    firm: string;
+    firmFullName?: string;
+    location: string;
+    department: string;
+    designation: string;
+    shiftHours: number;
+    employmentType?: string;
+    hourlyRate?: number;
+    monthlySalary?: number;
+    overtimeRate?: number;
+  };
+  month: number;
+  year: number;
+  monthName: string;
+  daysInMonth: number;
+  totalWorkingDays: number;
+  presentDays: number;
+  absentDays: number;
+  leaveDays: number;
+  paidLeaves?: number;
+  annualLeaves?: number;
+  unpaidLeaves?: number;
+  halfDays: number;
+  holidayDays: number;
+  weeklyOffs: number;
+  sundays: number;
+  sundaysEarned?: number;
+  sundayEarnedHours?: number;
+  totalAttendance: number;
+  totalWorkHours: number;
+  totalOvertimeHours: number;
+  totalSundayHours: number;
+  totalPHHours: number;
+  totalHrsInclSundayPH?: number;
+  lateEntries: number;
+  earlyOuts?: number;
+  records: AttendanceRecord[];
+  // Salary calculation fields (from monthly-summary API)
+  perDayRate?: number;
+  calculatedHourlyRate?: number;
+  calculatedBaseSalary?: number;
+  calculatedOtAmount?: number;
+  calculatedGrossSalary?: number;
 }
 
 // ── Animated Counter ──
@@ -86,6 +168,7 @@ function StatusBadge({ status }: { status: string }) {
   const config: Record<string, { bg: string; text: string; label: string }> = {
     present: { bg: 'bg-emerald-500/15 border-emerald-500/20', text: 'text-emerald-600 dark:text-emerald-400', label: 'Present' },
     late: { bg: 'bg-yellow-500/15 border-yellow-500/20', text: 'text-yellow-600 dark:text-yellow-400', label: 'Late' },
+    'early-out': { bg: 'bg-rose-500/15 border-rose-500/20', text: 'text-rose-600 dark:text-rose-400', label: 'Early Out' },
     absent: { bg: 'bg-red-500/15 border-red-500/20', text: 'text-red-600 dark:text-red-400', label: 'Absent' },
     'half-day': { bg: 'bg-orange-500/15 border-orange-500/20', text: 'text-orange-600 dark:text-orange-400', label: 'Half-Day' },
     holiday: { bg: 'bg-purple-500/15 border-purple-500/20', text: 'text-purple-600 dark:text-purple-400', label: 'Holiday' },
@@ -107,9 +190,9 @@ function FirmBadge({ firm }: { firm: string }) {
 export function AttendanceTracker() {
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [summary, setSummary] = useState({
-    present: 0, absent: 0, late: 0, halfDay: 0, ot: 0,
+    present: 0, absent: 0, late: 0, earlyOut: 0, halfDay: 0, ot: 0,
   });
-  const [employees, setEmployees] = useState<{ employeeId: string; fullName: string; department: string; location: string }[]>([]);
+  const [employees, setEmployees] = useState<{ employeeId: string; fullName: string; department: string; location: string; firm: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ employeeId: '', date: '', checkIn: '', checkOut: '' });
@@ -123,13 +206,42 @@ export function AttendanceTracker() {
   const [filterLocation, setFilterLocation] = useState('all');
   const [searchEmployee, setSearchEmployee] = useState('');
 
+  // ── Daily tab: date filter + status filter ──
+  const [filterDate, setFilterDate] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  });
+  const [statusFilter, setStatusFilter] = useState<string>('all'); // 'all' | 'present' | 'absent' | 'late' | 'early-out' | 'ot'
+
+  // ── Edit state ──
+  const [editOpen, setEditOpen] = useState(false);
+  const [editRecord, setEditRecord] = useState<AttendanceRecord | null>(null);
+  const [editForm, setEditForm] = useState({ checkIn: '', checkOut: '' });
+
+  // ── Monthly Summary state ──
+  const [monthlyEmpId, setMonthlyEmpId] = useState('');
+  const [monthlySummary, setMonthlySummary] = useState<MonthlySummary | null>(null);
+  const [monthlyLoading, setMonthlyLoading] = useState(false);
+
+  // ── Import state ──
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importPreview, setImportPreview] = useState<any[]>([]);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<any>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   // ── Load data ──
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
-      params.set('month', filterMonth);
-      params.set('year', filterYear);
+      // If a specific date is selected, use date filter; otherwise use month/year
+      if (filterDate) {
+        params.set('date', filterDate);
+      } else {
+        params.set('month', filterMonth);
+        params.set('year', filterYear);
+      }
       if (filterFirm !== 'all') params.set('department', filterFirm);
       if (filterLocation !== 'all') params.set('location', filterLocation);
 
@@ -147,33 +259,53 @@ export function AttendanceTracker() {
         fullName: e.fullName,
         department: e.department,
         location: e.location,
+        firm: e.firm,
       })));
 
       const summ = attData.summary || {};
       setSummary({
-        present: summ.present || recs.filter((a: any) => ['present', 'late'].includes(a.status)).length,
+        present: summ.present || recs.filter((a: any) => ['present', 'late', 'early-out'].includes(a.status)).length,
         absent: summ.absent || recs.filter((a: any) => a.status === 'absent').length,
         late: summ.late || recs.filter((a: any) => a.lateEntry).length,
+        earlyOut: summ.earlyOuts || recs.filter((a: any) => a.earlyOut).length,
         halfDay: summ.halfDay || recs.filter((a: any) => a.halfDay).length,
-        ot: Math.round((summ.totalOvertimeHours || recs.reduce((s: number, a: any) => s + a.overtimeHours, 0)) * 10) / 10,
+        ot: Math.round((summ.totalOvertimeHours || recs.reduce((s: number, a: any) => s + a.overtimeHours, 0)) * 100) / 100,
       });
     } catch {
       toast.error('Failed to load attendance data');
     }
     setLoading(false);
-  }, [filterMonth, filterYear, filterFirm, filterLocation]);
+  }, [filterDate, filterMonth, filterYear, filterFirm, filterLocation]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  // ── Filtered records by employee search ──
+  // ── Filtered records by employee search + status filter ──
   const filteredRecords = useMemo(() => {
-    if (!searchEmployee) return records;
-    const q = searchEmployee.toLowerCase();
-    return records.filter((r) =>
-      r.employee?.fullName?.toLowerCase().includes(q) ||
-      r.employeeId.toLowerCase().includes(q)
-    );
-  }, [records, searchEmployee]);
+    let filtered = records;
+    // Status filter
+    if (statusFilter !== 'all') {
+      if (statusFilter === 'present') {
+        filtered = filtered.filter((r) => ['present', 'late', 'early-out'].includes(r.status));
+      } else if (statusFilter === 'absent') {
+        filtered = filtered.filter((r) => r.status === 'absent');
+      } else if (statusFilter === 'late') {
+        filtered = filtered.filter((r) => r.lateEntry);
+      } else if (statusFilter === 'early-out') {
+        filtered = filtered.filter((r) => r.earlyOut);
+      } else if (statusFilter === 'ot') {
+        filtered = filtered.filter((r) => r.overtimeHours > 0);
+      }
+    }
+    // Employee search
+    if (searchEmployee) {
+      const q = searchEmployee.toLowerCase();
+      filtered = filtered.filter((r) =>
+        r.employee?.fullName?.toLowerCase().includes(q) ||
+        r.employeeId.toLowerCase().includes(q)
+      );
+    }
+    return filtered;
+  }, [records, searchEmployee, statusFilter]);
 
   // ── Mark attendance submit ──
   const handleSubmit = async () => {
@@ -197,38 +329,536 @@ export function AttendanceTracker() {
     }
   };
 
-  // ── Summary cards config ──
+  // ── Edit attendance ──
+  const handleEdit = (rec: AttendanceRecord) => {
+    setEditRecord(rec);
+    setEditForm({ checkIn: rec.checkIn || '', checkOut: rec.checkOut || '' });
+    setEditOpen(true);
+  };
+
+  const handleEditSubmit = async () => {
+    if (!editRecord) return;
+    try {
+      const res = await fetch(`/api/attendance/${editRecord.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editForm),
+      });
+      if (res.ok) {
+        toast.success('Attendance updated successfully');
+        setEditOpen(false);
+        setEditRecord(null);
+        loadData();
+      } else {
+        const data = await res.json();
+        toast.error(data.error || 'Failed to update');
+      }
+    } catch {
+      toast.error('Failed to update attendance');
+    }
+  };
+
+  // ── Delete attendance ──
+  const handleDelete = async (id: string) => {
+    if (!confirm('Delete this attendance record?')) return;
+    try {
+      const res = await fetch(`/api/attendance/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        toast.success('Attendance record deleted');
+        loadData();
+      }
+    } catch {
+      toast.error('Failed to delete');
+    }
+  };
+
+  // ── Load Monthly Summary ──
+  const loadMonthlySummary = useCallback(async () => {
+    if (!monthlyEmpId) return;
+    setMonthlyLoading(true);
+    try {
+      const res = await fetch(`/api/attendance/monthly-summary?employeeId=${monthlyEmpId}&month=${filterMonth}&year=${filterYear}`);
+      if (res.ok) {
+        const data = await res.json();
+        setMonthlySummary(data);
+      } else {
+        setMonthlySummary(null);
+      }
+    } catch {
+      toast.error('Failed to load monthly summary');
+      setMonthlySummary(null);
+    }
+    setMonthlyLoading(false);
+  }, [monthlyEmpId, filterMonth, filterYear]);
+
+  useEffect(() => { loadMonthlySummary(); }, [loadMonthlySummary]);
+
+  // ── Export Daily Attendance as Excel ──
+  const handleExportDailyExcel = async () => {
+    if (filteredRecords.length === 0) {
+      toast.error('No records to export');
+      return;
+    }
+    const XLSX = await import('xlsx');
+    const wb = XLSX.utils.book_new();
+
+    // Company Header
+    const headerData = [
+      ['Laxree Group of Companies'],
+      [`Daily Attendance Report - ${MONTHS[parseInt(filterMonth) - 1]} ${filterYear}`],
+      [`Generated: ${new Date().toLocaleString('en-IN')}`],
+      [],
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(headerData);
+
+    // Data rows
+    const dataRows = filteredRecords.map(rec => ({
+      'Employee Name': rec.employee?.fullName || rec.employeeId,
+      'Emp Code': rec.employeeId,
+      'Company': rec.employee?.department || '',
+      'Date': new Date(rec.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
+      'In Time': rec.checkIn || '-',
+      'Out Time': rec.checkOut || '-',
+      'Hours': rec.totalHours > 0 ? formatHours(rec.totalHours) : '0.00',
+      'Status': rec.status.charAt(0).toUpperCase() + rec.status.slice(1).replace('-', ' '),
+      'OT Hours': rec.overtimeHours > 0 ? formatHours(rec.overtimeHours) : '0.00',
+    }));
+    XLSX.utils.sheet_add_json(ws, dataRows, { origin: 'A5' });
+
+    // Column widths
+    ws['!cols'] = [
+      { wch: 20 }, { wch: 12 }, { wch: 10 }, { wch: 14 },
+      { wch: 10 }, { wch: 10 }, { wch: 8 }, { wch: 12 }, { wch: 10 },
+    ];
+
+    // Merge header cells
+    ws['!merges'] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 8 } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: 8 } },
+      { s: { r: 2, c: 0 }, e: { r: 2, c: 8 } },
+    ];
+
+    XLSX.utils.book_append_sheet(wb, ws, 'Daily Attendance');
+
+    // Summary sheet
+    const summaryRows = [
+      ['Attendance Summary'],
+      [],
+      ['Present', summary.present],
+      ['Absent', summary.absent],
+      ['Late', summary.late],
+      ['OT Hours', formatHours(summary.ot)],
+    ];
+    const ws2 = XLSX.utils.aoa_to_sheet(summaryRows);
+    ws2['!cols'] = [{ wch: 16 }, { wch: 12 }];
+    XLSX.utils.book_append_sheet(wb, ws2, 'Summary');
+
+    XLSX.writeFile(wb, `Daily_Attendance_${MONTHS[parseInt(filterMonth) - 1]}_${filterYear}.xlsx`);
+    toast.success('Excel exported successfully');
+  };
+
+  // ── Export Monthly Summary as Excel ──
+  const handleExportExcel = async () => {
+    if (!monthlySummary) return;
+    const XLSX = await import('xlsx');
+    const s = monthlySummary;
+    const wb = XLSX.utils.book_new();
+
+    const firmFullName = s.employee.firmFullName || FIRM_NAMES[s.employee.firm] || s.employee.firm;
+    const hourlyRate = s.calculatedHourlyRate || s.employee.hourlyRate || 0;
+    const perDayRate = s.perDayRate || 0;
+    const monthlySalary = s.employee.monthlySalary || 0;
+    // OT at normal hourly rate (1x), NOT 1.5x
+    const otRate = hourlyRate;
+    const workedHrsDecimal = Math.round(s.totalWorkHours * 100) / 100;
+    const otHrsDecimal = Math.round(s.totalOvertimeHours * 100) / 100;
+    const sundayHrsDecimal = Math.round(s.totalSundayHours * 100) / 100;
+    const phHrsDecimal = Math.round(s.totalPHHours * 100) / 100;
+    const totalHrsDecimal = Math.round((s.totalHrsInclSundayPH || (s.totalWorkHours + s.totalSundayHours + s.totalPHHours)) * 100) / 100;
+    // Use calculated salary from API (new formula: baseSalary = monthlySalary - perDayRate × absentDays)
+    const baseSalary = s.calculatedBaseSalary || Math.round((monthlySalary - (perDayRate * s.absentDays)) * 100) / 100;
+    const otAmount = s.calculatedOtAmount || Math.round(otHrsDecimal * otRate * 100) / 100;
+    const estimatedSalary = s.calculatedGrossSalary || Math.round((baseSalary + otAmount) * 100) / 100;
+
+    // Summary sheet — Professional format with full company name
+    const summaryData: any[][] = [
+      [firmFullName],
+      ['Monthly Attendance Summary'],
+      [`Month: ${s.monthName} ${s.year}`, '', '', `Generated: ${new Date().toLocaleString('en-IN')}`],
+      [],
+      ['Employee Name', s.employee.fullName],
+      ['Employee Code', s.employee.employeeId],
+      ['Company', firmFullName],
+      ['Location', s.employee.location],
+      ['Department', s.employee.department || ''],
+      ['Designation', s.employee.designation || ''],
+      ['Working Days', s.totalWorkingDays],
+      [],
+      ['Days Present', 'Days Absent', 'Half Days', 'AL', 'UL', 'PH', 'Total Hrs Worked', 'OT Hrs', 'Sundays Earned', 'Sunday Hrs', 'Total Hrs (incl. Sunday + PH)'],
+      [
+        s.presentDays,
+        s.absentDays,
+        s.halfDays,
+        s.annualLeaves || 0,
+        s.unpaidLeaves || 0,
+        s.holidayDays,
+        formatHours(workedHrsDecimal),
+        formatHours(otHrsDecimal),
+        s.sundaysEarned || 0,
+        formatHours(s.sundayEarnedHours || s.totalSundayHours),
+        formatHours(totalHrsDecimal),
+      ],
+      [],
+      ['Additional Info'],
+      ['Weekly Offs', s.weeklyOffs],
+      ['Sundays', s.sundays],
+      ['Late Entries', s.lateEntries],
+      ['Early Outs', s.earlyOuts || 0],
+      ['PH Hours', formatHours(phHrsDecimal)],
+      ['Shift Hours', formatHours(s.employee.shiftHours)],
+      [],
+      ['Salary Calculation'],
+      ['Per Day Rate', perDayRate ? `₹${perDayRate.toFixed(2)}` : 'N/A', '', 'Days in Month', `${s.daysInMonth}`],
+      ['Hourly Rate', hourlyRate ? `₹${hourlyRate.toFixed(2)}` : 'N/A', '', 'Shift Hours', formatHours(s.employee.shiftHours)],
+      ['Base Salary', `₹${baseSalary.toFixed(2)}`, '', 'Absent Days', `${s.absentDays}`],
+      ['OT Hours', `${formatHours(otHrsDecimal)} hrs`, '', 'OT Amount (1x rate)', otRate ? `₹${otAmount.toFixed(2)}` : 'N/A'],
+      ['Sunday Hours', `${formatHours(sundayHrsDecimal)} hrs`, '', 'PH Hours', formatHours(phHrsDecimal)],
+      ['Estimated Gross Salary', hourlyRate ? `₹${estimatedSalary.toFixed(2)}` : 'N/A'],
+      [],
+      ['Monthly Salary (Fixed)', monthlySalary ? `₹${monthlySalary.toLocaleString('en-IN')}` : 'N/A'],
+      [],
+      ['Note: Base Salary = Monthly Salary − (Per Day Rate × Absent Days). Per Day Rate = Monthly Salary ÷ Days in Month (31/30/28). OT = OT Hours × Hourly Rate (1x normal rate, NOT 1.5x). Final salary may vary based on deductions and approvals.'],
+    ];
+    const ws1 = XLSX.utils.aoa_to_sheet(summaryData);
+    ws1['!cols'] = [
+      { wch: 22 }, { wch: 35 }, { wch: 10 }, { wch: 18 }, { wch: 20 },
+      { wch: 8 }, { wch: 18 }, { wch: 10 }, { wch: 16 }, { wch: 12 }, { wch: 26 },
+    ];
+    // Merge header cells
+    ws1['!merges'] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 10 } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: 10 } },
+      { s: { r: 30, c: 0 }, e: { r: 30, c: 10 } },
+    ];
+    XLSX.utils.book_append_sheet(wb, ws1, 'Summary');
+
+    // Daily records sheet
+    if (s.records.length > 0) {
+      const dailyData = s.records.map(r => ({
+        Date: new Date(r.date).toLocaleDateString('en-IN'),
+        'Check In': r.checkIn || '-',
+        'Check Out': r.checkOut || '-',
+        Hours: r.totalHours > 0 ? formatHours(r.totalHours) : '0.00',
+        Status: r.status.charAt(0).toUpperCase() + r.status.slice(1).replace('-', ' '),
+        'OT Hours': r.overtimeHours > 0 ? formatHours(r.overtimeHours) : '0.00',
+        'Sunday Hrs': r.sundayHours > 0 ? formatHours(r.sundayHours) : '0.00',
+        'PH Hrs': r.phHours > 0 ? formatHours(r.phHours) : '0.00',
+        Late: r.lateEntry ? 'Yes' : '',
+        'Early Out': r.earlyOut ? 'Yes' : '',
+      }));
+      const ws2 = XLSX.utils.json_to_sheet(dailyData);
+      ws2['!cols'] = [
+        { wch: 14 }, { wch: 10 }, { wch: 10 }, { wch: 8 }, { wch: 12 },
+        { wch: 10 }, { wch: 12 }, { wch: 10 }, { wch: 8 }, { wch: 10 },
+      ];
+      XLSX.utils.book_append_sheet(wb, ws2, 'Daily Records');
+    }
+
+    XLSX.writeFile(wb, `Attendance_${s.employee.fullName}_${s.monthName}_${s.year}.xlsx`);
+    toast.success('Excel exported successfully');
+  };
+
+  // ── Convert Excel serial date to YYYY-MM-DD ──
+  const excelSerialToDate = (serial: number): string => {
+    // Excel serial date: days since Jan 1, 1900 (with the 1900 leap year bug)
+    const epoch = new Date(1899, 11, 30); // Dec 30, 1899 is day 0
+    const date = new Date(epoch.getTime() + serial * 86400000);
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  };
+
+  // ── Convert Excel decimal time to HH:MM ──
+  const excelDecimalToTime = (value: any): string => {
+    if (typeof value === 'string') {
+      // Already a string - check if it looks like HH:MM
+      const trimmed = value.trim();
+      if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(trimmed)) return trimmed.substring(0, 5);
+      // Try parsing as number
+      const num = parseFloat(trimmed);
+      if (!isNaN(num) && num >= 0 && num < 1) {
+        const totalMinutes = Math.round(num * 1440);
+        const hours = Math.floor(totalMinutes / 60);
+        const minutes = totalMinutes % 60;
+        return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+      }
+      return trimmed;
+    }
+    if (typeof value === 'number') {
+      if (value >= 1) {
+        // Could be a full datetime serial - extract time portion
+        const timePart = value - Math.floor(value);
+        const totalMinutes = Math.round(timePart * 1440);
+        const hours = Math.floor(totalMinutes / 60);
+        const minutes = totalMinutes % 60;
+        return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+      }
+      // Decimal time fraction (0 to <1)
+      const totalMinutes = Math.round(value * 1440);
+      const hours = Math.floor(totalMinutes / 60);
+      const minutes = totalMinutes % 60;
+      return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+    }
+    return String(value || '');
+  };
+
+  // ── Parse any date value to YYYY-MM-DD ──
+  const parseDateValue = (value: any): string => {
+    if (!value && value !== 0) return '';
+    if (typeof value === 'number') {
+      // Excel serial date number
+      return excelSerialToDate(value);
+    }
+    const str = String(value).trim();
+    if (!str) return '';
+    // Already in YYYY-MM-DD format
+    if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+    // Try DD/MM/YYYY or DD-MM-YYYY
+    const dmyMatch = str.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})$/);
+    if (dmyMatch) return `${dmyMatch[3]}-${dmyMatch[2].padStart(2, '0')}-${dmyMatch[1].padStart(2, '0')}`;
+    // Try MM/DD/YYYY
+    const mdyMatch = str.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})$/);
+    if (mdyMatch) return `${mdyMatch[3]}-${mdyMatch[1].padStart(2, '0')}-${mdyMatch[2].padStart(2, '0')}`;
+    // Fallback: try native Date parse
+    try {
+      const d = new Date(str);
+      if (!isNaN(d.getTime())) {
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      }
+    } catch {}
+    return str;
+  };
+
+  // ── Smart Employee ID matching ──
+  const smartMatchEmployeeId = (rawId: string, empName: string): string => {
+    if (!rawId && !empName) return '';
+    let empId = String(rawId).trim();
+
+    // If we have an ID, try exact match first
+    if (empId) {
+      // Try exact match
+      const exact = employees.find(e => e.employeeId === empId);
+      if (exact) return exact.employeeId;
+
+      // Try with EMP- prefix (e.g., "41" → "EMP-041" or "EMP-41")
+      const withPrefix = `EMP-${empId.padStart(3, '0')}`;
+      const matchPad = employees.find(e => e.employeeId === withPrefix);
+      if (matchPad) return matchPad.employeeId;
+
+      const withoutPad = `EMP-${empId}`;
+      const matchNoPad = employees.find(e => e.employeeId === withoutPad);
+      if (matchNoPad) return matchNoPad.employeeId;
+    }
+
+    // Match by employee name
+    if (empName) {
+      const nameLower = empName.toLowerCase().trim();
+      // Exact name match
+      const exactName = employees.find(e => e.fullName.toLowerCase() === nameLower);
+      if (exactName) return exactName.employeeId;
+      // Partial name match
+      const partialName = employees.find(e =>
+        e.fullName.toLowerCase().includes(nameLower) || nameLower.includes(e.fullName.toLowerCase())
+      );
+      if (partialName) return partialName.employeeId;
+    }
+
+    return empId; // Return whatever we have
+  };
+
+  // ── File upload handler ──
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImportFile(file);
+    setImportResult(null);
+
+    try {
+      const XLSX = await import('xlsx');
+      const arrayBuffer = await file.arrayBuffer();
+      const workbook = XLSX.read(arrayBuffer, { cellDates: false, raw: true });
+      const sheetName = workbook.SheetNames[0];
+      const sheet = workbook.Sheets[sheetName];
+      // Use raw:true to get actual values, then we convert ourselves
+      const data = XLSX.utils.sheet_to_json(sheet, { raw: true });
+
+      if (data.length === 0) {
+        toast.error('No data found in the file');
+        return;
+      }
+
+      // Try to map columns - look for common column names
+      const mapped = data.map((row: any) => {
+        // Get raw values from various possible column names
+        const rawEmpId = row['Employee ID'] || row['employeeId'] || row['Employee_Code'] || row['EMP ID'] || row['Emp ID'] || row['Emp_Code'] || '';
+        const rawEmpName = row['Employee Name'] || row['fullName'] || row['Name'] || row['Employee_Name'] || row['Emp Name'] || '';
+        const rawDate = row['Date'] || row['date'] || row['Attendance Date'] || row['Att Date'] || '';
+        const rawCheckIn = row['In Time'] || row['Check In'] || row['checkIn'] || row['In_Time'] || row['IN'] || row['Time In'] || '';
+        const rawCheckOut = row['Out Time'] || row['Check Out'] || row['checkOut'] || row['Out_Time'] || row['OUT'] || row['Time Out'] || '';
+        const rawStatus = row['Status'] || row['status'] || '';
+
+        // Convert values
+        const empId = String(rawEmpId).trim();
+        const empName = String(rawEmpName).trim();
+        const date = parseDateValue(rawDate);
+        const checkIn = excelDecimalToTime(rawCheckIn);
+        const checkOut = excelDecimalToTime(rawCheckOut);
+        const status = String(rawStatus).trim();
+
+        return { employeeId: empId, employeeName: empName, date, checkIn, checkOut, status };
+      }).filter(r => r.employeeId || r.employeeName);
+
+      setImportPreview(mapped);
+    } catch (err: any) {
+      toast.error('Failed to parse file: ' + err.message);
+    }
+  };
+
+  // ── Download Excel Template ──
+  const handleDownloadTemplate = async () => {
+    const XLSX = await import('xlsx');
+    const wb = XLSX.utils.book_new();
+
+    // Get today's date for the template
+    const today = new Date();
+    const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
+    // Template with actual employee data from the system
+    const templateData: string[][] = [
+      ['Employee ID', 'Employee Name', 'Date', 'In Time', 'Out Time', 'Status'],
+    ];
+
+    // Add sample rows with actual employees (first 5)
+    const sampleEmployees = employees.slice(0, 5);
+    if (sampleEmployees.length > 0) {
+      sampleEmployees.forEach(emp => {
+        templateData.push([emp.employeeId, emp.fullName, dateStr, '09:30', '18:30', '']);
+      });
+    } else {
+      // Fallback sample data
+      templateData.push(['EMP-001', 'John Doe', dateStr, '09:30', '18:30', '']);
+      templateData.push(['EMP-002', 'Jane Smith', dateStr, '10:00', '19:00', 'Late']);
+    }
+
+    const ws = XLSX.utils.aoa_to_sheet(templateData);
+
+    // Set column widths
+    ws['!cols'] = [
+      { wch: 14 },  // Employee ID
+      { wch: 22 },  // Employee Name
+      { wch: 14 },  // Date
+      { wch: 10 },  // In Time
+      { wch: 10 },  // Out Time
+      { wch: 12 },  // Status
+    ];
+
+    XLSX.utils.book_append_sheet(wb, ws, 'Attendance Template');
+
+    // Add an Instructions sheet
+    const instructionsData = [
+      ['Laxree HRMS - Attendance Upload Template Instructions'],
+      [''],
+      ['Column Descriptions:'],
+      ['Column', 'Format', 'Required', 'Example', 'Notes'],
+      ['Employee ID', 'EMP-XXX', 'Yes (or Name)', 'EMP-041', 'Use the same ID as in the HRMS system (e.g., EMP-041 NOT just 41). If unknown, leave blank and provide Employee Name.'],
+      ['Employee Name', 'Text', 'Yes (or ID)', 'Kulvinder', 'Used to match employee if ID not found. Must match the name in the system.'],
+      ['Date', 'YYYY-MM-DD', 'Yes', dateStr, 'Use YYYY-MM-DD format (e.g., ' + dateStr + '). DD/MM/YYYY also accepted.'],
+      ['In Time', 'HH:MM (24hr)', 'No', '09:30', 'Use 24-hour format: 09:30, 14:00, 19:30. Leave blank if absent.'],
+      ['Out Time', 'HH:MM (24hr)', 'No', '18:30', 'Use 24-hour format. Leave blank if absent or not checked out.'],
+      ['Status', 'Text', 'No', 'Late', 'Leave blank for auto-calculation. Use: Late, Half-Day, Absent if needed.'],
+      [''],
+      ['Important Notes:'],
+      ['1. Employee ID format must match the system (e.g., EMP-041, NOT just 41)'],
+      ['2. Date format: Use YYYY-MM-DD (e.g., ' + dateStr + '). Other formats: DD/MM/YYYY also accepted.'],
+      ['3. Time format: Use HH:MM in 24-hour format (e.g., 09:30, 18:45). Do NOT use AM/PM.'],
+      ['4. If In Time and Out Time are blank, the system will mark as Absent.'],
+      ['5. The system auto-calculates: Working Hours, Late Entry, Overtime, Half Day, Sunday, Holiday.'],
+      ['6. Delete the sample rows before filling in your actual data.'],
+      ['7. Save as .xlsx or .csv before uploading.'],
+      ['8. The system will auto-match employees by ID first, then by Name.'],
+    ];
+    const ws2 = XLSX.utils.aoa_to_sheet(instructionsData);
+    ws2['!cols'] = [
+      { wch: 16 }, { wch: 16 }, { wch: 14 }, { wch: 16 }, { wch: 70 },
+    ];
+    XLSX.utils.book_append_sheet(wb, ws2, 'Instructions');
+
+    // Add Employee List sheet for reference
+    if (employees.length > 0) {
+      const empListData = [
+        ['Employee ID', 'Employee Name', 'Company', 'Location'],
+        ...employees.map(e => [e.employeeId, e.fullName, e.firm || e.department, e.location]),
+      ];
+      const ws3 = XLSX.utils.aoa_to_sheet(empListData);
+      ws3['!cols'] = [{ wch: 14 }, { wch: 25 }, { wch: 12 }, { wch: 18 }];
+      XLSX.utils.book_append_sheet(wb, ws3, 'Employee List');
+    }
+
+    XLSX.writeFile(wb, 'Laxree_Attendance_Template.xlsx');
+    toast.success('Template downloaded! Fill it and upload.');
+  };
+
+  // ── Process import ──
+  const handleProcessImport = async () => {
+    if (importPreview.length === 0) return;
+    setImporting(true);
+
+    try {
+      // Use smart matching for employee IDs
+      const recordsToImport = importPreview.map((row) => {
+        const empId = smartMatchEmployeeId(row.employeeId, row.employeeName);
+        return {
+          employeeId: empId,
+          date: row.date,
+          checkIn: row.checkIn || '',
+          checkOut: row.checkOut || '',
+        };
+      }).filter(r => r.employeeId && r.date);
+
+      if (recordsToImport.length === 0) {
+        toast.error('No valid records found. Ensure Employee IDs or Names match the system.');
+        setImporting(false);
+        return;
+      }
+
+      const res = await fetch('/api/attendance/bulk-upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ records: recordsToImport }),
+      });
+      const data = await res.json();
+
+      if (res.ok) {
+        setImportResult(data);
+        toast.success(`Processed ${data.successCount} records successfully!`);
+        loadData();
+      } else {
+        toast.error(data.error || 'Import failed');
+      }
+    } catch (err: any) {
+      toast.error('Import failed: ' + err.message);
+    }
+    setImporting(false);
+  };
+
+  // ── Summary cards config — clickable for daily tab ──
   const statCards = [
-    {
-      title: 'Present Today',
-      value: summary.present,
-      icon: CheckCircle,
-      gradient: 'gradient-success',
-      color: 'text-emerald-500',
-    },
-    {
-      title: 'Absent Today',
-      value: summary.absent,
-      icon: XCircle,
-      gradient: 'gradient-danger',
-      color: 'text-red-500',
-    },
-    {
-      title: 'Late Today',
-      value: summary.late,
-      icon: AlertTriangle,
-      gradient: 'gradient-warning',
-      color: 'text-yellow-500',
-    },
-    {
-      title: 'OT Hours (Monthly)',
-      value: summary.ot,
-      icon: Timer,
-      gradient: 'gradient-info',
-      color: 'text-cyan-500',
-      decimals: 1,
-      suffix: 'h',
-    },
+    { title: 'Present', value: summary.present, icon: CheckCircle, gradient: 'gradient-success', color: 'text-emerald-500', filter: 'present' },
+    { title: 'Absent', value: summary.absent, icon: XCircle, gradient: 'gradient-danger', color: 'text-red-500', filter: 'absent' },
+    { title: 'Late', value: summary.late, icon: AlertTriangle, gradient: 'gradient-warning', color: 'text-yellow-500', filter: 'late' },
+    { title: 'Early Out', value: summary.earlyOut, icon: Clock, gradient: 'gradient-rose', color: 'text-rose-500', filter: 'early-out' },
+    { title: 'OT Hours', value: summary.ot, icon: Timer, gradient: 'gradient-info', color: 'text-cyan-500', isHours: true, filter: 'ot' },
   ];
 
   // ── Filtered employees for the dialog searchable list ──
@@ -274,196 +904,593 @@ export function AttendanceTracker() {
         </Button>
       </motion.div>
 
-      {/* ── Summary Cards ── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {statCards.map((card, i) => {
-          const Icon = card.icon;
-          return (
-            <motion.div
-              key={card.title}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.05 }}
-              className="kpi-card"
+      {/* ── Date Picker + Summary Cards (clickable) ── */}
+      <motion.div
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="glass-card p-4 space-y-4 border border-gold/10"
+      >
+        {/* Date Picker Row */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+          <div className="flex items-center gap-2">
+            <CalendarDays className="w-5 h-5 text-gold" />
+            <span className="text-sm font-semibold">Select Date</span>
+          </div>
+          <Input
+            type="date"
+            value={filterDate}
+            onChange={(e) => {
+              setFilterDate(e.target.value);
+              setStatusFilter('all');
+              // Auto-set month/year from date for monthly tab sync
+              if (e.target.value) {
+                const d = new Date(e.target.value);
+                setFilterMonth(String(d.getMonth() + 1));
+                setFilterYear(String(d.getFullYear()));
+              }
+            }}
+            className="w-full sm:w-48 h-10 text-sm font-medium input-premium rounded-lg"
+          />
+          {filterDate && (
+            <span className="text-xs text-muted-foreground">
+              {new Date(filterDate + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}
+            </span>
+          )}
+          <div className="sm:ml-auto flex items-center gap-2">
+            <Select value={filterFirm} onValueChange={(v) => { setFilterFirm(v); setStatusFilter('all'); }}>
+              <SelectTrigger className="w-32 h-9 text-xs">
+                <Building2 className="w-3.5 h-3.5 mr-1 text-muted-foreground" />
+                <SelectValue placeholder="All Firms" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Firms</SelectItem>
+                {FIRMS.map((f) => (<SelectItem key={f} value={f}>{f}</SelectItem>))}
+              </SelectContent>
+            </Select>
+            <Select value={filterLocation} onValueChange={(v) => { setFilterLocation(v); setStatusFilter('all'); }}>
+              <SelectTrigger className="w-36 h-9 text-xs">
+                <MapPin className="w-3.5 h-3.5 mr-1 text-muted-foreground" />
+                <SelectValue placeholder="All Locations" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Locations</SelectItem>
+                {LOCATIONS.map((l) => (<SelectItem key={l} value={l}>{l}</SelectItem>))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        {/* Clickable Summary Cards */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          {/* "All" card */}
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0 }}
+            className={`cursor-pointer transition-all duration-200 rounded-xl border-2 ${
+              statusFilter === 'all'
+                ? 'border-gold shadow-lg shadow-gold/10 kpi-card'
+                : 'border-transparent kpi-card hover:border-gold/30'
+            }`}
+            onClick={() => setStatusFilter('all')}
+          >
+            <Card className="border-0 shadow-none bg-transparent">
+              <CardContent className="p-3 flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl gradient-laxree flex items-center justify-center shrink-0 shadow-lg">
+                  <Users className="w-5 h-5 text-white" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[10px] text-muted-foreground font-medium truncate">Total</p>
+                  <p className="text-xl font-bold">
+                    <AnimatedCounter value={records.length} />
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+          {statCards.map((card, i) => {
+            const Icon = card.icon;
+            const isActive = statusFilter === card.filter;
+            return (
+              <motion.div
+                key={card.title}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: (i + 1) * 0.05 }}
+                className={`cursor-pointer transition-all duration-200 rounded-xl border-2 ${
+                  isActive
+                    ? 'border-gold shadow-lg shadow-gold/10 kpi-card'
+                    : 'border-transparent kpi-card hover:border-gold/30'
+                }`}
+                onClick={() => setStatusFilter(isActive ? 'all' : card.filter)}
+              >
+                <Card className="border-0 shadow-none bg-transparent">
+                  <CardContent className="p-3 flex items-center gap-3">
+                    <div className={`w-10 h-10 rounded-xl ${card.gradient} flex items-center justify-center shrink-0 shadow-lg ${isActive ? 'animate-pulse' : ''}`}>
+                      <Icon className="w-5 h-5 text-white" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[10px] text-muted-foreground font-medium truncate">{card.title}</p>
+                      <p className="text-xl font-bold">
+                        {card.isHours ? (
+                          <span>{formatHours(card.value)}h</span>
+                        ) : (
+                          <AnimatedCounter
+                            value={card.value}
+                            suffix={'suffix' in card ? (card as any).suffix : ''}
+                            decimals={'decimals' in card ? (card as any).decimals : 0}
+                          />
+                        )}
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            );
+          })}
+        </div>
+
+        {/* Active filter indicator */}
+        {statusFilter !== 'all' && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">Showing:</span>
+            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-gold/10 text-gold border border-gold/20">
+              {statCards.find(c => c.filter === statusFilter)?.title || statusFilter} ({filteredRecords.length} records)
+            </span>
+            <button
+              className="text-xs text-muted-foreground hover:text-gold underline"
+              onClick={() => setStatusFilter('all')}
             >
-              <Card className="border-0 shadow-none bg-transparent">
-                <CardContent className="p-4 flex items-center gap-3">
-                  <div className={`w-10 h-10 rounded-xl ${card.gradient} flex items-center justify-center shrink-0 shadow-lg`}>
-                    <Icon className="w-5 h-5 text-white" />
+              Show All
+            </button>
+          </div>
+        )}
+      </motion.div>
+
+      {/* ── Tabs: Daily / Monthly / Import ── */}
+      <Tabs defaultValue="daily" className="space-y-4">
+        <TabsList className="bg-muted/50">
+          <TabsTrigger value="daily" className="gap-1.5 text-xs">
+            <CalendarDays className="w-3.5 h-3.5" /> Daily
+          </TabsTrigger>
+          <TabsTrigger value="monthly" className="gap-1.5 text-xs">
+            <FileSpreadsheet className="w-3.5 h-3.5" /> Monthly
+          </TabsTrigger>
+          <TabsTrigger value="import" className="gap-1.5 text-xs">
+            <Upload className="w-3.5 h-3.5" /> Import
+          </TabsTrigger>
+        </TabsList>
+
+        {/* ══════════════════════════════════════════════════
+            DAILY ATTENDANCE TAB
+            ══════════════════════════════════════════════════ */}
+        <TabsContent value="daily" className="space-y-4">
+          {/* ── Search + Export Row ── */}
+          <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
+            <div className="relative flex-1">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input className="pl-9 h-9" placeholder="Search employee by name or ID..." value={searchEmployee} onChange={(e) => setSearchEmployee(e.target.value)} />
+            </div>
+            <Button variant="outline" size="sm" className="h-9 gap-1.5 shrink-0" onClick={handleExportDailyExcel}>
+              <FileDown className="w-3.5 h-3.5" /> Export Excel
+            </Button>
+          </motion.div>
+
+          {/* ── Attendance Table ── */}
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+            <Card className="glass-card card-gold-hover border-0">
+              <CardContent className="p-0">
+                <div className="overflow-auto max-h-[65vh]" style={{ WebkitOverflowScrolling: 'touch' }}>
+                  <Table id="daily-attendance-table">
+                    <TableHeader>
+                      <TableRow className="hover:bg-transparent sticky top-0 bg-card z-10">
+                        <TableHead className="min-w-[160px]">Employee</TableHead>
+                        <TableHead className="min-w-[70px]">Emp Code</TableHead>
+                        <TableHead className="hidden md:table-cell min-w-[70px]">Company</TableHead>
+                        <TableHead className="min-w-[80px]">In Time</TableHead>
+                        <TableHead className="hidden sm:table-cell min-w-[70px]">Out Time</TableHead>
+                        <TableHead className="min-w-[50px]">Hrs</TableHead>
+                        <TableHead className="min-w-[80px]">Status</TableHead>
+                        <TableHead className="hidden lg:table-cell min-w-[50px]">OT</TableHead>
+                        <TableHead className="w-[70px] sticky right-0 bg-card">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {loading ? (
+                        Array.from({ length: 5 }).map((_, i) => (
+                          <TableRow key={i}>
+                            {Array.from({ length: 9 }).map((_, j) => (
+                              <TableCell key={j}><div className="h-4 bg-muted/50 rounded animate-pulse" /></TableCell>
+                            ))}
+                          </TableRow>
+                        ))
+                      ) : filteredRecords.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={9} className="text-center py-12 text-muted-foreground">
+                            <CalendarDays className="w-10 h-10 mx-auto mb-2 opacity-30" />
+                            <p className="font-medium">No attendance records for this date</p>
+                            <p className="text-xs mt-1">Select a different date or import attendance data</p>
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        filteredRecords.map((rec) => (
+                          <TableRow key={rec.id} className="hover:bg-muted/30 transition-colors">
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                <div className="w-7 h-7 rounded-full gradient-laxree flex items-center justify-center text-white text-[10px] font-bold shrink-0">
+                                  {rec.employee?.fullName?.charAt(0) || '?'}
+                                </div>
+                                <div className="min-w-0 overflow-hidden">
+                                  <p className="text-sm font-medium truncate max-w-[120px]">{rec.employee?.fullName || rec.employeeId}</p>
+                                </div>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-xs font-mono text-muted-foreground">{rec.employeeId}</TableCell>
+                            <TableCell className="hidden md:table-cell">
+                              <FirmBadge firm={getFirmFromEmployeeId(rec.employeeId) || rec.employee?.department || ''} />
+                            </TableCell>
+                            <TableCell className="text-sm font-mono whitespace-nowrap">{rec.checkIn || '—'}</TableCell>
+                            <TableCell className="hidden sm:table-cell text-sm font-mono whitespace-nowrap">{rec.checkOut || '—'}</TableCell>
+                            <TableCell className="text-sm font-medium whitespace-nowrap">{rec.totalHours > 0 ? `${formatHours(rec.totalHours)}h` : '—'}</TableCell>
+                            <TableCell><StatusBadge status={rec.status} /></TableCell>
+                            <TableCell className="hidden lg:table-cell text-sm whitespace-nowrap">
+                              {rec.overtimeHours > 0 ? (
+                                <span className="text-cyan-600 dark:text-cyan-400 font-medium">{formatHours(rec.overtimeHours)}h</span>
+                              ) : '—'}
+                            </TableCell>
+                            <TableCell className="sticky right-0 bg-card">
+                              <div className="flex items-center gap-1">
+                                <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => handleEdit(rec)} title="Edit">
+                                  <Pencil className="w-3 h-3" />
+                                </Button>
+                                <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-destructive hover:text-destructive" onClick={() => handleDelete(rec.id)} title="Delete">
+                                  <Trash2 className="w-3 h-3" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        </TabsContent>
+
+        {/* ══════════════════════════════════════════════════
+            MONTHLY ATTENDANCE TAB
+            ══════════════════════════════════════════════════ */}
+        <TabsContent value="monthly" className="space-y-4">
+          {/* ── Employee Selector ── */}
+          <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-3">
+            <div className="flex flex-col sm:flex-row gap-3 flex-wrap items-end">
+              <div className="flex-1 min-w-[200px]">
+                <Label className="text-xs text-muted-foreground mb-1 block">Select Employee</Label>
+                <Select value={monthlyEmpId} onValueChange={setMonthlyEmpId}>
+                  <SelectTrigger className="w-full h-9">
+                    <Search className="w-3.5 h-3.5 mr-1.5 text-muted-foreground" />
+                    <SelectValue placeholder="Select Employee..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {employees.sort((a, b) => a.fullName.localeCompare(b.fullName)).map(e => (
+                      <SelectItem key={e.employeeId} value={e.employeeId}>
+                        {e.fullName} ({e.employeeId})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Select value={filterMonth} onValueChange={setFilterMonth}>
+                <SelectTrigger className="w-full sm:w-36 h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {MONTHS.map((m, i) => (<SelectItem key={i + 1} value={String(i + 1)}>{m}</SelectItem>))}
+                </SelectContent>
+              </Select>
+              <Select value={filterYear} onValueChange={setFilterYear}>
+                <SelectTrigger className="w-full sm:w-24 h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {[2024, 2025, 2026, 2027].map(y => (<SelectItem key={y} value={String(y)}>{y}</SelectItem>))}
+                </SelectContent>
+              </Select>
+              {monthlySummary && (
+                <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={handleExportExcel}>
+                  <FileDown className="w-3.5 h-3.5" /> Export Excel
+                </Button>
+              )}
+            </div>
+          </motion.div>
+
+          {/* ── Monthly Summary Card — Spreadsheet Format ── */}
+          {monthlyLoading ? (
+            <Card className="glass-card card-gold-hover border-0">
+              <CardContent className="p-8 text-center text-muted-foreground">
+                <div className="animate-spin w-8 h-8 border-2 border-gold border-t-transparent rounded-full mx-auto mb-3" />
+                <p>Loading monthly summary...</p>
+              </CardContent>
+            </Card>
+          ) : monthlySummary ? (
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+              <Card className="glass-card card-gold-hover border-0">
+                <CardContent className="p-4 md:p-6 space-y-4">
+                  {/* Employee Info Header */}
+                  <div className="flex items-center gap-3 pb-3 border-b border-border/50">
+                    <div className="w-12 h-12 rounded-xl gradient-laxree flex items-center justify-center text-white text-lg font-bold shrink-0">
+                      {monthlySummary.employee.fullName.charAt(0)}
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="font-bold text-lg">{monthlySummary.employee.fullName}</h3>
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
+                        <span className="font-mono">{monthlySummary.employee.employeeId}</span>
+                        <span>•</span>
+                        <FirmBadge firm={getFirmFromEmployeeId(monthlySummary.employee.employeeId) || monthlySummary.employee.firm || monthlySummary.employee.department} />
+                        <span>•</span>
+                        <span>{monthlySummary.employee.location}</span>
+                        <span>•</span>
+                        <span>{monthlySummary.monthName} {monthlySummary.year}</span>
+                      </div>
+                    </div>
                   </div>
-                  <div className="min-w-0">
-                    <p className="text-xs text-muted-foreground font-medium truncate">{card.title}</p>
-                    <p className="text-xl font-bold">
-                      <AnimatedCounter
-                        value={card.value}
-                        suffix={card.suffix || ''}
-                        decimals={card.decimals || 0}
-                      />
-                    </p>
+
+                  {/* ── Spreadsheet-style Summary Table ── */}
+                  <div className="overflow-x-auto rounded-lg border border-border/50">
+                    <table className="w-full text-sm border-collapse">
+                      <thead>
+                        <tr className="bg-emerald-700 dark:bg-emerald-900 text-white">
+                          <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider border-r border-emerald-600/30">Days Present</th>
+                          <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider border-r border-emerald-600/30">Days Absent</th>
+                          <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider border-r border-emerald-600/30">Half Days</th>
+                          <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider border-r border-emerald-600/30">AL</th>
+                          <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider border-r border-emerald-600/30">UL</th>
+                          <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider border-r border-emerald-600/30">PH</th>
+                          <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider border-r border-emerald-600/30">Total Hrs Worked</th>
+                          <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider border-r border-emerald-600/30">OT Hrs</th>
+                          <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider border-r border-emerald-600/30">Sundays Earned</th>
+                          <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider border-r border-emerald-600/30">Sunday Hrs</th>
+                          <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider">Total Hrs (incl. Sunday + PH)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr className="bg-muted/30 hover:bg-muted/50 transition-colors">
+                          <td className="px-3 py-3 font-bold text-emerald-600 dark:text-emerald-400 border-r border-border/30">{monthlySummary.presentDays}</td>
+                          <td className="px-3 py-3 font-bold text-red-500 border-r border-border/30">{monthlySummary.absentDays}</td>
+                          <td className="px-3 py-3 font-bold text-orange-500 border-r border-border/30">{monthlySummary.halfDays}</td>
+                          <td className="px-3 py-3 text-blue-500 border-r border-border/30">{monthlySummary.annualLeaves || 0}</td>
+                          <td className="px-3 py-3 text-amber-600 dark:text-amber-400 border-r border-border/30">{monthlySummary.unpaidLeaves || 0}</td>
+                          <td className="px-3 py-3 text-purple-500 border-r border-border/30">{monthlySummary.holidayDays}</td>
+                          <td className="px-3 py-3 font-bold text-cyan-600 dark:text-cyan-400 border-r border-border/30">{formatHours(monthlySummary.totalWorkHours)}</td>
+                          <td className="px-3 py-3 font-bold text-yellow-600 dark:text-yellow-400 border-r border-border/30">{formatHours(monthlySummary.totalOvertimeHours)}</td>
+                          <td className="px-3 py-3 text-sky-600 dark:text-sky-400 border-r border-border/30">{monthlySummary.sundaysEarned || 0}</td>
+                          <td className="px-3 py-3 text-blue-600 dark:text-blue-400 border-r border-border/30">{formatHours(monthlySummary.sundayEarnedHours || monthlySummary.totalSundayHours)}</td>
+                          <td className="px-3 py-3 font-bold text-gold">{formatHours(monthlySummary.totalHrsInclSundayPH || (monthlySummary.totalWorkHours + monthlySummary.totalSundayHours + monthlySummary.totalPHHours))}</td>
+                        </tr>
+                      </tbody>
+                    </table>
                   </div>
+
+                  {/* Additional Info Row */}
+                  <div className="grid grid-cols-4 sm:grid-cols-7 gap-2">
+                    {[
+                      { label: 'Working Days', value: monthlySummary.totalWorkingDays, color: 'text-foreground' },
+                      { label: 'Weekly Offs', value: monthlySummary.weeklyOffs, color: 'text-sky-500' },
+                      { label: 'Sundays', value: monthlySummary.sundays, color: 'text-blue-500' },
+                      { label: 'Late Entries', value: monthlySummary.lateEntries, color: 'text-amber-500' },
+                      { label: 'Early Outs', value: monthlySummary.earlyOuts || 0, color: 'text-rose-500' },
+                      { label: 'PH Hours', value: `${formatHours(monthlySummary.totalPHHours)}h`, color: 'text-purple-500' },
+                      { label: 'Shift Hrs', value: `${formatHours(monthlySummary.employee.shiftHours)}h`, color: 'text-muted-foreground' },
+                    ].map(item => (
+                      <div key={item.label} className="p-2 rounded-lg bg-muted/20 text-center">
+                        <p className="text-[9px] text-muted-foreground font-medium uppercase tracking-wider">{item.label}</p>
+                        <p className={`text-sm font-bold ${item.color}`}>{item.value}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  <Separator />
+
+                  {/* Daily Records Table */}
+                  {monthlySummary.records.length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-semibold mb-2 flex items-center gap-1.5">
+                        <ChevronRight className="w-4 h-4 text-gold" />
+                        Daily Attendance Breakdown
+                      </h4>
+                      <ScrollArea className="max-h-[35vh]">
+                        <Table>
+                          <TableHeader>
+                            <TableRow className="hover:bg-transparent">
+                              <TableHead className="text-xs">Date</TableHead>
+                              <TableHead className="text-xs">In</TableHead>
+                              <TableHead className="text-xs">Out</TableHead>
+                              <TableHead className="text-xs">Hrs</TableHead>
+                              <TableHead className="text-xs">Status</TableHead>
+                              <TableHead className="text-xs">OT</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {monthlySummary.records.map((rec) => (
+                              <TableRow key={rec.id} className="hover:bg-muted/30">
+                                <TableCell className="text-xs whitespace-nowrap">
+                                  {new Date(rec.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+                                </TableCell>
+                                <TableCell className="text-xs font-mono">{rec.checkIn || '—'}</TableCell>
+                                <TableCell className="text-xs font-mono">{rec.checkOut || '—'}</TableCell>
+                                <TableCell className="text-xs font-medium">{rec.totalHours > 0 ? `${formatHours(rec.totalHours)}h` : '—'}</TableCell>
+                                <TableCell><StatusBadge status={rec.status} /></TableCell>
+                                <TableCell className="text-xs">{rec.overtimeHours > 0 ? `${formatHours(rec.overtimeHours)}h` : '—'}</TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </ScrollArea>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </motion.div>
-          );
-        })}
-      </div>
+          ) : (
+            <Card className="glass-card card-gold-hover border-0">
+              <CardContent className="p-8 text-center text-muted-foreground">
+                <CalendarDays className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                <p>Select an employee to view monthly attendance summary</p>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
 
-      {/* ── Filter Bar ── */}
-      <motion.div
-        initial={{ opacity: 0, y: -5 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.2 }}
-        className="glass-card p-3"
-      >
-        <div className="flex flex-col sm:flex-row gap-3 flex-wrap">
-          <Select value={filterMonth} onValueChange={setFilterMonth}>
-            <SelectTrigger className="w-full sm:w-36 h-9">
-              <CalendarDays className="w-3.5 h-3.5 mr-1.5 text-muted-foreground" />
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {MONTHS.map((m, i) => (
-                <SelectItem key={i + 1} value={String(i + 1)}>{m}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={filterYear} onValueChange={setFilterYear}>
-            <SelectTrigger className="w-full sm:w-24 h-9">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {[2024, 2025, 2026, 2027].map((y) => (
-                <SelectItem key={y} value={String(y)}>{y}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={filterFirm} onValueChange={setFilterFirm}>
-            <SelectTrigger className="w-full sm:w-36 h-9">
-              <Building2 className="w-3.5 h-3.5 mr-1.5 text-muted-foreground" />
-              <SelectValue placeholder="All Firms" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Firms</SelectItem>
-              {FIRMS.map((f) => (
-                <SelectItem key={f} value={f}>{f}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={filterLocation} onValueChange={setFilterLocation}>
-            <SelectTrigger className="w-full sm:w-40 h-9">
-              <MapPin className="w-3.5 h-3.5 mr-1.5 text-muted-foreground" />
-              <SelectValue placeholder="All Locations" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Locations</SelectItem>
-              {LOCATIONS.map((l) => (
-                <SelectItem key={l} value={l}>{l}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <div className="relative flex-1 min-w-[200px]">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              className="pl-9 h-9"
-              placeholder="Search employee..."
-              value={searchEmployee}
-              onChange={(e) => setSearchEmployee(e.target.value)}
-            />
-          </div>
-        </div>
-      </motion.div>
+        {/* ══════════════════════════════════════════════════
+            DAILY ATTENDANCE IMPORT TAB
+            ══════════════════════════════════════════════════ */}
+        <TabsContent value="import" className="space-y-4">
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+            <Card className="glass-card card-gold-hover border-0">
+              <CardContent className="p-6 space-y-6">
+                {/* Upload Section */}
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-semibold flex items-center gap-2">
+                      <Upload className="w-4 h-4 text-gold" />
+                      Upload Attendance Sheet
+                    </h3>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 gap-1.5 text-xs border-gold/30 hover:border-gold/60 hover:bg-gold/5"
+                      onClick={handleDownloadTemplate}
+                    >
+                      <Download className="w-3.5 h-3.5" /> Download Template
+                    </Button>
+                  </div>
+                  <div className="border-2 border-dashed border-border rounded-xl p-8 text-center hover:border-gold/50 transition-colors">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".xlsx,.xls,.csv"
+                      onChange={handleFileUpload}
+                      className="hidden"
+                    />
+                    <FileSpreadsheet className="w-12 h-12 mx-auto mb-3 text-muted-foreground/50" />
+                    <p className="text-sm text-muted-foreground mb-3">
+                      Upload Excel (.xlsx, .xls) or CSV file with attendance data
+                    </p>
+                    <Button
+                      variant="outline"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="gap-1.5"
+                    >
+                      <Upload className="w-4 h-4" /> Choose File
+                    </Button>
+                    {importFile && (
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Selected: {importFile.name} ({(importFile.size / 1024).toFixed(1)} KB)
+                      </p>
+                    )}
+                  </div>
+                  <div className="mt-3 p-3 rounded-lg bg-gold/5 border border-gold/10">
+                    <Info className="w-4 h-4 text-gold inline mr-1.5 -mt-0.5" />
+                    <span className="text-xs text-muted-foreground">
+                      <strong>Required format:</strong> Employee ID (EMP-XXX), Employee Name, Date (YYYY-MM-DD), In Time (HH:MM), Out Time (HH:MM). 
+                      Click <strong>"Download Template"</strong> to get the correct format. The system auto-converts Excel dates/times and matches employees by ID or Name.
+                    </span>
+                  </div>
+                </div>
 
-      {/* ── Attendance Table ── */}
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.25 }}
-      >
-        <Card className="glass-card card-gold-hover border-0">
-          <CardContent className="p-0">
-            <ScrollArea className="max-h-[55vh]">
-              <Table>
-                <TableHeader>
-                  <TableRow className="hover:bg-transparent">
-                    <TableHead className="min-w-[160px]">Employee</TableHead>
-                    <TableHead className="hidden md:table-cell min-w-[70px]">Firm</TableHead>
-                    <TableHead className="hidden lg:table-cell min-w-[100px]">Location</TableHead>
-                    <TableHead className="min-w-[80px]">Date</TableHead>
-                    <TableHead className="min-w-[70px]">In</TableHead>
-                    <TableHead className="hidden sm:table-cell min-w-[70px]">Out</TableHead>
-                    <TableHead className="min-w-[50px]">Hrs</TableHead>
-                    <TableHead className="min-w-[80px]">Status</TableHead>
-                    <TableHead className="hidden lg:table-cell min-w-[50px]">OT</TableHead>
-                    <TableHead className="hidden lg:table-cell min-w-[60px]">Sunday</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {loading ? (
-                    Array.from({ length: 5 }).map((_, i) => (
-                      <TableRow key={i}>
-                        {Array.from({ length: 10 }).map((_, j) => (
-                          <TableCell key={j}>
-                            <div className="h-4 bg-muted/50 rounded animate-pulse" />
-                          </TableCell>
+                {/* Preview Section */}
+                {importPreview.length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                      <Search className="w-4 h-4 text-gold" />
+                      Preview ({importPreview.length} records found)
+                    </h3>
+                    <ScrollArea className="max-h-[40vh]">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="hover:bg-transparent">
+                            <TableHead className="text-xs">Employee ID</TableHead>
+                            <TableHead className="text-xs">Employee Name</TableHead>
+                            <TableHead className="text-xs">Date</TableHead>
+                            <TableHead className="text-xs">In Time</TableHead>
+                            <TableHead className="text-xs">Out Time</TableHead>
+                            <TableHead className="text-xs">Status</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {importPreview.slice(0, 100).map((row, i) => (
+                            <TableRow key={i} className="hover:bg-muted/30">
+                              <TableCell className="text-xs font-mono">{row.employeeId || '—'}</TableCell>
+                              <TableCell className="text-xs">{row.employeeName || '—'}</TableCell>
+                              <TableCell className="text-xs">{row.date || '—'}</TableCell>
+                              <TableCell className="text-xs font-mono">{row.checkIn || '—'}</TableCell>
+                              <TableCell className="text-xs font-mono">{row.checkOut || '—'}</TableCell>
+                              <TableCell className="text-xs">{row.status || '—'}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </ScrollArea>
+
+                    {/* Process Button */}
+                    <div className="flex items-center gap-3 mt-4 pt-4 border-t relative z-10 bg-background">
+                      <Button
+                        className="gradient-laxree text-white gap-1.5 shrink-0"
+                        onClick={handleProcessImport}
+                        disabled={importing}
+                      >
+                        {importing ? (
+                          <>
+                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                            Processing...
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle className="w-4 h-4" /> Process Attendance
+                          </>
+                        )}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="shrink-0"
+                        onClick={() => {
+                          setImportPreview([]);
+                          setImportFile(null);
+                          setImportResult(null);
+                          if (fileInputRef.current) fileInputRef.current.value = '';
+                        }}
+                      >
+                        Clear
+                      </Button>
+                      <span className="text-xs text-muted-foreground ml-auto">{importPreview.length} records ready to process</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Import Result */}
+                {importResult && (
+                  <div className="p-4 rounded-lg bg-muted/30 border">
+                    <h4 className="text-sm font-semibold mb-2">Import Results</h4>
+                    <div className="flex gap-4 text-sm">
+                      <span className="text-emerald-500 font-medium">Success: {importResult.successCount}</span>
+                      {importResult.errorCount > 0 && (
+                        <span className="text-red-500 font-medium">Errors: {importResult.errorCount}</span>
+                      )}
+                    </div>
+                    {importResult.results?.filter((r: any) => r.error).length > 0 && (
+                      <div className="mt-2 text-xs text-red-500">
+                        {importResult.results.filter((r: any) => r.error).map((r: any, i: number) => (
+                          <p key={i}>{r.employeeId} ({r.date}): {r.error}</p>
                         ))}
-                      </TableRow>
-                    ))
-                  ) : filteredRecords.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={10} className="text-center py-12 text-muted-foreground">
-                        No attendance records found
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    filteredRecords.slice(0, 200).map((rec) => (
-                      <TableRow key={rec.id} className="hover:bg-muted/30 transition-colors">
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <div className="w-7 h-7 rounded-full gradient-laxree flex items-center justify-center text-white text-[10px] font-bold shrink-0">
-                              {rec.employee?.fullName?.charAt(0) || '?'}
-                            </div>
-                            <div className="min-w-0 overflow-hidden">
-                              <p className="text-sm font-medium truncate max-w-[120px]">{rec.employee?.fullName || rec.employeeId}</p>
-                              <p className="text-[10px] text-muted-foreground font-mono truncate">{rec.employeeId}</p>
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell className="hidden md:table-cell">
-                          <FirmBadge firm={rec.employee?.department || ''} />
-                        </TableCell>
-                        <TableCell className="hidden lg:table-cell text-sm text-muted-foreground truncate max-w-[100px]">
-                          {rec.employee?.location || '—'}
-                        </TableCell>
-                        <TableCell className="text-sm whitespace-nowrap">
-                          {new Date(rec.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
-                        </TableCell>
-                        <TableCell className="text-sm font-mono whitespace-nowrap">{rec.checkIn || '—'}</TableCell>
-                        <TableCell className="hidden sm:table-cell text-sm font-mono whitespace-nowrap">{rec.checkOut || '—'}</TableCell>
-                        <TableCell className="text-sm font-medium whitespace-nowrap">{rec.totalHours > 0 ? `${rec.totalHours}h` : '—'}</TableCell>
-                        <TableCell><StatusBadge status={rec.status} /></TableCell>
-                        <TableCell className="hidden lg:table-cell text-sm whitespace-nowrap">
-                          {rec.overtimeHours > 0 ? (
-                            <span className="text-cyan-600 dark:text-cyan-400 font-medium">{rec.overtimeHours}h</span>
-                          ) : '—'}
-                        </TableCell>
-                        <TableCell className="hidden lg:table-cell text-sm whitespace-nowrap">
-                          {rec.isSunday ? (
-                            <span className="text-blue-600 dark:text-blue-400 font-medium">
-                              {rec.sundayHours > 0 ? `${rec.sundayHours}h` : '✓'}
-                            </span>
-                          ) : '—'}
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </ScrollArea>
-          </CardContent>
-        </Card>
-      </motion.div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </motion.div>
+        </TabsContent>
+      </Tabs>
 
-      {/* ── Mark Attendance Dialog — Fixed overlapping & z-index */}
+      {/* ── Mark Attendance Dialog ── */}
       <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setForm({ employeeId: '', date: '', checkIn: '', checkOut: '' }); setEmployeeSearch(''); } }}>
         <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto z-[100]">
           <DialogHeader>
@@ -471,9 +1498,10 @@ export function AttendanceTracker() {
               <Clock className="w-5 h-5 text-gold" />
               Mark Attendance
             </DialogTitle>
+            <DialogDescription>Select an employee and enter attendance details</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
-            {/* Employee Selection — Fixed layout to prevent overlap */}
+            {/* Employee Selection */}
             <div className="space-y-2">
               <Label className="text-sm font-medium">Employee *</Label>
               {!form.employeeId ? (
@@ -517,12 +1545,7 @@ export function AttendanceTracker() {
                     <span className="text-sm font-medium truncate-fix">{selectedEmployee?.fullName}</span>
                     <FirmBadge firm={selectedEmployee?.department || ''} />
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 text-xs shrink-0 px-2"
-                    onClick={() => setForm({ ...form, employeeId: '' })}
-                  >
+                  <Button variant="ghost" size="sm" className="h-7 text-xs shrink-0 px-2" onClick={() => setForm({ ...form, employeeId: '' })}>
                     <X className="w-3 h-3 mr-1" /> Change
                   </Button>
                 </div>
@@ -555,6 +1578,54 @@ export function AttendanceTracker() {
               Save Attendance
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Edit Attendance Dialog ── */}
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="sm:max-w-md z-[100]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="w-5 h-5 text-gold" />
+              Edit Attendance
+            </DialogTitle>
+            <DialogDescription>Update check-in and check-out times for this attendance record</DialogDescription>
+          </DialogHeader>
+          {editRecord && (
+            <div className="space-y-4 py-2">
+              <div className="px-3 py-2.5 bg-muted/50 rounded-lg flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full gradient-laxree flex items-center justify-center text-white text-xs font-bold shrink-0">
+                  {editRecord.employee?.fullName?.charAt(0) || '?'}
+                </div>
+                <div>
+                  <p className="text-sm font-medium">{editRecord.employee?.fullName || editRecord.employeeId}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {editRecord.employeeId} • {new Date(editRecord.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                  </p>
+                </div>
+                <StatusBadge status={editRecord.status} />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Check-In Time</Label>
+                  <Input type="time" value={editForm.checkIn} onChange={(e) => setEditForm({ ...editForm, checkIn: e.target.value })} className="w-full" />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Check-Out Time</Label>
+                  <Input type="time" value={editForm.checkOut} onChange={(e) => setEditForm({ ...editForm, checkOut: e.target.value })} className="w-full" />
+                </div>
+              </div>
+              <div className="flex items-start gap-2 p-3 rounded-lg bg-gold/5 border border-gold/10">
+                <Info className="w-4 h-4 text-gold shrink-0 mt-0.5" />
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Hours, OT, late entry, and status will be auto-recalculated when you save.
+                </p>
+              </div>
+              <Button className="w-full gradient-laxree text-white h-10" onClick={handleEditSubmit}>
+                Update Attendance
+              </Button>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

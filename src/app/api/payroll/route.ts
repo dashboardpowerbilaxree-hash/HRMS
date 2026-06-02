@@ -38,7 +38,14 @@ export async function GET(request: NextRequest) {
       },
       orderBy: { employeeId: 'asc' },
     });
-    return NextResponse.json(payrolls);
+
+    // Enrich with computed fields (not stored in DB)
+    const enrichedPayrolls = payrolls.map(p => ({
+      ...p,
+      baseSalary: p.grossSalary - (p.otAmount || 0),
+    }));
+
+    return NextResponse.json(enrichedPayrolls);
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
@@ -56,61 +63,7 @@ export async function POST(request: NextRequest) {
     const endDate = new Date(year, month, 1);
     const daysInMonth = new Date(year, month, 0).getDate();
 
-    // ─── LAXREE PAYROLL FORMULA ───
-    // Hourly Rate = monthlySalary / (shiftHours × daysInMonth)
-    const hourlyRate = employee.hourlyRate || (employee.monthlySalary / (employee.shiftHours * daysInMonth));
-
-    // Get attendance records for the month
-    const attendance = await db.attendance.findMany({
-      where: { employeeId, date: { gte: startDate, lt: endDate } },
-    });
-
-    // Total worked hours from attendance
-    const totalWorkedHrs = Math.round(attendance
-      .filter(a => ['present', 'late', 'half-day', 'half_day'].includes(a.status))
-      .reduce((sum, a) => sum + a.totalHours, 0) * 100) / 100;
-
-    // Overtime records
-    const overtimeRecords = await db.overtime.findMany({
-      where: { employeeId, date: { gte: startDate, lt: endDate } },
-    });
-    const otHours = Math.round(overtimeRecords.reduce((sum, o) => sum + o.hours, 0) * 100) / 100;
-    const otAmount = Math.round(overtimeRecords.reduce((sum, o) => sum + o.amount, 0) * 100) / 100;
-
-    // Sunday tracking — earned Sundays (1 per 6 working days for Full Time)
-    const presentDays = attendance.filter(a => ['present', 'late'].includes(a.status)).length;
-    const halfDays = attendance.filter(a => a.status === 'half-day' || a.status === 'half_day').length;
-    const holidayWorked = attendance.filter(a => a.isHoliday).length;
-    const weeklyOffWorked = attendance.filter(a => a.isWeeklyOff).length;
-
-    // Sundays earned: 1 per 6 full working days
-    const sundaysEarned = employee.employmentType === 'Full Time' ? Math.floor(presentDays / 6) : 0;
-    const sundayHrs = Math.round(sundaysEarned * employee.shiftHours * 100) / 100;
-
-    // PH hours (public holiday worked)
-    const phHours = Math.round(attendance.filter(a => a.isHoliday).reduce((sum, a) => sum + a.totalHours, 0) * 100) / 100;
-
-    // Total hours = worked + sunday + PH
-    const totalHrs = Math.round((totalWorkedHrs + sundayHrs + phHours) * 100) / 100;
-
-    // ─── GROSS SALARY ───
-    let grossSalary = 0;
-    if (employee.salaryType === 'hourly') {
-      // Gross = Total Hrs × Hourly Rate + OT Amount
-      grossSalary = Math.round((totalHrs * hourlyRate + otAmount) * 100) / 100;
-    } else {
-      // Daily workers: Gross = Daily Rate × Present Days + OT Amount
-      const dailyRate = employee.dailyRate || Math.round(employee.monthlySalary / 30 * 100) / 100;
-      grossSalary = Math.round((dailyRate * (presentDays + halfDays * 0.5 + sundaysEarned) + otAmount) * 100) / 100;
-    }
-
-    // Approved leaves
-    const leaves = await db.leave.findMany({
-      where: { employeeId, status: 'approved', startDate: { gte: startDate }, endDate: { lt: endDate } },
-    });
-    const paidLeaves = leaves.reduce((sum, l) => sum + l.days, 0);
-
-    // Count sundays and holidays in month
+    // ─── Count sundays and holidays ───
     let sundays = 0;
     const holidays = await db.holiday.findMany({ where: { date: { gte: startDate, lt: endDate } } });
     const holidayDays = holidays.length;
@@ -118,8 +71,67 @@ export async function POST(request: NextRequest) {
       if (new Date(year, month - 1, d).getDay() === 0) sundays++;
     }
     const totalWorkingDays = daysInMonth - sundays - holidayDays;
-    const effectivePresentDays = presentDays + halfDays * 0.5 + holidayWorked;
+
+    // ─── LAXREE PAYROLL FORMULA ───
+    // Per Day Rate = monthlySalary / daysInMonth (31, 30, 28 as per calendar)
+    // Hourly Rate = perDayRate / shiftHours
+    // Base Salary = monthlySalary - (perDayRate × absentDays)
+    // OT Amount = otHours × hourlyRate (1x normal rate, NOT 1.5x)
+    // Gross Salary = baseSalary + otAmount
+    // Net Salary = grossSalary + bonus + incentive + arrear - totalDeductions
+
+    const perDayRate = Math.round((employee.monthlySalary / daysInMonth) * 100) / 100;
+    const hourlyRate = Math.round((perDayRate / employee.shiftHours) * 100) / 100;
+
+    // Get attendance records for the month
+    const attendance = await db.attendance.findMany({
+      where: { employeeId, date: { gte: startDate, lt: endDate } },
+    });
+
+    // Total worked hours from attendance (includes early-out)
+    const totalWorkedHrs = Math.round(attendance
+      .filter(a => ['present', 'late', 'half-day', 'half_day', 'early-out'].includes(a.status))
+      .reduce((sum, a) => sum + a.totalHours, 0) * 100) / 100;
+
+    // Overtime records (get OT hours from records, amount recalculated using hourlyRate)
+    const overtimeRecords = await db.overtime.findMany({
+      where: { employeeId, date: { gte: startDate, lt: endDate } },
+    });
+    const otHours = Math.round(overtimeRecords.reduce((sum, o) => sum + o.hours, 0) * 100) / 100;
+
+    // Attendance counts
+    const presentDays = attendance.filter(a => ['present', 'late', 'early-out'].includes(a.status)).length;
+    const halfDays = attendance.filter(a => a.status === 'half-day' || a.status === 'half_day').length;
+    // Only count holidays/Sundays where employee actually worked
+    const holidayWorked = attendance.filter(a => a.isHoliday && a.totalHours > 0).length;
+    const weeklyOffWorked = attendance.filter(a => a.isWeeklyOff && a.totalHours > 0).length;
+
+    // Effective present days = present + half×0.5 + holidayWorked + weeklyOffWorked
+    const effectivePresentDays = presentDays + halfDays * 0.5 + holidayWorked + weeklyOffWorked;
+
+    // Approved leaves
+    const leaves = await db.leave.findMany({
+      where: { employeeId, status: 'approved', startDate: { gte: startDate }, endDate: { lt: endDate } },
+    });
+    const paidLeaves = leaves.filter(l => l.type !== 'unpaid' && l.type !== 'UL' && l.type !== 'LOP').reduce((sum, l) => sum + l.days, 0);
+
+    // Absent days
     const absentDays = Math.max(0, totalWorkingDays - effectivePresentDays - paidLeaves);
+
+    // ─── BASE SALARY = monthlySalary - (perDayRate × absentDays) ───
+    // Sundays and paid holidays are automatically paid (included in monthlySalary)
+    // Only actual absent days on working days reduce the salary
+    const baseSalary = Math.round((employee.monthlySalary - (perDayRate * absentDays)) * 100) / 100;
+
+    // ─── ACTUAL Sunday/PH worked hours (for display/records only) ───
+    const sundayWorkedHrs = Math.round(attendance.filter(a => a.isSunday && a.totalHours > 0).reduce((sum, a) => sum + a.totalHours, 0) * 100) / 100;
+    const phWorkedHrs = Math.round(attendance.filter(a => a.isHoliday && a.totalHours > 0).reduce((sum, a) => sum + a.totalHours, 0) * 100) / 100;
+
+    // ─── OT Amount = otHours × hourlyRate (1x normal rate, NOT 1.5x) ───
+    const otAmount = Math.round(otHours * hourlyRate * 100) / 100;
+
+    // ─── GROSS SALARY ───
+    const grossSalary = Math.round((baseSalary + otAmount) * 100) / 100;
 
     // ─── DEDUCTIONS ───
     const tdsDeduction = body.tdsDeduction || 0;
@@ -131,18 +143,20 @@ export async function POST(request: NextRequest) {
 
     // ─── NET SALARY ───
     const arrear = body.arrear || 0;
-    const netSalary = Math.round((grossSalary - totalDeductions + arrear) * 100) / 100;
+    const bonus = body.bonus || 0;
+    const incentive = body.incentive || 0;
+    const netSalary = Math.round((grossSalary + bonus + incentive + arrear - totalDeductions) * 100) / 100;
 
     const payrollData = {
       monthlySalary: employee.monthlySalary,
-      hourlyRate: Math.round(hourlyRate * 100) / 100,
+      hourlyRate,
       totalWorkedHrs,
       otHours,
-      otRate: employee.overtimeRate,
+      otRate: hourlyRate,
       otAmount,
-      sundayHrs,
-      phHours,
-      totalHrs,
+      sundayHrs: sundayWorkedHrs,
+      phHours: phWorkedHrs,
+      totalHrs: totalWorkedHrs,
       presentDays: effectivePresentDays,
       absentDays,
       holidayDays,
@@ -155,6 +169,8 @@ export async function POST(request: NextRequest) {
       otherDeductions,
       totalDeductions,
       arrear,
+      bonus,
+      incentive,
       netSalary,
       status: 'generated' as const,
     };
@@ -165,7 +181,7 @@ export async function POST(request: NextRequest) {
         where: { id: existing.id },
         data: payrollData,
       });
-      return NextResponse.json(updated);
+      return NextResponse.json({ ...updated, baseSalary, perDayRate, totalWorkingDays, daysInMonth });
     }
 
     const payroll = await db.payroll.create({
@@ -189,7 +205,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    return NextResponse.json(payroll, { status: 201 });
+    return NextResponse.json({ ...payroll, baseSalary, perDayRate, totalWorkingDays, daysInMonth }, { status: 201 });
   } catch (error: any) {
     console.error('Payroll error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });

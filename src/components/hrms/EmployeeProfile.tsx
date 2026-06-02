@@ -23,6 +23,15 @@ const FIRM_BADGE_CLASS: Record<string, string> = {
   Roofing: 'firm-badge-roofing',
 };
 
+// ── Convert decimal hours to HH.MM display format ──
+function formatHours(decimal: number): string {
+  if (!decimal || decimal === 0) return '0.00';
+  const hours = Math.floor(decimal);
+  const minutes = Math.round((decimal - hours) * 60);
+  if (minutes >= 60) return `${hours + 1}.00`;
+  return `${hours}.${String(minutes).padStart(2, '0')}`;
+}
+
 // ── Employee Data Type ──
 interface EmployeeData {
   id: string;
@@ -148,7 +157,7 @@ export function EmployeeProfile() {
     {
       icon: IndianRupee,
       label: 'Monthly Salary',
-      value: `₹${employee.basicSalary.toLocaleString('en-IN')}`,
+      value: `₹${(employee.basicSalary ?? employee.monthlySalary ?? 0).toLocaleString('en-IN')}`,
       color: 'text-gold',
     },
     {
@@ -306,12 +315,12 @@ export function EmployeeProfile() {
                             <TableCell className="text-sm font-mono">{a.checkIn || '—'}</TableCell>
                             <TableCell className="text-sm font-mono">{a.checkOut || '—'}</TableCell>
                             <TableCell className="text-sm font-medium">
-                              {a.totalHours > 0 ? `${a.totalHours}h` : '—'}
+                              {a.totalHours > 0 ? `${formatHours(a.totalHours)}h` : '—'}
                             </TableCell>
                             <TableCell><AttStatusBadge status={a.status} /></TableCell>
                             <TableCell className="hidden md:table-cell text-sm">
                               {a.overtimeHours > 0 ? (
-                                <span className="text-cyan-600 dark:text-cyan-400 font-medium">{a.overtimeHours}h</span>
+                                <span className="text-cyan-600 dark:text-cyan-400 font-medium">{formatHours(a.overtimeHours)}h</span>
                               ) : '—'}
                             </TableCell>
                           </TableRow>

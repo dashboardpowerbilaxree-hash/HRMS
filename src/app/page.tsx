@@ -259,6 +259,9 @@ export default function Home() {
     try {
       await fetch('/api/seed', { method: 'POST' });
     } catch {}
+    try {
+      await fetch('/api/firms/seed', { method: 'POST' });
+    } catch {}
     setSeeded(true);
   }, []);
 

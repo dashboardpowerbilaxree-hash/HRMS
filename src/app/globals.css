@@ -223,6 +223,10 @@
   background: linear-gradient(135deg, oklch(0.6 0.18 195), oklch(0.55 0.2 210));
 }
 
+.gradient-rose {
+  background: linear-gradient(135deg, oklch(0.6 0.22 10), oklch(0.55 0.2 350));
+}
+
 /* ═══════════════════════════════════════════════════════════
    ANIMATIONS
    ═══════════════════════════════════════════════════════════ */

@@ -68,8 +68,13 @@ export async function POST(request: NextRequest) {
     const d = new Date(body.date);
     const isSunday = d.getDay() === 0;
 
-    // Use provided rate or employee's overtime rate
-    const rate = body.rate || employee.overtimeRate;
+    // Use provided rate or calculate normal hourly rate (1x, NOT 1.5x)
+    // Normal hourly rate = monthlySalary / (daysInMonth × shiftHours)
+    let rate = body.rate;
+    if (!rate || rate === employee.overtimeRate) {
+      const daysInMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+      rate = Math.round((employee.monthlySalary / (daysInMonth * employee.shiftHours)) * 100) / 100;
+    }
     const hours = body.hours || 0;
     const amount = hours * rate;
 

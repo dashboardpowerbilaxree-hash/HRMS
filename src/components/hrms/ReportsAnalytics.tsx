@@ -33,6 +33,15 @@ const FIRM_BADGE_CLASS: Record<string, string> = {
   SDF: 'firm-badge-sdf',
 };
 
+// ── Convert decimal hours to HH.MM display format ──
+function formatHours(decimal: number): string {
+  if (!decimal || decimal === 0) return '0.00';
+  const hours = Math.floor(decimal);
+  const minutes = Math.round((decimal - hours) * 60);
+  if (minutes >= 60) return `${hours + 1}.00`;
+  return `${hours}.${String(minutes).padStart(2, '0')}`;
+}
+
 const FIRMS = ['LAPL', 'LRSL', 'SI', 'SDF'];
 
 export function ReportsAnalytics() {
@@ -211,8 +220,8 @@ export function ReportsAnalytics() {
                             <TableCell><FirmBadge firm={r.employee?.department || ''} /></TableCell>
                             <TableCell className="text-sm whitespace-nowrap">{new Date(r.date).toLocaleDateString()}</TableCell>
                             <TableCell className="text-sm whitespace-nowrap">{r.status}</TableCell>
-                            <TableCell className="text-sm whitespace-nowrap">{r.totalHours}h</TableCell>
-                            <TableCell className="text-sm whitespace-nowrap">{r.overtimeHours > 0 ? `${r.overtimeHours}h` : '-'}</TableCell>
+                            <TableCell className="text-sm whitespace-nowrap">{formatHours(r.totalHours)}h</TableCell>
+                            <TableCell className="text-sm whitespace-nowrap">{r.overtimeHours > 0 ? `${formatHours(r.overtimeHours)}h` : '-'}</TableCell>
                           </TableRow>
                         ))}
                       </TableBody>

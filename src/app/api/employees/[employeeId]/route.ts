@@ -30,13 +30,26 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const { employeeId } = await params;
     const body = await request.json();
 
+    const salaryType = (body.salaryType || '').toLowerCase();
     const sh = body.shiftHours || 9;
-    const daysInMonth = 31;
     const monthlySalary = body.monthlySalary || body.basicSalary || 0;
-    const hourlyRate = body.salaryType === 'hourly'
-      ? Math.round((monthlySalary / (sh * daysInMonth)) * 100) / 100
-      : Math.round(((body.dailyRate || monthlySalary / 30) / sh) * 100) / 100;
-    const overtimeRate = Math.round(hourlyRate * 1.5 * 100) / 100;
+
+    // Hourly rate = monthlySalary / (shiftHours × totalWorkingDays)
+    const now = new Date();
+    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    let totalWorkingDays = daysInMonth;
+    for (let d = 1; d <= daysInMonth; d++) {
+      if (new Date(now.getFullYear(), now.getMonth(), d).getDay() === 0) totalWorkingDays--;
+    }
+    const holidays = await db.holiday.findMany({
+      where: { date: { gte: new Date(now.getFullYear(), now.getMonth(), 1), lt: new Date(now.getFullYear(), now.getMonth() + 1, 1) } },
+    });
+    totalWorkingDays -= holidays.length;
+    if (totalWorkingDays < 1) totalWorkingDays = 26;
+
+    const hourlyRate = Math.round((monthlySalary / (sh * totalWorkingDays)) * 100) / 100;
+    // OT at normal hourly rate (1x), NOT 1.5x — user explicitly confirmed
+    const overtimeRate = Math.round(hourlyRate * 100) / 100;
 
     const employee = await db.employee.update({
       where: { employeeId },
@@ -46,9 +59,9 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         email: body.email,
         firm: body.firm || body.department,
         location: body.location,
-        salaryType: body.salaryType,
+        salaryType,
         monthlySalary,
-        dailyRate: body.dailyRate || Math.round(monthlySalary / 30),
+        dailyRate: body.dailyRate || Math.round(monthlySalary / totalWorkingDays),
         hourlyRate,
         overtimeRate,
         employmentType: body.employmentType,

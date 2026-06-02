@@ -56,8 +56,8 @@ export function SettingsPanel() {
         { key: 'pfRate', label: 'PF Rate (%)', defaultValue: '12' },
         { key: 'esiRate', label: 'ESI Rate (%)', defaultValue: '0.75' },
         { key: 'gracePeriod', label: 'Late Grace Period (min)', defaultValue: '15' },
-        { key: 'otMultiplier', label: 'OT Multiplier', defaultValue: '1.5' },
-        { key: 'holidayOTMultiplier', label: 'Holiday OT Multiplier', defaultValue: '2' },
+        { key: 'otMultiplier', label: 'OT Multiplier', defaultValue: '1' },
+        { key: 'holidayOTMultiplier', label: 'Holiday OT Multiplier', defaultValue: '1' },
       ],
     },
     {
@@ -211,7 +211,7 @@ export function SettingsPanel() {
               <Separator />
               <p className="text-xs">
                 Hourly Rate = Monthly Salary ÷ (Shift Hours × Days in Month) &nbsp;|&nbsp;
-                OT Rate = Hourly Rate × {settings.otMultiplier || '1.5'} &nbsp;|&nbsp;
+                OT Rate = Hourly Rate × {settings.otMultiplier || '1'} (normal rate, NOT 1.5x) &nbsp;|&nbsp;
                 Holiday OT = Hourly Rate × {settings.holidayOTMultiplier || '2'}
               </p>
               <p className="text-xs">

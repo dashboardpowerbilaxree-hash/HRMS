@@ -26,12 +26,12 @@ export async function POST() {
       data: { username: 'admin', password: 'laxree@2026', name: 'Laxree Admin', role: 'super_admin' },
     });
 
-    // Create Firms (from Excel data)
+    // Create Firms (from Excel data) — with company details for payslip
     const firms = [
-      { code: 'LAPL', name: 'Laxree Associates Pvt. Ltd.' },
-      { code: 'LRSL', name: 'Laxree Roofing Solutions Ltd.' },
-      { code: 'SI', name: 'Shree Industries' },
-      { code: 'SDF', name: 'SDF Division' },
+      { code: 'LAPL', name: 'Laxree Associates Pvt. Ltd.', address: 'Plot No. 45, Sector 32, Gurgaon, Haryana 122001', contactPhone: '+91-124-4567890', contactEmail: 'hr@laxree.com', logo: '/laxree-logo.png' },
+      { code: 'LRSL', name: 'Laxree Roofing Solutions Ltd.', address: 'Industrial Area, Ajmer, Rajasthan 305001', contactPhone: '+91-145-2678901', contactEmail: 'hr@laxree.com', logo: '/laxree-logo.png' },
+      { code: 'SI', name: 'Shree Industries', address: 'M.I.A., Madanganj, Kishangarh, Ajmer, Rajasthan 305801', contactPhone: '+91-145-3789012', contactEmail: 'hr@laxree.com', logo: '/laxree-logo.png' },
+      { code: 'SDF', name: 'SDF Division', address: 'M.I.A., Ajmer, Rajasthan 305001', contactPhone: '+91-145-4890123', contactEmail: 'hr@laxree.com', logo: '/laxree-logo.png' },
     ];
     for (const f of firms) await db.firm.create({ data: f });
 
@@ -92,7 +92,8 @@ export async function POST() {
       const hourlyRate = emp.salaryType === 'hourly'
         ? Math.round((emp.monthlySalary / (31 * emp.shiftHours)) * 100) / 100
         : Math.round((emp.dailyRate || emp.monthlySalary / 30) / emp.shiftHours * 100) / 100;
-      const overtimeRate = Math.round(hourlyRate * 1.5 * 100) / 100;
+      // OT at normal hourly rate (1x), NOT 1.5x
+      const overtimeRate = Math.round(hourlyRate * 100) / 100;
 
       await db.employee.create({
         data: {
@@ -198,15 +199,17 @@ export async function POST() {
             },
           });
 
-          // Create OT record
+          // Create OT record (1x normal rate)
           if (actualOT > 0) {
             const employee = await db.employee.findUnique({ where: { employeeId: emp.employeeId } });
             if (employee) {
+              const daysInMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+              const normalHourlyRate = Math.round((employee.monthlySalary / (daysInMonth * employee.shiftHours)) * 100) / 100;
               await db.overtime.create({
                 data: {
                   employeeId: emp.employeeId, date,
-                  hours: actualOT, rate: employee.overtimeRate,
-                  amount: Math.round(actualOT * employee.overtimeRate * 100) / 100,
+                  hours: actualOT, rate: normalHourlyRate,
+                  amount: Math.round(actualOT * normalHourlyRate * 100) / 100,
                   isHoliday: false, status: 'approved',
                 },
               });
@@ -246,8 +249,8 @@ export async function POST() {
         { key: 'pfRate', value: '12' },
         { key: 'esiRate', value: '0.75' },
         { key: 'gracePeriod', value: '15' },
-        { key: 'otMultiplier', value: '1.5' },
-        { key: 'holidayOTMultiplier', value: '2' },
+        { key: 'otMultiplier', value: '1' },
+        { key: 'holidayOTMultiplier', value: '1' },
         { key: 'salaryFormula', value: 'hourly' },
         { key: 'sundayRule', value: 'earned_per_6_days' },
       ],
