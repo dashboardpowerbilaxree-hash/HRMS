@@ -19,6 +19,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
+import Image from 'next/image';
 
 // ── Firm badge class map ──
 const FIRM_BADGE_CLASS: Record<string, string> = {
@@ -34,6 +35,13 @@ const FIRM_NAMES: Record<string, string> = {
   LRSL: 'LAXREE ROOFING SOLUTION',
   SI: 'SMARTH INTERNATIONAL',
   SDF: 'SANGRAH DECOR & FURNITURE',
+};
+
+const FIRM_LOGOS: Record<string, string> = {
+  LAPL: '/logos/lapl.jpg',
+  LRSL: '/logos/lrsl.jpg',
+  SI: '/logos/si.png',
+  SDF: '/logos/sdf.png',
 };
 
 // ── Convert decimal hours to HH.MM display format ──
@@ -393,23 +401,78 @@ export function AttendanceTracker() {
 
   useEffect(() => { loadMonthlySummary(); }, [loadMonthlySummary]);
 
-  // ── Export Daily Attendance as Excel ──
+  // ── Styling helpers for Excel ──
+  const GOLD = 'D4A843';
+  const DARK = '1A1A1A';
+  const WHITE = 'FFFFFF';
+  const EMERALD = '059669';
+  const RED = 'DC2626';
+  const AMBER = 'D97706';
+  const CYAN = '0891B2';
+  const PURPLE = '7C3AED';
+  const SKY = '0284C7';
+  const LIGHT_BG = 'FFF8E7';
+  const LIGHT_GREEN = 'ECFDF5';
+  const LIGHT_RED = 'FEF2F2';
+  const LIGHT_AMBER = 'FFFBEB';
+
+  const styleHeader = (rgb: string = DARK) => ({
+    font: { bold: true, color: { rgb: GOLD }, sz: 14 },
+    fill: { fgColor: { rgb } },
+    alignment: { horizontal: 'center' as const },
+  });
+  const styleSubHeader = (rgb: string = DARK) => ({
+    font: { bold: true, color: { rgb: WHITE }, sz: 11 },
+    fill: { fgColor: { rgb } },
+    alignment: { horizontal: 'center' as const },
+  });
+  const styleColHeader = (rgb: string = EMERALD) => ({
+    font: { bold: true, color: { rgb: WHITE }, sz: 10 },
+    fill: { fgColor: { rgb } },
+    alignment: { horizontal: 'center' as const, vertical: 'center' as const, wrapText: true },
+    border: { bottom: { style: 'medium' as const, color: { rgb: GOLD } } },
+  });
+  const styleData = (bg?: string) => ({
+    font: { sz: 10 },
+    fill: bg ? { fgColor: { rgb: bg } } : undefined,
+    alignment: { horizontal: 'center' as const, vertical: 'center' as const },
+    border: { bottom: { style: 'thin' as const, color: { rgb: 'E5E7EB' } } },
+  });
+  const styleBold = (rgb: string = DARK, bg?: string) => ({
+    font: { bold: true, color: { rgb }, sz: 10 },
+    fill: bg ? { fgColor: { rgb: bg } } : undefined,
+    alignment: { horizontal: 'center' as const, vertical: 'center' as const },
+    border: { bottom: { style: 'thin' as const, color: { rgb: 'E5E7EB' } } },
+  });
+
+  // ── Export Daily Attendance as Beautiful Excel ──
   const handleExportDailyExcel = async () => {
     if (filteredRecords.length === 0) {
       toast.error('No records to export');
       return;
     }
-    const XLSX = await import('xlsx');
+    const XLSX = await import('xlsx-js-style');
     const wb = XLSX.utils.book_new();
 
     // Company Header
-    const headerData = [
-      ['Laxree Group of Companies'],
-      [`Daily Attendance Report - ${MONTHS[parseInt(filterMonth) - 1]} ${filterYear}`],
+    const headerData: any[][] = [
+      ['LAXREE GROUP OF COMPANIES'],
+      [`Daily Attendance Report — ${MONTHS[parseInt(filterMonth) - 1]} ${filterYear}`],
       [`Generated: ${new Date().toLocaleString('en-IN')}`],
       [],
     ];
     const ws = XLSX.utils.aoa_to_sheet(headerData);
+
+    // Apply styles to header rows
+    ['A1', 'B1', 'C1', 'D1', 'E1', 'F1', 'G1', 'H1', 'I1'].forEach(c => {
+      if (ws[c]) ws[c].s = styleHeader();
+    });
+    ['A2', 'B2', 'C2', 'D2', 'E2', 'F2', 'G2', 'H2', 'I2'].forEach(c => {
+      if (ws[c]) ws[c].s = { font: { bold: true, color: { rgb: WHITE }, sz: 12 }, fill: { fgColor: { rgb: '2D2D2D' } }, alignment: { horizontal: 'center' as const } };
+    });
+    ['A3', 'B3', 'C3', 'D3', 'E3', 'F3', 'G3', 'H3', 'I3'].forEach(c => {
+      if (ws[c]) ws[c].s = { font: { italic: true, color: { rgb: '888888' }, sz: 9 }, fill: { fgColor: { rgb: '2D2D2D' } }, alignment: { horizontal: 'center' as const } };
+    });
 
     // Data rows
     const dataRows = filteredRecords.map(rec => ({
@@ -425,13 +488,41 @@ export function AttendanceTracker() {
     }));
     XLSX.utils.sheet_add_json(ws, dataRows, { origin: 'A5' });
 
+    // Style column headers (row 5)
+    const colKeys = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'];
+    colKeys.forEach(c => {
+      const cell = ws[`${c}5`];
+      if (cell) cell.s = styleColHeader(EMERALD);
+    });
+
+    // Style data rows with alternating colors
+    for (let i = 0; i < dataRows.length; i++) {
+      const row = i + 6;
+      const bg = i % 2 === 0 ? LIGHT_BG : undefined;
+      colKeys.forEach(c => {
+        const cell = ws[`${c}${row}`];
+        if (cell) {
+          // Color-code Status column
+          if (c === 'H') {
+            const status = String(cell.v || '');
+            if (status === 'Present') cell.s = styleBold(EMERALD, LIGHT_GREEN);
+            else if (status === 'Absent') cell.s = styleBold(RED, LIGHT_RED);
+            else if (status === 'Late') cell.s = styleBold(AMBER, LIGHT_AMBER);
+            else if (status === 'Early Out') cell.s = styleBold('E11D48', LIGHT_RED);
+            else if (status === 'Half Day') cell.s = styleBold(AMBER, LIGHT_AMBER);
+            else cell.s = styleData(bg);
+          } else {
+            cell.s = styleData(bg);
+          }
+        }
+      });
+    }
+
     // Column widths
     ws['!cols'] = [
       { wch: 20 }, { wch: 12 }, { wch: 10 }, { wch: 14 },
       { wch: 10 }, { wch: 10 }, { wch: 8 }, { wch: 12 }, { wch: 10 },
     ];
-
-    // Merge header cells
     ws['!merges'] = [
       { s: { r: 0, c: 0 }, e: { r: 0, c: 8 } },
       { s: { r: 1, c: 0 }, e: { r: 1, c: 8 } },
@@ -440,27 +531,38 @@ export function AttendanceTracker() {
 
     XLSX.utils.book_append_sheet(wb, ws, 'Daily Attendance');
 
-    // Summary sheet
-    const summaryRows = [
+    // ── Summary Sheet ──
+    const summaryRows: any[][] = [
       ['Attendance Summary'],
       [],
+      ['Category', 'Count'],
       ['Present', summary.present],
       ['Absent', summary.absent],
       ['Late', summary.late],
+      ['Early Out', summary.earlyOut],
       ['OT Hours', formatHours(summary.ot)],
     ];
     const ws2 = XLSX.utils.aoa_to_sheet(summaryRows);
-    ws2['!cols'] = [{ wch: 16 }, { wch: 12 }];
+    // Style summary
+    ['A1', 'B1'].forEach(c => { if (ws2[c]) ws2[c].s = styleHeader(); });
+    ['A3', 'B3'].forEach(c => { if (ws2[c]) ws2[c].s = styleColHeader(EMERALD); });
+    ws2['A4'].s = styleBold(EMERALD, LIGHT_GREEN); ws2['B4'].s = styleBold(EMERALD, LIGHT_GREEN);
+    ws2['A5'].s = styleBold(RED, LIGHT_RED); ws2['B5'].s = styleBold(RED, LIGHT_RED);
+    ws2['A6'].s = styleBold(AMBER, LIGHT_AMBER); ws2['B6'].s = styleBold(AMBER, LIGHT_AMBER);
+    ws2['A7'].s = styleBold('E11D48', LIGHT_RED); ws2['B7'].s = styleBold('E11D48', LIGHT_RED);
+    ws2['A8'].s = styleBold(CYAN); ws2['B8'].s = styleBold(CYAN);
+    ws2['!cols'] = [{ wch: 18 }, { wch: 14 }];
+    ws2['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 1 } }];
     XLSX.utils.book_append_sheet(wb, ws2, 'Summary');
 
     XLSX.writeFile(wb, `Daily_Attendance_${MONTHS[parseInt(filterMonth) - 1]}_${filterYear}.xlsx`);
     toast.success('Excel exported successfully');
   };
 
-  // ── Export Monthly Attendance Register as Excel ──
+  // ── Export Monthly Attendance Register as Beautiful Excel ──
   const handleExportExcel = async () => {
     if (!monthlySummary) return;
-    const XLSX = await import('xlsx');
+    const XLSX = await import('xlsx-js-style');
     const s = monthlySummary;
     const wb = XLSX.utils.book_new();
 
@@ -480,6 +582,18 @@ export function AttendanceTracker() {
     ];
     const ws1 = XLSX.utils.aoa_to_sheet(headerRows);
 
+    // Style header rows
+    const cols12 = ['A','B','C','D','E','F','G','H','I','J','K','L'];
+    cols12.forEach(c => {
+      if (ws1[`${c}1`]) ws1[`${c}1`].s = styleHeader();
+      if (ws1[`${c}2`]) ws1[`${c}2`].s = styleSubHeader('2D2D2D');
+    });
+    for (let r = 3; r <= 5; r++) {
+      cols12.forEach(c => {
+        if (ws1[`${c}${r}`]) ws1[`${c}${r}`].s = { font: { sz: 9, color: { rgb: 'CCCCCC' } }, fill: { fgColor: { rgb: '2D2D2D' } } };
+      });
+    }
+
     // Add day-by-day attendance data starting from row 7
     const dayHeaders = [
       'S.No', 'Date', 'Day', 'Check In', 'Check Out', 'Total Hrs',
@@ -487,7 +601,6 @@ export function AttendanceTracker() {
     ];
     const dayRows: any[][] = [dayHeaders];
 
-    // Generate all days of the month
     const daysInMonth = new Date(s.year, s.month, 0).getDate();
     const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -497,7 +610,6 @@ export function AttendanceTracker() {
       const dayName = dayNames[dateObj.getDay()];
       const isSunday = dateObj.getDay() === 0;
 
-      // Find matching record
       const rec = s.records.find((r: any) => {
         const rDate = new Date(r.date);
         return rDate.getFullYear() === s.year && rDate.getMonth() + 1 === s.month && rDate.getDate() === day;
@@ -519,7 +631,6 @@ export function AttendanceTracker() {
           rec.earlyOut ? 'Yes' : '',
         ]);
       } else {
-        // No record for this day - mark as Sunday or blank
         dayRows.push([
           day,
           dateObj.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
@@ -533,19 +644,50 @@ export function AttendanceTracker() {
 
     XLSX.utils.sheet_add_aoa(ws1, dayRows, { origin: 'A7' });
 
+    // Style column headers (row 7)
+    cols12.forEach(c => {
+      const cell = ws1[`${c}7`];
+      if (cell) cell.s = styleColHeader(EMERALD);
+    });
+
+    // Style data rows with color-coded status
+    for (let i = 0; i < dayRows.length - 1; i++) {
+      const row = i + 8;
+      const bg = i % 2 === 0 ? LIGHT_BG : undefined;
+      cols12.forEach(c => {
+        const cell = ws1[`${c}${row}`];
+        if (cell) {
+          if (c === 'G') { // Status column
+            const status = String(cell.v || '');
+            if (status === 'Present') cell.s = styleBold(EMERALD, LIGHT_GREEN);
+            else if (status === 'Absent') cell.s = styleBold(RED, LIGHT_RED);
+            else if (status === 'Late') cell.s = styleBold(AMBER, LIGHT_AMBER);
+            else if (status === 'Early Out') cell.s = styleBold('E11D48', LIGHT_RED);
+            else if (status === 'Half Day') cell.s = styleBold(AMBER, LIGHT_AMBER);
+            else if (status === 'Weekly Off') cell.s = styleBold(SKY, 'EFF6FF');
+            else if (status === 'Holiday') cell.s = styleBold(PURPLE, 'F5F3FF');
+            else cell.s = styleData(bg);
+          } else if (c === 'C') { // Day column - highlight Sundays
+            const dayVal = String(cell.v || '');
+            if (dayVal === 'Sunday') cell.s = styleBold(SKY, 'EFF6FF');
+            else cell.s = styleData(bg);
+          } else if (c === 'K') { // Late column
+            if (String(cell.v) === 'Yes') cell.s = styleBold(AMBER, LIGHT_AMBER);
+            else cell.s = styleData(bg);
+          } else if (c === 'L') { // Early Out column
+            if (String(cell.v) === 'Yes') cell.s = styleBold('E11D48', LIGHT_RED);
+            else cell.s = styleData(bg);
+          } else {
+            cell.s = styleData(bg);
+          }
+        }
+      });
+    }
+
     ws1['!cols'] = [
-      { wch: 6 },   // S.No
-      { wch: 16 },  // Date
-      { wch: 12 },  // Day
-      { wch: 10 },  // Check In
-      { wch: 10 },  // Check Out
-      { wch: 10 },  // Total Hrs
-      { wch: 14 },  // Status
-      { wch: 10 },  // OT Hrs
-      { wch: 12 },  // Sunday Hrs
-      { wch: 10 },  // PH Hrs
-      { wch: 8 },   // Late
-      { wch: 10 },  // Early Out
+      { wch: 6 }, { wch: 16 }, { wch: 12 }, { wch: 10 }, { wch: 10 },
+      { wch: 10 }, { wch: 14 }, { wch: 10 }, { wch: 12 }, { wch: 10 },
+      { wch: 8 }, { wch: 10 },
     ];
     ws1['!merges'] = [
       { s: { r: 0, c: 0 }, e: { r: 0, c: 11 } },
@@ -555,7 +697,7 @@ export function AttendanceTracker() {
     XLSX.utils.book_append_sheet(wb, ws1, 'Attendance Register');
 
     // ═══════════════════════════════════════════════════
-    // SHEET 2: Monthly Summary
+    // SHEET 2: Monthly Summary (Beautiful)
     // ═══════════════════════════════════════════════════
     const summaryData: any[][] = [
       [firmFullName],
@@ -579,6 +721,32 @@ export function AttendanceTracker() {
       ['Shift Hours', formatHours(s.employee.shiftHours)],
     ];
     const ws2 = XLSX.utils.aoa_to_sheet(summaryData);
+
+    // Style summary sheet
+    const cols5 = ['A','B','C','D','E'];
+    cols5.forEach(c => { if (ws2[`${c}1`]) ws2[`${c}1`].s = styleHeader(); });
+    cols5.forEach(c => { if (ws2[`${c}2`]) ws2[`${c}2`].s = styleSubHeader('2D2D2D'); });
+    cols5.forEach(c => { if (ws2[`${c}5`]) ws2[`${c}5`].s = styleColHeader(EMERALD); });
+    // Color-coded rows
+    ws2['A6'].s = styleBold(EMERALD, LIGHT_GREEN); ws2['B6'].s = styleBold(EMERALD, LIGHT_GREEN);
+    ws2['D6'].s = styleBold(RED, LIGHT_RED); ws2['E6'].s = styleBold(RED, LIGHT_RED);
+    ws2['A7'].s = styleBold(AMBER, LIGHT_AMBER); ws2['B7'].s = styleBold(AMBER, LIGHT_AMBER);
+    ws2['D7'].s = styleBold(SKY, 'EFF6FF'); ws2['E7'].s = styleBold(SKY, 'EFF6FF');
+    ws2['A8'].s = styleData(LIGHT_BG); ws2['B8'].s = styleData(LIGHT_BG);
+    ws2['D8'].s = styleBold(PURPLE, 'F5F3FF'); ws2['E8'].s = styleBold(PURPLE, 'F5F3FF');
+    ws2['A9'].s = styleData(); ws2['B9'].s = styleData();
+    ws2['D9'].s = styleBold(SKY, 'EFF6FF'); ws2['E9'].s = styleBold(SKY, 'EFF6FF');
+    ws2['A10'].s = styleBold(SKY, 'EFF6FF'); ws2['B10'].s = styleBold(SKY, 'EFF6FF');
+    ws2['D10'].s = styleBold(EMERALD, LIGHT_GREEN); ws2['E10'].s = styleBold(EMERALD, LIGHT_GREEN);
+    ws2['A11'].s = styleBold(AMBER, LIGHT_AMBER); ws2['B11'].s = styleBold(AMBER, LIGHT_AMBER);
+    ws2['D11'].s = styleBold('E11D48', LIGHT_RED); ws2['E11'].s = styleBold('E11D48', LIGHT_RED);
+    // Hours section
+    ws2['A13'].s = styleSubHeader('2D2D2D'); cols5.filter(c => c !== 'A').forEach(c => { if (ws2[`${c}13`]) ws2[`${c}13`].s = styleSubHeader('2D2D2D'); });
+    for (let r = 14; r <= 20; r++) {
+      const bg2 = (r - 14) % 2 === 0 ? LIGHT_BG : undefined;
+      ws2[`A${r}`].s = styleData(bg2); ws2[`B${r}`].s = styleBold(DARK, bg2);
+    }
+
     ws2['!cols'] = [
       { wch: 26 }, { wch: 14 }, { wch: 6 }, { wch: 26 }, { wch: 14 },
     ];
@@ -1240,9 +1408,19 @@ export function AttendanceTracker() {
                 <CardContent className="p-4 md:p-6 space-y-4">
                   {/* Employee Info Header */}
                   <div className="flex items-center gap-3 pb-3 border-b border-border/50">
-                    <div className="w-12 h-12 rounded-xl gradient-laxree flex items-center justify-center text-white text-lg font-bold shrink-0">
-                      {monthlySummary.employee.fullName.charAt(0)}
-                    </div>
+                    {(() => {
+                      const firmCode = getFirmFromEmployeeId(monthlySummary.employee.employeeId) || monthlySummary.employee.firm || monthlySummary.employee.department;
+                      const logoSrc = FIRM_LOGOS[firmCode];
+                      return logoSrc ? (
+                        <div className="w-14 h-14 rounded-xl overflow-hidden border-2 border-gold/30 shrink-0 bg-white p-1">
+                          <Image src={logoSrc} alt={firmCode} width={48} height={48} className="w-full h-full object-contain" />
+                        </div>
+                      ) : (
+                        <div className="w-14 h-14 rounded-xl gradient-laxree flex items-center justify-center text-white text-lg font-bold shrink-0">
+                          {monthlySummary.employee.fullName.charAt(0)}
+                        </div>
+                      );
+                    })()}
                     <div className="min-w-0">
                       <h3 className="font-bold text-lg">{monthlySummary.employee.fullName}</h3>
                       <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
@@ -1320,7 +1498,7 @@ export function AttendanceTracker() {
                         <ChevronRight className="w-4 h-4 text-gold" />
                         Daily Attendance Breakdown
                       </h4>
-                      <ScrollArea className="max-h-[70vh]">
+                      <div className="overflow-y-auto max-h-[70vh] rounded-lg" style={{ WebkitOverflowScrolling: 'touch' }}>
                         <Table>
                           <TableHeader>
                             <TableRow className="hover:bg-transparent">
@@ -1347,7 +1525,7 @@ export function AttendanceTracker() {
                             ))}
                           </TableBody>
                         </Table>
-                      </ScrollArea>
+                      </div>
                     </div>
                   )}
                 </CardContent>

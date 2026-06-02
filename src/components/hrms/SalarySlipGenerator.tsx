@@ -25,6 +25,13 @@ const FIRM_NAMES: Record<string, string> = {
   SDF: 'SANGRAH DECOR & FURNITURE',
 };
 
+const FIRM_LOGOS: Record<string, string> = {
+  LAPL: '/logos/lapl.jpg',
+  LRSL: '/logos/lrsl.jpg',
+  SI: '/logos/si.png',
+  SDF: '/logos/sdf.png',
+};
+
 // ── Convert decimal hours to HH.MM display format ──
 function formatHours(decimal: number): string {
   if (!decimal || decimal === 0) return '0.00';
@@ -108,16 +115,27 @@ export function SalarySlipGenerator() {
   const firmDetails = firms.find(f => f.code === firmCode);
   const firmFullName = FIRM_NAMES[firmCode] || firmDetails?.name || 'Laxree Group of Companies';
 
-  // ── Professional Excel Export ──
+  // ── Professional Excel Export (Beautiful & Colorful) ──
   const handleExportExcel = async () => {
     if (!slip?.payroll) return;
-    const XLSX = await import('xlsx');
+    const XLSX = await import('xlsx-js-style');
     const p = slip.payroll;
     const e = slip.employee;
     const fd = firmDetails;
     const baseSalary = p.baseSalary != null ? p.baseSalary : Math.round((p.monthlySalary - ((p.monthlySalary / (new Date(year, month, 0).getDate())) * p.absentDays)) * 100) / 100;
     const totalEarnings = p.grossSalary + (p.bonus || 0) + (p.incentive || 0) + (p.arrear || 0);
     const perDayRate = Math.round((p.monthlySalary / (new Date(year, month, 0).getDate())) * 100) / 100;
+
+    const GOLD = 'D4A843'; const DARK = '1A1A1A'; const WHITE = 'FFFFFF';
+    const EMERALD = '059669'; const RED = 'DC2626'; const LIGHT_BG = 'FFF8E7';
+    const LIGHT_GREEN = 'ECFDF5'; const LIGHT_RED = 'FEF2F2';
+
+    const hdr = { font: { bold: true, color: { rgb: GOLD }, sz: 14 }, fill: { fgColor: { rgb: DARK } }, alignment: { horizontal: 'center' as const } };
+    const subhdr = (rgb: string = DARK) => ({ font: { bold: true, color: { rgb: WHITE }, sz: 11 }, fill: { fgColor: { rgb } }, alignment: { horizontal: 'center' as const } });
+    const sectionTitle = { font: { bold: true, color: { rgb: GOLD }, sz: 10 }, fill: { fgColor: { rgb: '2D2D2D' } } };
+    const label = { font: { sz: 10, color: { rgb: '666666' } } };
+    const value = (bg?: string) => ({ font: { bold: true, sz: 10 }, fill: bg ? { fgColor: { rgb: bg } } : undefined });
+    const netStyle = { font: { bold: true, color: { rgb: GOLD }, sz: 14 }, fill: { fgColor: { rgb: DARK } }, alignment: { horizontal: 'center' as const } };
 
     const wb = XLSX.utils.book_new();
 
@@ -153,14 +171,68 @@ export function SalarySlipGenerator() {
     ];
 
     const ws = XLSX.utils.aoa_to_sheet(data);
+
+    // Apply beautiful styling
+    const cols5 = ['A','B','C','D','E'];
+    // Row 1: Company name header
+    cols5.forEach(c => { if (ws[`${c}1`]) ws[`${c}1`].s = hdr; });
+    // Row 2: SALARY SLIP
+    cols5.forEach(c => { if (ws[`${c}2`]) ws[`${c}2`].s = subhdr('2D2D2D'); });
+    // Row 3: Month/Date info
+    ['A','D'].forEach(c => { if (ws[`${c}3`]) ws[`${c}3`].s = { font: { italic: true, sz: 9, color: { rgb: 'CCCCCC' } }, fill: { fgColor: { rgb: '2D2D2D' } } }; });
+    // Row 5: Employee Details section title
+    ['A','D'].forEach(c => { if (ws[`${c}5`]) ws[`${c}5`].s = sectionTitle; });
+    // Rows 6-8: Employee data
+    for (const r of [6,7,8]) {
+      if (ws[`A${r}`]) ws[`A${r}`].s = label;
+      if (ws[`B${r}`]) ws[`B${r}`].s = value(LIGHT_BG);
+      if (ws[`D${r}`]) ws[`D${r}`].s = label;
+      if (ws[`E${r}`]) ws[`E${r}`].s = value(LIGHT_BG);
+    }
+    // Row 10: Work Details section title
+    ['A','D'].forEach(c => { if (ws[`${c}10`]) ws[`${c}10`].s = sectionTitle; });
+    // Rows 11-14: Work data
+    for (const r of [11,12,13,14]) {
+      if (ws[`A${r}`]) ws[`A${r}`].s = label;
+      if (ws[`B${r}`]) ws[`B${r}`].s = value(LIGHT_BG);
+      if (ws[`D${r}`]) ws[`D${r}`].s = label;
+      if (ws[`E${r}`]) ws[`E${r}`].s = value(LIGHT_BG);
+    }
+    // Row 16: Earnings/Deductions header
+    if (ws['A16']) ws['A16'].s = subhdr(EMERALD);
+    if (ws['D16']) ws['D16'].s = subhdr(RED);
+    if (ws['B16']) ws['B16'].s = subhdr(EMERALD);
+    if (ws['E16']) ws['E16'].s = subhdr(RED);
+    // Rows 17-21: Earnings/Deductions data
+    for (const r of [17,18,19,20,21]) {
+      const bg = (r - 17) % 2 === 0 ? LIGHT_GREEN : undefined;
+      const bgR = (r - 17) % 2 === 0 ? LIGHT_RED : undefined;
+      if (ws[`A${r}`]) ws[`A${r}`].s = { font: { sz: 10 } };
+      if (ws[`B${r}`]) ws[`B${r}`].s = value(bg);
+      if (ws[`D${r}`]) ws[`D${r}`].s = { font: { sz: 10 } };
+      if (ws[`E${r}`]) ws[`E${r}`].s = value(bgR);
+    }
+    // Row 22: Totals
+    if (ws['A22']) ws['A22'].s = { font: { bold: true, sz: 10 }, fill: { fgColor: { rgb: LIGHT_GREEN } } };
+    if (ws['B22']) ws['B22'].s = { font: { bold: true, sz: 11, color: { rgb: EMERALD } }, fill: { fgColor: { rgb: LIGHT_GREEN } } };
+    if (ws['D22']) ws['D22'].s = { font: { bold: true, sz: 10 }, fill: { fgColor: { rgb: LIGHT_RED } } };
+    if (ws['E22']) ws['E22'].s = { font: { bold: true, sz: 11, color: { rgb: RED } }, fill: { fgColor: { rgb: LIGHT_RED } } };
+    // Row 24: NET SALARY
+    if (ws['D24']) ws['D24'].s = netStyle;
+    if (ws['E24']) ws['E24'].s = { font: { bold: true, color: { rgb: GOLD }, sz: 16 }, fill: { fgColor: { rgb: DARK } }, alignment: { horizontal: 'center' as const } };
+    // Rows 26-27: Footer
+    cols5.forEach(c => { if (ws[`${c}26`]) ws[`${c}26`].s = { font: { italic: true, sz: 8, color: { rgb: '999999' } } }; });
+    cols5.forEach(c => { if (ws[`${c}27`]) ws[`${c}27`].s = { font: { italic: true, sz: 8, color: { rgb: '999999' } } }; });
+
     ws['!cols'] = [
       { wch: 20 }, { wch: 25 }, { wch: 5 }, { wch: 20 }, { wch: 25 },
     ];
     ws['!merges'] = [
       { s: { r: 0, c: 0 }, e: { r: 0, c: 4 } },
       { s: { r: 1, c: 0 }, e: { r: 1, c: 4 } },
-      { s: { r: 22, c: 0 }, e: { r: 22, c: 4 } },
-      { s: { r: 23, c: 0 }, e: { r: 23, c: 4 } },
+      { s: { r: 23, c: 3 }, e: { r: 23, c: 4 } },
+      { s: { r: 25, c: 0 }, e: { r: 25, c: 4 } },
+      { s: { r: 26, c: 0 }, e: { r: 26, c: 4 } },
     ];
     XLSX.utils.book_append_sheet(wb, ws, 'Salary Slip');
 
@@ -342,11 +414,20 @@ export function SalarySlipGenerator() {
         >
           <Card className="glass-card card-gold-hover border-0" ref={slipRef}>
             <CardHeader className="text-center pb-2">
-              {/* Company Header with details */}
+              {/* Company Header with Firm Logo */}
               <div className="flex items-center justify-center gap-3 mb-2">
-                <div className="w-12 h-12 rounded-xl gradient-laxree flex items-center justify-center overflow-hidden">
-                  <Image src="/laxree-logo.png" alt="Laxree" width={40} height={40} className="rounded-lg" />
-                </div>
+                {(() => {
+                  const logoSrc = FIRM_LOGOS[firmCode];
+                  return logoSrc ? (
+                    <div className="w-14 h-14 rounded-xl overflow-hidden border-2 border-gold/30 bg-white p-1">
+                      <Image src={logoSrc} alt={firmCode} width={48} height={48} className="w-full h-full object-contain" />
+                    </div>
+                  ) : (
+                    <div className="w-12 h-12 rounded-xl gradient-laxree flex items-center justify-center overflow-hidden">
+                      <Image src="/laxree-logo.png" alt="Laxree" width={40} height={40} className="rounded-lg" />
+                    </div>
+                  );
+                })()}
                 <div>
                   <CardTitle className="text-lg">{firmFullName}</CardTitle>
                   <p className="text-xs text-muted-foreground">Salary Slip - {months[month - 1]} {year}</p>
