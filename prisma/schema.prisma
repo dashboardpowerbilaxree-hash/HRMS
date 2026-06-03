@@ -77,6 +77,7 @@ model Employee {
   overtimes        Overtime[]
   salaryHistory    SalaryHistory[]
   notifications    Notification[]
+  advances         Advance[]
 }
 
 model Attendance {
@@ -225,4 +226,18 @@ model Setting {
   id    String @id @default(cuid())
   key   String @unique
   value String
+}
+
+model Advance {
+  id          String   @id @default(cuid())
+  employeeId  String
+  amount      Float
+  reason      String
+  date        DateTime
+  month       Int
+  year        Int
+  status      String   @default("pending")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  employee    Employee @relation(fields: [employeeId], references: [employeeId])
 }

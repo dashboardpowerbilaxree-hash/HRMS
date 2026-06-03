@@ -11,6 +11,44 @@ import { motion } from 'framer-motion';
 import Image from 'next/image';
 import { toast } from 'sonner';
 
+// ── Advance Section Component ──
+function AdvanceSection({ employeeId, month, year, advanceDeduction }: { employeeId: string; month: number; year: number; advanceDeduction: number }) {
+  const [advances, setAdvances] = useState<any[]>([]);
+
+  useEffect(() => {
+    fetch(`/api/advances?employeeId=${employeeId}&month=${month}&year=${year}`)
+      .then(res => res.json())
+      .then(data => setAdvances(data))
+      .catch(() => {});
+  }, [employeeId, month, year]);
+
+  if (advances.length === 0) return null;
+
+  return (
+    <div className="mx-5 mb-3 border border-amber-300/30 rounded-lg overflow-hidden">
+      <div className="bg-amber-500/10 px-4 py-2 border-b border-amber-300/20">
+        <p className="text-xs font-bold text-amber-700 dark:text-amber-400">Advance Details</p>
+      </div>
+      <div className="px-4 py-2 space-y-1.5">
+        {advances.map((adv: any, idx: number) => (
+          <div key={adv.id} className="flex items-center justify-between text-xs">
+            <div className="flex items-center gap-2">
+              <span className="text-muted-foreground">#{idx + 1}</span>
+              <span>{adv.reason}</span>
+              <span className="text-muted-foreground">({new Date(adv.date).toLocaleDateString('en-IN')})</span>
+            </div>
+            <span className="font-bold text-amber-600 dark:text-amber-400">₹{Number(adv.amount).toLocaleString('en-IN')}</span>
+          </div>
+        ))}
+        <div className="flex items-center justify-between text-xs border-t border-amber-200/20 pt-1.5 mt-1.5">
+          <span className="font-semibold">Total Advance Deducted</span>
+          <span className="font-bold text-amber-700 dark:text-amber-400">₹{advanceDeduction.toLocaleString('en-IN')}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const FIRM_BADGE_CLASS: Record<string, string> = {
   LAPL: 'firm-badge-lapl',
   LRSL: 'firm-badge-lrsl',
@@ -654,6 +692,11 @@ export function SalarySlipGenerator() {
                   </tbody>
                 </table>
               </div>
+
+              {/* Advance Details */}
+              {(p.advanceDeduction > 0) && (
+                <AdvanceSection employeeId={e.employeeId} month={month} year={year} advanceDeduction={p.advanceDeduction} />
+              )}
 
               {/* In Words */}
               <div className="mx-5 mb-3 px-4 py-2 bg-blue-50 dark:bg-blue-950/30 rounded text-sm">

@@ -1,27 +1,26 @@
 ---
 Task ID: 1
 Agent: Main Agent
-Task: Fix attendance data loss after server restart, add payroll export, fix salary slip font
+Task: Fix data loss, add Advance feature, payroll export, salary slip improvements
 
 Work Log:
-- Investigated data persistence issue - found startup scripts overwrite active DB with stale copy
-- Fixed start-daemon.sh: removed `cp -f` line that copies stale DB, changed DATABASE_URL to persistent path
-- Fixed start-server.sh: changed DATABASE_URL from standalone copy to persistent /home/z/my-project/db/custom.db
-- Fixed start-with-warmup.sh: removed `cp -f` stale DB copy, changed DATABASE_URL to persistent path
-- Fixed package.json build script: added DB backup before build
-- Added Merriweather serif font to layout.tsx for human-like salary slip appearance
-- Updated SalarySlipGenerator.tsx: changed font from 'Segoe UI' to Merriweather/Georgia/Liberation Serif
-- Removed formula line from salary slip Excel export footer
-- Updated all firm addresses to correct address: Plot No. 1 & 2, Harbilas Sharda Marg, Civil Lines, Ajmer
-- Updated firm names in seed data to match correct company names
-- Updated firms in database via prisma db execute
-- Added Export Sheet button to PayrollAutomation.tsx with full XLSX export functionality
-- Fixed TypeScript error: removed `p.employee?.firm` reference that doesn't exist in type
+- Diagnosed data loss: startup scripts overwrote active DB with stale copy on every restart
+- Fixed all startup scripts (start-daemon.sh, start-server.sh, start-with-warmup.sh) to use persistent DB path
+- Added DB backup to build script in package.json
+- Added Advance model to Prisma schema with employee relation
+- Created /api/advances route (GET + POST) and /api/advances/[id] route (DELETE)
+- Added Advance section to PayrollAutomation.tsx with Add Advance dialog and Advances list
+- Added AdvanceSection component to SalarySlipGenerator.tsx showing advance reason, date, amount
+- When advance is added, it auto-updates the payroll advanceDeduction and recalculates net salary
+- Added Export Sheet button with full XLSX export (Payroll Register + Summary sheets)
+- Changed salary slip font from sans-serif to Merriweather serif (human-like)
+- Updated firm addresses to correct Ajmer address
+- Updated firm names to match correct company names
+- Removed formula line from salary slip Excel footer
 
 Stage Summary:
-- Data persistence fixed: All startup scripts now point to /home/z/my-project/db/custom.db (persistent)
-- No more stale DB copy on restart - data will survive server restarts and rebuilds
-- Payroll Export Sheet added with premium styling (2 sheets: Register + Summary)
-- Salary slip now uses Merriweather serif font (human-like, not AI-looking)
-- Formula line removed from Excel export footer
-- Firm addresses/names corrected in all locations
+- Data persistence fixed permanently - no more data loss on restart
+- Advance feature fully implemented: Add advance → auto-deducts from payroll → shows on salary slip
+- Payroll Export Sheet added with premium styling
+- Salary slip now uses human-like Merriweather serif font
+- All firm details corrected

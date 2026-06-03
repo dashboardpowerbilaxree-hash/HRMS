@@ -158,6 +158,18 @@ export function PayrollAutomation() {
   const [generatingAll, setGeneratingAll] = useState(false);
   const [exporting, setExporting] = useState(false);
 
+  // ── Advance Form ──
+  const [advanceOpen, setAdvanceOpen] = useState(false);
+  const [advanceForm, setAdvanceForm] = useState({
+    employeeId: '',
+    amount: '',
+    reason: '',
+    date: new Date().toISOString().split('T')[0],
+  });
+  const [advanceSearch, setAdvanceSearch] = useState('');
+  const [advances, setAdvances] = useState<any[]>([]);
+  const [addingAdvance, setAddingAdvance] = useState(false);
+
   // ── Form for Generate One ──
   const [form, setForm] = useState({
     employeeId: '',
@@ -520,6 +532,82 @@ export function PayrollAutomation() {
     setExporting(false);
   };
 
+  // ── Load advances ──
+  const loadAdvances = useCallback(async () => {
+    try {
+      const params = new URLSearchParams();
+      params.set('month', filterMonth);
+      params.set('year', filterYear);
+      const res = await fetch(`/api/advances?${params}`);
+      if (res.ok) {
+        const data = await res.json();
+        setAdvances(data);
+      }
+    } catch {}
+  }, [filterMonth, filterYear]);
+
+  useEffect(() => { loadAdvances(); }, [loadAdvances]);
+
+  // ── Add Advance ──
+  const handleAddAdvance = async () => {
+    if (!advanceForm.employeeId || !advanceForm.amount || !advanceForm.reason) {
+      toast.error('Please fill employee, amount, and reason');
+      return;
+    }
+    setAddingAdvance(true);
+    try {
+      const res = await fetch('/api/advances', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          employeeId: advanceForm.employeeId,
+          amount: advanceForm.amount,
+          reason: advanceForm.reason,
+          date: advanceForm.date,
+          month: parseInt(filterMonth),
+          year: parseInt(filterYear),
+        }),
+      });
+      if (!res.ok) throw new Error('Failed to add advance');
+      toast.success('Advance added successfully! It will reflect in payroll.');
+      setAdvanceOpen(false);
+      setAdvanceForm({ employeeId: '', amount: '', reason: '', date: new Date().toISOString().split('T')[0] });
+      setAdvanceSearch('');
+      loadAdvances();
+      loadData();
+    } catch {
+      toast.error('Failed to add advance');
+    }
+    setAddingAdvance(false);
+  };
+
+  // ── Delete Advance ──
+  const handleDeleteAdvance = async (id: string) => {
+    try {
+      const res = await fetch(`/api/advances/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Failed');
+      toast.success('Advance deleted');
+      loadAdvances();
+      loadData();
+    } catch {
+      toast.error('Failed to delete advance');
+    }
+  };
+
+  // ── Selected advance employee ──
+  const selectedAdvEmp = useMemo(() => {
+    return employees.find((e) => e.employeeId === advanceForm.employeeId);
+  }, [employees, advanceForm.employeeId]);
+
+  // ── Filtered employees for advance dialog ──
+  const filteredAdvEmployees = useMemo(() => {
+    if (!advanceSearch) return employees;
+    const q = advanceSearch.toLowerCase();
+    return employees.filter((e) =>
+      e.fullName.toLowerCase().includes(q) || e.employeeId.toLowerCase().includes(q)
+    );
+  }, [employees, advanceSearch]);
+
   // ── Summary cards ──
   const statCards = [
     {
@@ -609,6 +697,14 @@ export function PayrollAutomation() {
           >
             {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
             {exporting ? 'Exporting...' : 'Export Sheet'}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5 border-amber-500/30 text-amber-600 hover:bg-amber-500/10"
+            onClick={() => setAdvanceOpen(true)}
+          >
+            <IndianRupee className="w-4 h-4" /> Add Advance
           </Button>
         </div>
       </motion.div>
@@ -1062,6 +1158,182 @@ export function PayrollAutomation() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* ── Add Advance Dialog ── */}
+      <Dialog open={advanceOpen} onOpenChange={(v) => {
+        setAdvanceOpen(v);
+        if (!v) {
+          setAdvanceForm({ employeeId: '', amount: '', reason: '', date: new Date().toISOString().split('T')[0] });
+          setAdvanceSearch('');
+        }
+      }}>
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <IndianRupee className="w-5 h-5 text-amber-500" />
+              Add Advance
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {/* Employee Search */}
+            <div>
+              <Label>Select Employee *</Label>
+              <div className="space-y-2">
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    className="pl-9"
+                    placeholder="Search employee..."
+                    value={advanceSearch}
+                    onChange={(e) => setAdvanceSearch(e.target.value)}
+                  />
+                </div>
+                {!advanceForm.employeeId ? (
+                  <div className="max-h-40 border rounded-lg overflow-y-auto">
+                    <div className="p-1">
+                      {filteredAdvEmployees.slice(0, 20).map((e) => (
+                        <button
+                          key={e.employeeId}
+                          className="w-full text-left px-3 py-2 rounded-md hover:bg-muted/80 text-sm flex items-center justify-between transition-colors gap-2"
+                          onClick={() => { setAdvanceForm({ ...advanceForm, employeeId: e.employeeId }); setAdvanceSearch(''); }}
+                        >
+                          <div className="flex items-center gap-2 min-w-0 overflow-hidden">
+                            <FirmBadge firm={e.department} />
+                            <span className="truncate">{e.fullName}</span>
+                          </div>
+                          <span className="text-xs text-muted-foreground font-mono whitespace-nowrap shrink-0">{e.employeeId}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between px-3 py-2 bg-muted/50 rounded-lg">
+                    <div className="flex items-center gap-2 min-w-0 overflow-hidden">
+                      <FirmBadge firm={selectedAdvEmp?.department || ''} />
+                      <span className="text-sm font-medium truncate">{selectedAdvEmp?.fullName}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-mono text-muted-foreground">{advanceForm.employeeId}</span>
+                      <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => setAdvanceForm({ ...advanceForm, employeeId: '' })}>
+                        Change
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Amount */}
+            <div>
+              <Label>Advance Amount (₹) *</Label>
+              <Input
+                type="number"
+                value={advanceForm.amount}
+                onChange={(e) => setAdvanceForm({ ...advanceForm, amount: e.target.value })}
+                placeholder="Enter amount"
+              />
+            </div>
+
+            {/* Reason */}
+            <div>
+              <Label>Reason *</Label>
+              <Input
+                value={advanceForm.reason}
+                onChange={(e) => setAdvanceForm({ ...advanceForm, reason: e.target.value })}
+                placeholder="Reason for advance"
+              />
+            </div>
+
+            {/* Date */}
+            <div>
+              <Label>Date</Label>
+              <Input
+                type="date"
+                value={advanceForm.date}
+                onChange={(e) => setAdvanceForm({ ...advanceForm, date: e.target.value })}
+              />
+            </div>
+
+            <Button
+              className="w-full gradient-laxree text-white"
+              onClick={handleAddAdvance}
+              disabled={addingAdvance}
+            >
+              {addingAdvance ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+              {addingAdvance ? 'Adding...' : 'Add Advance'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Advances List ── */}
+      {advances.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+        >
+          <Card className="glass-card border-0">
+            <CardContent className="p-0">
+              <div className="px-4 py-3 border-b border-amber-500/10 bg-amber-500/5">
+                <h3 className="text-sm font-bold flex items-center gap-2 text-amber-600">
+                  <IndianRupee className="w-4 h-4" />
+                  Advances Taken — {MONTHS[parseInt(filterMonth) - 1]} {filterYear}
+                </h3>
+              </div>
+              <ScrollArea className="max-h-[30vh]">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead>Employee</TableHead>
+                      <TableHead>Amount</TableHead>
+                      <TableHead>Reason</TableHead>
+                      <TableHead>Date</TableHead>
+                      <TableHead className="w-10"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {advances.map((adv: any) => (
+                      <TableRow key={adv.id} className="hover:bg-muted/30">
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <div className="w-6 h-6 rounded-full gradient-laxree flex items-center justify-center text-white text-[9px] font-bold shrink-0">
+                              {adv.employee?.fullName?.charAt(0) || '?'}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium truncate">{adv.employee?.fullName || adv.employeeId}</p>
+                              <p className="text-[10px] text-muted-foreground font-mono">{adv.employeeId}</p>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-sm font-bold text-amber-600 whitespace-nowrap">
+                          ₹{Number(adv.amount).toLocaleString('en-IN')}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate">
+                          {adv.reason}
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                          {new Date(adv.date).toLocaleDateString('en-IN')}
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 w-7 p-0 text-red-500 hover:text-red-700 hover:bg-red-500/10"
+                            onClick={() => handleDeleteAdvance(adv.id)}
+                          >
+                            ×
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </ScrollArea>
+            </CardContent>
+          </Card>
+        </motion.div>
+      )}
     </div>
   );
 }
