@@ -97,10 +97,45 @@ export async function GET(request: NextRequest) {
     // For salary: effectivePresentDays includes half-days as 0.5
     const effectivePresentDays = rawPresentDays + halfDays * 0.5;
 
-    const totalWorkHours = Math.round(attendance.reduce((sum, a) => sum + a.totalHours, 0) * 100) / 100;
-    const totalOvertimeHours = Math.round(attendance.reduce((sum, a) => sum + a.overtimeHours, 0) * 100) / 100;
-    const totalSundayHours = Math.round(attendance.reduce((sum, a) => sum + a.sundayHours, 0) * 100) / 100;
-    const totalPHHours = Math.round(attendance.reduce((sum, a) => sum + a.phHours, 0) * 100) / 100;
+    // ─── Calculate totals from RAW check-in/check-out times (most accurate) ───
+    // Instead of summing stored decimal hours (which have rounding errors),
+    // we calculate from the actual times to get exact totals in HH.MM format.
+    let totalWorkMinutes = 0;
+    let totalOTMinutes = 0;
+    let totalSundayMinutes = 0;
+    let totalPHMinutes = 0;
+    const shiftMinutes = Math.round(employee.shiftHours * 60);
+
+    for (const a of attendance) {
+      if (a.checkIn && a.checkOut) {
+        const [h1, m1] = a.checkIn.split(':').map(Number);
+        const [h2, m2] = a.checkOut.split(':').map(Number);
+        const workMin = Math.max(0, (h2 * 60 + m2) - (h1 * 60 + m1));
+        totalWorkMinutes += workMin;
+        const otMin = Math.max(0, workMin - shiftMinutes);
+        totalOTMinutes += otMin;
+      }
+      // Sunday and PH hours from stored values (these are already correct)
+      if (a.sundayHours > 0) {
+        const sH = Math.floor(a.sundayHours);
+        const sM = Math.round((a.sundayHours - sH) * 60);
+        totalSundayMinutes += sH * 60 + sM;
+      }
+      if (a.phHours > 0) {
+        const pH = Math.floor(a.phHours);
+        const pM = Math.round((a.phHours - pH) * 60);
+        totalPHMinutes += pH * 60 + pM;
+      }
+    }
+
+    // Convert total minutes to HH.MM format for display
+    const totalWorkHours = Math.floor(totalWorkMinutes / 60) + (totalWorkMinutes % 60) / 100;
+    const totalOvertimeHours = Math.floor(totalOTMinutes / 60) + (totalOTMinutes % 60) / 100;
+    const totalSundayHours = Math.floor(totalSundayMinutes / 60) + (totalSundayMinutes % 60) / 100;
+    const totalPHHours = Math.floor(totalPHMinutes / 60) + (totalPHMinutes % 60) / 100;
+
+    // Also compute decimal hours for salary calculation
+    const totalOvertimeHoursDecimal = Math.round(totalOTMinutes / 60 * 100) / 100;
     const lateEntries = attendance.filter(a => a.lateEntry).length;
     const earlyOuts = attendance.filter(a => a.earlyOut).length;
 
@@ -170,10 +205,12 @@ export async function GET(request: NextRequest) {
     const sundaysEarned = employee.employmentType === 'Full Time' || !employee.employmentType
       ? Math.floor(presentDays / 6)
       : 0;
-    const sundayEarnedHours = Math.round(sundaysEarned * employee.shiftHours * 100) / 100;
+    const sundayEarnedHoursDecimal = sundaysEarned * employee.shiftHours;
+    const sundayEarnedHours = Math.floor(sundayEarnedHoursDecimal) + (Math.round((sundayEarnedHoursDecimal - Math.floor(sundayEarnedHoursDecimal)) * 60)) / 100;
 
-    // Total hours including Sunday + PH
-    const totalHrsInclSundayPH = Math.round((totalWorkHours + totalSundayHours + totalPHHours) * 100) / 100;
+    // Total hours including Sunday + PH (sum minutes then convert to HH.MM)
+    const totalHrsInclSundayPHMinutes = totalWorkMinutes + totalSundayMinutes + totalPHMinutes;
+    const totalHrsInclSundayPH = Math.floor(totalHrsInclSundayPHMinutes / 60) + (totalHrsInclSundayPHMinutes % 60) / 100;
 
     // Leave breakdown
     const annualLeaves = leaves.filter(l => l.type === 'annual' || l.type === 'AL' || l.type === 'Casual' || l.type === 'CL').reduce((sum, l) => sum + l.days, 0);
@@ -191,7 +228,7 @@ export async function GET(request: NextRequest) {
     const perDayRate = Math.round((employee.monthlySalary / daysInMonth) * 100) / 100;
     const calculatedHourlyRate = Math.round((perDayRate / employee.shiftHours) * 100) / 100;
     const calculatedBaseSalary = Math.round((employee.monthlySalary - (perDayRate * salaryAbsentDays)) * 100) / 100;
-    const calculatedOtAmount = Math.round(totalOvertimeHours * calculatedHourlyRate * 100) / 100;
+    const calculatedOtAmount = Math.round(totalOvertimeHoursDecimal * calculatedHourlyRate * 100) / 100;
     const calculatedGrossSalary = Math.round((calculatedBaseSalary + calculatedOtAmount) * 100) / 100;
 
     return NextResponse.json({

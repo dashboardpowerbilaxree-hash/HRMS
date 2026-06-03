@@ -55,6 +55,13 @@ function formatHours(decimal: number): string {
   return `${hours}.${String(minutes).padStart(2, '0')}`;
 }
 
+// ── Display a value that's already in HH.MM format (e.g., 5.25 = 5h 25min) ──
+// Just format with 2 decimal places
+function displayHHMM(value: number | undefined | null): string {
+  if (!value && value !== 0) return '0.00';
+  return value.toFixed(2);
+}
+
 // ── Get firm code from employee ID prefix ──
 function getFirmFromEmployeeId(employeeId: string): string {
   const id = employeeId.toUpperCase();
@@ -1184,11 +1191,11 @@ export function AttendanceTracker() {
                           <td className="px-3 py-3 text-blue-500 border-r border-border/30">{monthlySummary.annualLeaves || 0}</td>
                           <td className="px-3 py-3 text-amber-600 dark:text-amber-400 border-r border-border/30">{monthlySummary.unpaidLeaves || 0}</td>
                           <td className="px-3 py-3 text-purple-500 border-r border-border/30">{monthlySummary.holidayDays}</td>
-                          <td className="px-3 py-3 font-bold text-cyan-600 dark:text-cyan-400 border-r border-border/30">{formatHours(monthlySummary.totalWorkHours)}</td>
-                          <td className="px-3 py-3 font-bold text-yellow-600 dark:text-yellow-400 border-r border-border/30">{formatHours(monthlySummary.totalOvertimeHours)}</td>
+                          <td className="px-3 py-3 font-bold text-cyan-600 dark:text-cyan-400 border-r border-border/30">{displayHHMM(monthlySummary.totalWorkHours)}</td>
+                          <td className="px-3 py-3 font-bold text-yellow-600 dark:text-yellow-400 border-r border-border/30">{displayHHMM(monthlySummary.totalOvertimeHours)}</td>
                           <td className="px-3 py-3 text-sky-600 dark:text-sky-400 border-r border-border/30">{monthlySummary.sundaysEarned || 0}</td>
-                          <td className="px-3 py-3 text-blue-600 dark:text-blue-400 border-r border-border/30">{formatHours(monthlySummary.sundayEarnedHours || monthlySummary.totalSundayHours)}</td>
-                          <td className="px-3 py-3 font-bold text-gold">{formatHours((monthlySummary.totalWorkHours || 0) + (monthlySummary.totalSundayHours || 0))}</td>
+                          <td className="px-3 py-3 text-blue-600 dark:text-blue-400 border-r border-border/30">{displayHHMM(monthlySummary.sundayEarnedHours || monthlySummary.totalSundayHours)}</td>
+                          <td className="px-3 py-3 font-bold text-gold">{displayHHMM(monthlySummary.totalHrsInclSundayPH || (monthlySummary.totalWorkHours || 0))}</td>
                         </tr>
                       </tbody>
                     </table>
@@ -1202,7 +1209,7 @@ export function AttendanceTracker() {
                       { label: 'Sundays', value: monthlySummary.sundays, color: 'text-blue-500' },
                       { label: 'Late Entries', value: monthlySummary.lateEntries, color: 'text-amber-500' },
                       { label: 'Early Outs', value: monthlySummary.earlyOuts || 0, color: 'text-rose-500' },
-                      { label: 'Shift Hrs', value: `${formatHours(monthlySummary.employee.shiftHours)}h`, color: 'text-muted-foreground' },
+                      { label: 'Shift Hrs', value: `${displayHHMM(monthlySummary.employee.shiftHours)}h`, color: 'text-muted-foreground' },
                     ].map(item => (
                       <div key={item.label} className="p-2 rounded-lg bg-muted/20 text-center">
                         <p className="text-[9px] text-muted-foreground font-medium uppercase tracking-wider">{item.label}</p>

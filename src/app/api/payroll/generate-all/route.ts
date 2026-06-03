@@ -43,15 +43,23 @@ export async function POST(request: NextRequest) {
           where: { employeeId: emp.employeeId, date: { gte: startDate, lt: endDate } },
         });
 
-        const totalWorkedHrs = Math.round(attendance
-          .filter(a => ['present', 'late', 'half-day', 'half_day', 'early-out'].includes(a.status))
-          .reduce((sum, a) => sum + a.totalHours, 0) * 100) / 100;
-
-        // Overtime records (get OT hours from records, amount recalculated using hourlyRate)
-        const overtimeRecords = await db.overtime.findMany({
-          where: { employeeId: emp.employeeId, date: { gte: startDate, lt: endDate } },
-        });
-        const otHours = Math.round(overtimeRecords.reduce((sum, o) => sum + o.hours, 0) * 100) / 100;
+        // Total worked hours from attendance — calculate from RAW check-in/check-out times
+        let totalWorkMinutes = 0;
+        let totalOTMinutes = 0;
+        const shiftMinutes = Math.round(emp.shiftHours * 60);
+        for (const a of attendance) {
+          if (a.checkIn && a.checkOut && ['present', 'late', 'half-day', 'half_day', 'early-out'].includes(a.status)) {
+            const [h1, m1] = a.checkIn.split(':').map(Number);
+            const [h2, m2] = a.checkOut.split(':').map(Number);
+            const workMin = Math.max(0, (h2 * 60 + m2) - (h1 * 60 + m1));
+            totalWorkMinutes += workMin;
+            const otMin = Math.max(0, workMin - shiftMinutes);
+            totalOTMinutes += otMin;
+          }
+        }
+        const totalWorkedHrs = Math.floor(totalWorkMinutes / 60) + (totalWorkMinutes % 60) / 100;
+        const otHours = Math.floor(totalOTMinutes / 60) + (totalOTMinutes % 60) / 100;
+        const otHoursDecimal = Math.round(totalOTMinutes / 60 * 100) / 100;
 
         // Attendance counts
         const rawPresentDays = attendance.filter(a => ['present', 'late', 'early-out'].includes(a.status)).length;
@@ -111,11 +119,25 @@ export async function POST(request: NextRequest) {
         const baseSalary = Math.round((emp.monthlySalary - (perDayRate * salaryAbsentDays)) * 100) / 100;
 
         // ─── ACTUAL Sunday/PH worked hours (for display/records only) ───
-        const sundayWorkedHrs = Math.round(attendance.filter(a => a.isSunday && a.totalHours > 0).reduce((sum, a) => sum + a.totalHours, 0) * 100) / 100;
-        const phWorkedHrs = Math.round(attendance.filter(a => a.isHoliday && a.totalHours > 0).reduce((sum, a) => sum + a.totalHours, 0) * 100) / 100;
+        let sundayWorkMinutes = 0;
+        let phWorkMinutes = 0;
+        for (const a of attendance) {
+          if (a.isSunday && a.checkIn && a.checkOut) {
+            const [h1, m1] = a.checkIn.split(':').map(Number);
+            const [h2, m2] = a.checkOut.split(':').map(Number);
+            sundayWorkMinutes += Math.max(0, (h2 * 60 + m2) - (h1 * 60 + m1));
+          }
+          if (a.isHoliday && a.checkIn && a.checkOut) {
+            const [h1, m1] = a.checkIn.split(':').map(Number);
+            const [h2, m2] = a.checkOut.split(':').map(Number);
+            phWorkMinutes += Math.max(0, (h2 * 60 + m2) - (h1 * 60 + m1));
+          }
+        }
+        const sundayWorkedHrs = Math.floor(sundayWorkMinutes / 60) + (sundayWorkMinutes % 60) / 100;
+        const phWorkedHrs = Math.floor(phWorkMinutes / 60) + (phWorkMinutes % 60) / 100;
 
-        // ─── OT Amount = otHours × hourlyRate (1x normal rate, NOT 1.5x) ───
-        const otAmount = Math.round(otHours * hourlyRate * 100) / 100;
+        // ─── OT Amount = otHoursDecimal × hourlyRate (1x normal rate, NOT 1.5x) ───
+        const otAmount = Math.round(otHoursDecimal * hourlyRate * 100) / 100;
 
         // ─── GROSS SALARY = baseSalary + otAmount ───
         const grossSalary = Math.round((baseSalary + otAmount) * 100) / 100;

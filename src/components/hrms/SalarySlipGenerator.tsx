@@ -101,6 +101,12 @@ function formatHours(decimal: number): string {
   return `${hours}.${String(minutes).padStart(2, '0')}`;
 }
 
+// ── Display a value that's already in HH.MM format (e.g., 5.25 = 5h 25min) ──
+function displayHHMM(value: number | undefined | null): string {
+  if (!value && value !== 0) return '0.00';
+  return value.toFixed(2);
+}
+
 // ── Get firm code from employee ID prefix ──
 function getFirmFromEmployeeId(employeeId: string): string {
   const id = employeeId.toUpperCase();
@@ -383,8 +389,8 @@ export function SalarySlipGenerator() {
       ['Absent Days', (p.absentDays || 0).toString(), '', 'Gross Salary', p.grossSalary.toLocaleString('en-IN')],
       [],
       ['Hours Breakdown'],
-      ['Total Worked Hrs', formatHours(p.totalWorkedHrs || 0), '', 'OT Hours', formatHours(p.otHours || 0)],
-      ['Sunday Hours', formatHours(p.sundayHrs || 0), '', 'OT Amount', (p.otAmount || 0).toLocaleString('en-IN')],
+      ['Total Worked Hrs', displayHHMM(p.totalWorkedHrs || 0), '', 'OT Hours', displayHHMM(p.otHours || 0)],
+      ['Sunday Hours', displayHHMM(p.sundayHrs || 0), '', 'OT Amount', (p.otAmount || 0).toLocaleString('en-IN')],
     ];
 
     const ws2 = XLSX.utils.aoa_to_sheet(detailData);

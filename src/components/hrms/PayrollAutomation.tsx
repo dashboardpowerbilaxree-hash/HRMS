@@ -38,6 +38,12 @@ function formatHours(decimal: number): string {
   return `${hours}.${String(minutes).padStart(2, '0')}`;
 }
 
+// ── Display a value that's already in HH.MM format (e.g., 5.25 = 5h 25min) ──
+function displayHHMM(value: number | undefined | null): string {
+  if (!value && value !== 0) return '0.00';
+  return value.toFixed(2);
+}
+
 // ── Get firm code from employee ID prefix ──
 function getFirmFromEmployeeId(employeeId: string): string {
   const id = employeeId.toUpperCase();
@@ -409,8 +415,8 @@ export function PayrollAutomation() {
         'Monthly Salary': p.monthlySalary,
         'Present Days': p.presentDays || 0,
         'Absent Days': p.absentDays || 0,
-        'Worked Hrs': formatHours(p.totalWorkedHrs || p.totalWorkHours || 0),
-        'OT Hrs': formatHours(p.otHours || 0),
+        'Worked Hrs': displayHHMM(p.totalWorkedHrs || p.totalWorkHours || 0),
+        'OT Hrs': displayHHMM(p.otHours || 0),
         'OT Amount': p.otAmount || 0,
         'Gross Salary': p.grossSalary,
         'Deductions': p.totalDeductions,
@@ -489,7 +495,7 @@ export function PayrollAutomation() {
         ['Metric', 'Value'],
         ['Employees Processed', filteredRecords.length],
         ['Average Net Salary', filteredRecords.length > 0 ? Math.round(totalNet / filteredRecords.length) : 0],
-        ['Total OT Hours', formatHours(totalOTHours)],
+        ['Total OT Hours', displayHHMM(totalOTHours)],
       ];
       const ws2 = XLSX.utils.aoa_to_sheet(summaryData);
       ['A1','B1'].forEach(c => { if (ws2[c]) ws2[c].s = { font: { bold: true, color: { rgb: WHITE }, sz: 14 }, fill: { fgColor: { rgb: GOLD } }, alignment: { horizontal: 'center' as const }, border: fullBorder(GOLD, 'medium') }; });
@@ -906,14 +912,14 @@ export function PayrollAutomation() {
                           <FirmBadge firm={getFirmFromEmployeeId(p.employeeId) || p.employee?.department || ''} />
                         </TableCell>
                         <TableCell className="hidden lg:table-cell text-sm whitespace-nowrap">
-                          {(p.totalWorkedHrs || p.totalWorkHours || 0) > 0 ? `${formatHours(p.totalWorkedHrs || p.totalWorkHours || 0)}h` : '—'}
+                          {(p.totalWorkedHrs || p.totalWorkHours || 0) > 0 ? `${displayHHMM(p.totalWorkedHrs || p.totalWorkHours || 0)}h` : '—'}
                         </TableCell>
                         <TableCell className="hidden xl:table-cell text-sm font-mono whitespace-nowrap">
                           {(p.hourlyRate || p.salaryPerHour || 0) > 0 ? `₹${(p.hourlyRate || p.salaryPerHour).toFixed(2)}` : '—'}
                         </TableCell>
                         <TableCell className="hidden lg:table-cell text-sm whitespace-nowrap">
                           {(p.otHours || 0) > 0 ? (
-                            <span className="text-cyan-600 dark:text-cyan-400 font-medium">{formatHours(p.otHours)}h</span>
+                            <span className="text-cyan-600 dark:text-cyan-400 font-medium">{displayHHMM(p.otHours)}h</span>
                           ) : '—'}
                         </TableCell>
                         <TableCell className="hidden sm:table-cell text-sm whitespace-nowrap">
@@ -923,7 +929,7 @@ export function PayrollAutomation() {
                         </TableCell>
                         <TableCell className="hidden lg:table-cell text-sm whitespace-nowrap">
                           {(p.sundayHrs || 0) > 0 ? (
-                            <span className="text-blue-600 dark:text-blue-400 font-medium">{formatHours(p.sundayHrs)}h</span>
+                            <span className="text-blue-600 dark:text-blue-400 font-medium">{displayHHMM(p.sundayHrs)}h</span>
                           ) : '—'}
                         </TableCell>
 
@@ -1024,7 +1030,7 @@ export function PayrollAutomation() {
                 <Info className="w-3.5 h-3.5 text-gold shrink-0" />
                 <span>
                   <strong>{selectedEmp.salaryType}</strong> worker &middot; Monthly: ₹{selectedEmp.basicSalary.toLocaleString('en-IN')}
-                  {selectedEmp.salaryType === 'Hourly' && ` · Shift: ${formatHours(selectedEmp.shiftHours)}h`}
+                  {selectedEmp.salaryType === 'Hourly' && ` · Shift: ${displayHHMM(selectedEmp.shiftHours)}h`}
                 </span>
               </div>
             )}

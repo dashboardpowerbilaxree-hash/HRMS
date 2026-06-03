@@ -200,6 +200,21 @@ export async function GET(request: NextRequest) {
     const late = records.filter(a => a.lateEntry).length;
     const earlyOut = records.filter(a => a.earlyOut).length;
     const ot = Math.round(records.reduce((s, a) => s + a.overtimeHours, 0) * 100) / 100;
+    // Calculate total OT minutes from raw times for accurate HH.MM display
+    let totalDailyOTMinutes = 0;
+    for (const r of records) {
+      if (r.checkIn && r.checkOut && r.overtimeHours > 0 && r.employee?.shiftHours) {
+        const [h1, m1] = r.checkIn.split(':').map(Number);
+        const [h2, m2] = r.checkOut.split(':').map(Number);
+        const workMin = Math.max(0, (h2 * 60 + m2) - (h1 * 60 + m1));
+        const shiftMin = Math.round((r.employee.shiftHours || 9) * 60);
+        const otMin = Math.max(0, workMin - shiftMin);
+        totalDailyOTMinutes += otMin;
+      }
+    }
+    const otDisplay = totalDailyOTMinutes > 0
+      ? `${Math.floor(totalDailyOTMinutes / 60)}.${String(totalDailyOTMinutes % 60).padStart(2, '0')}`
+      : formatHours(ot);
 
     const summaryRows: any[][] = [
       ['Attendance Summary'],
@@ -209,7 +224,7 @@ export async function GET(request: NextRequest) {
       ['Absent', absent],
       ['Late', late],
       ['Early Out', earlyOut],
-      ['OT Hours', formatHours(ot)],
+      ['OT Hours', otDisplay],
     ];
     const ws2 = XLSXStyle.utils.aoa_to_sheet(summaryRows);
     ['A1', 'B1'].forEach(c => { safeStyle(ws2, c, styleHeader()); });

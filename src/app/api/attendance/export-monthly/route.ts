@@ -26,6 +26,21 @@ function formatHours(decimal: number): string {
   return `${hours}.${String(minutes).padStart(2, '0')}`;
 }
 
+// Format minutes directly to HH.MM string (e.g., 71 → "1.11", 325 → "5.25")
+function formatMinutesToHHMM(totalMinutes: number): string {
+  if (!totalMinutes || totalMinutes === 0) return '0.00';
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${hours}.${String(minutes).padStart(2, '0')}`;
+}
+
+// Convert HH.MM numeric (e.g., 1.11 = 1h 11min) to total minutes
+function hhmmToMinutes(val: number): number {
+  const h = Math.floor(val);
+  const m = Math.round((val - h) * 100); // extract minutes part from HH.MM
+  return h * 60 + m;
+}
+
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',
@@ -189,18 +204,39 @@ export async function GET(request: NextRequest) {
     const firmFullName = FIRM_NAMES[effectiveFirm] || employee.firm;
     const monthName = MONTHS[month - 1];
 
-    // Computed totals — using attendance.overtimeHours as source of truth
-    const totalWorkHours = Math.round(attendance.reduce((sum, a) => sum + a.totalHours, 0) * 100) / 100;
-    const totalOvertimeHours = Math.round(attendance.reduce((sum, a) => sum + a.overtimeHours, 0) * 100) / 100;
-    const totalSundayHours = Math.round(attendance.reduce((sum, a) => sum + a.sundayHours, 0) * 100) / 100;
+    // Computed totals — calculate from RAW check-in/check-out times for accuracy
+    // Instead of summing stored decimal hours (which have rounding errors),
+    // we calculate from the actual times to get exact totals in HH.MM format.
+    let totalWorkMinutes = 0;
+    let totalOTMinutes = 0;
+    let totalSundayMinutes = 0;
+    const shiftMinutes = Math.round(employee.shiftHours * 60);
+
+    for (const a of attendance) {
+      if (a.checkIn && a.checkOut) {
+        const [h1, m1] = a.checkIn.split(':').map(Number);
+        const [h2, m2] = a.checkOut.split(':').map(Number);
+        const workMin = Math.max(0, (h2 * 60 + m2) - (h1 * 60 + m1));
+        totalWorkMinutes += workMin;
+        const otMin = Math.max(0, workMin - shiftMinutes);
+        totalOTMinutes += otMin;
+      }
+      if (a.sundayHours > 0) {
+        totalSundayMinutes += hhmmToMinutes(a.sundayHours);
+      }
+    }
+
+    const totalWorkHours = formatMinutesToHHMM(totalWorkMinutes);
+    const totalOvertimeHours = formatMinutesToHHMM(totalOTMinutes);
+    const totalSundayHours = formatMinutesToHHMM(totalSundayMinutes);
     const lateEntries = attendance.filter(a => a.lateEntry).length;
     const earlyOuts = attendance.filter(a => a.earlyOut).length;
     const weeklyOffs = attendance.filter(a => a.isWeeklyOff || a.isSunday).length;
     const annualLeaves = effectivePaidLeaves;
     const unpaidLeaves = effectiveUnpaidLeaves;
     const sundaysEarned = employee.employmentType === 'Full Time' || !employee.employmentType ? Math.floor(rawPresentDays / 6) : 0;
-    const sundayEarnedHours = Math.round(sundaysEarned * employee.shiftHours * 100) / 100;
-    const totalHrsInclSunday = Math.round((totalWorkHours + totalSundayHours) * 100) / 100;
+    const sundayEarnedHours = formatMinutesToHHMM(sundaysEarned * shiftMinutes);
+    const totalHrsInclSunday = formatMinutesToHHMM(totalWorkMinutes + totalSundayMinutes);
 
     const wb = XLSXStyle.utils.book_new();
 
@@ -248,16 +284,31 @@ export async function GET(request: NextRequest) {
       });
 
       if (rec) {
+        // Calculate OT and total hours from raw times for accuracy
+        let dayTotalHrs = '0.00';
+        let dayOTHrs = '0.00';
+        let daySundayHrs = '0.00';
+        if (rec.checkIn && rec.checkOut) {
+          const [h1, m1] = rec.checkIn.split(':').map(Number);
+          const [h2, m2] = rec.checkOut.split(':').map(Number);
+          const workMin = Math.max(0, (h2 * 60 + m2) - (h1 * 60 + m1));
+          dayTotalHrs = formatMinutesToHHMM(workMin);
+          const otMin = Math.max(0, workMin - shiftMinutes);
+          dayOTHrs = formatMinutesToHHMM(otMin);
+        }
+        if (rec.sundayHours > 0) {
+          daySundayHrs = formatHours(rec.sundayHours);
+        }
         dayRows.push([
           day,
           dateObj.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
           dayName,
           rec.checkIn || '-',
           rec.checkOut || '-',
-          rec.totalHours > 0 ? formatHours(rec.totalHours) : '0.00',
+          dayTotalHrs,
           rec.status.charAt(0).toUpperCase() + rec.status.slice(1).replace('-', ' '),
-          rec.overtimeHours > 0 ? formatHours(rec.overtimeHours) : '0.00',
-          rec.sundayHours > 0 ? formatHours(rec.sundayHours) : '0.00',
+          dayOTHrs,
+          daySundayHrs,
           rec.lateEntry ? 'Yes' : '',
           rec.earlyOut ? 'Yes' : '',
         ]);
@@ -347,12 +398,12 @@ export async function GET(request: NextRequest) {
       // Row 5: Green header row — exact same columns as dashboard
       ['Days Present', 'Days Absent', 'Half Days', 'AL', 'UL', 'PH', 'Total Hrs Worked', 'OT Hrs', 'Sundays Earned', 'Sunday Hrs', 'Total Hrs (incl. Sunday)'],
       // Row 6: Data row — same color coding as dashboard
-      [presentDays, absentDays, halfDays, annualLeaves, unpaidLeaves, holidayDays, formatHours(totalWorkHours), formatHours(totalOvertimeHours), sundaysEarned, formatHours(sundayEarnedHours), formatHours(totalHrsInclSunday)],
+      [presentDays, absentDays, halfDays, annualLeaves, unpaidLeaves, holidayDays, totalWorkHours, totalOvertimeHours, sundaysEarned, sundayEarnedHours, totalHrsInclSunday],
       [],
       // Row 8: Additional info sub-headers
       ['Working Days', 'Weekly Offs', 'Sundays', 'Late Entries', 'Early Outs', 'Shift Hrs'],
       // Row 9: Additional info values
-      [totalWorkingDays, weeklyOffs, sundays, lateEntries, earlyOuts, formatHours(employee.shiftHours) + 'h'],
+      [totalWorkingDays, weeklyOffs, sundays, lateEntries, earlyOuts, formatMinutesToHHMM(shiftMinutes) + 'h'],
     ];
 
     const ws2 = XLSXStyle.utils.aoa_to_sheet(summaryData);
