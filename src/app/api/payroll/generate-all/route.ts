@@ -30,19 +30,17 @@ export async function POST(request: NextRequest) {
 
         // ─── LAXREE PAYROLL FORMULA ───
         // Per Day Rate = monthlySalary / daysInMonth (31, 30, 28 as per calendar)
-        // Hourly Rate = monthlySalary / (daysInMonth × shiftHours) — NO intermediate rounding
-        //   30 days × 9 hrs = 270 hrs → ₹20,000 / 270 = ₹74.07
-        //   31 days × 9 hrs = 279 hrs → ₹20,000 / 279 = ₹71.68
-        //   28 days × 9 hrs = 252 hrs → ₹20,000 / 252 = ₹79.37
+        // Hourly Rate = monthlySalary / (daysInMonth × 9) — NO intermediate rounding
         // Base Salary = perDayRate × earnedDays (Sundays NOT counted as earned)
         //   earnedDays = effectivePresentDays + effectivePaidLeaves
-        //   Sundays are weekly off — NOT counted as present or earned days
+        // Sunday Earnings = perDayRate × sundayCount (Sundays are paid weekly off)
+        //   Earned Sunday Hours = sundayCount × 9 (e.g., 5 Sundays = 45 hrs)
         // OT Amount = otHours × hourlyRate (1x normal rate, NOT 1.5x)
-        // Gross Salary = baseSalary + otAmount
+        // Gross Salary = baseSalary + sundayEarnings + otAmount
         // Net Salary = grossSalary + bonus + incentive + arrear - totalDeductions
 
         const perDayRate = Math.round((emp.monthlySalary / daysInMonth) * 100) / 100;
-        const hourlyRate = Math.round((emp.monthlySalary / (daysInMonth * emp.shiftHours)) * 100) / 100;
+        const hourlyRate = Math.round((emp.monthlySalary / (daysInMonth * 9)) * 100) / 100;  // Always use 9 shift hours
 
         const attendance = await db.attendance.findMany({
           where: { employeeId: emp.employeeId, date: { gte: startDate, lt: endDate } },
@@ -119,11 +117,16 @@ export async function POST(request: NextRequest) {
         const absentDays = Math.max(0, totalWorkingDays - presentDays - halfDays - effectivePaidLeaves - effectiveUnpaidLeaves);
 
         // ─── BASE SALARY = perDayRate × earnedDays ───
-        // earnedDays = effectivePresentDays + effectivePaidLeaves
-        // Sundays are weekly off — NOT counted as earned days
-        // Unpaid leaves are NOT counted as earned days
+        // earnedDays = effectivePresentDays + effectivePaidLeaves (Sundays NOT included)
+        // Sunday Earnings are calculated separately and added to gross
         const earnedDays = effectivePresentDays + effectivePaidLeaves;
         const baseSalary = Math.round((perDayRate * earnedDays) * 100) / 100;
+
+        // ─── SUNDAY EARNINGS (Paid Weekly Off) ───
+        // Each Sunday earns perDayRate. Earned Sunday Hours = sundayCount × 9.
+        const sundayCount = sundays;
+        const sundayEarnings = Math.round((perDayRate * sundayCount) * 100) / 100;
+        const earnedSundayHrs = sundayCount * 9;
 
         // ─── ACTUAL Sunday/PH worked hours (for display/records only) ───
         let sundayWorkMinutes = 0;
@@ -146,8 +149,8 @@ export async function POST(request: NextRequest) {
         // ─── OT Amount = otHoursDecimal × hourlyRate (1x normal rate, NOT 1.5x) ───
         const otAmount = Math.round(otHoursDecimal * hourlyRate * 100) / 100;
 
-        // ─── GROSS SALARY = baseSalary + otAmount ───
-        const grossSalary = Math.round((baseSalary + otAmount) * 100) / 100;
+        // ─── GROSS SALARY = baseSalary + sundayEarnings + otAmount ───
+        const grossSalary = Math.round((baseSalary + sundayEarnings + otAmount) * 100) / 100;
 
         const totalDeductions = 0;
         const netSalary = grossSalary;
@@ -160,6 +163,8 @@ export async function POST(request: NextRequest) {
           otRate: hourlyRate,
           otAmount,
           sundayHrs: sundayWorkedHrs,
+          sundayCount,
+          sundayEarnings,
           phHours: phWorkedHrs,
           totalHrs: totalWorkedHrs,
           presentDays: presentDays,

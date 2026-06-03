@@ -73,3 +73,31 @@ Stage Summary:
 - Base Salary formula: perDayRate × earnedDays — where earnedDays = effectivePresentDays + effectivePaidLeaves (Sundays NOT counted)
 - Sundays are now weekly off, NOT counted as present or earned days
 - All employee sections now show correct OT rate based on daysInMonth
+
+---
+Task ID: 1
+Agent: Main Agent
+Task: Fix hourly rate formula and add Sunday earnings for all employees
+
+Work Log:
+- Added `sundayCount` and `sundayEarnings` fields to Prisma Payroll model
+- Ran `prisma db push` to update database schema
+- Fixed hourly rate formula in payroll route.ts (POST): `base_salary / (daysInMonth * 9)` - hardcoded 9 as shift hours
+- Fixed hourly rate formula in payroll generate-all route.ts: same formula
+- Fixed hourly rate formula in attendance monthly-summary route.ts: same formula
+- Added Sunday Earnings calculation: `perDayRate × sundayCount`
+- Added Earned Sunday Hours calculation: `sundayCount × 9`
+- Updated Gross Salary formula: `baseSalary + sundayEarnings + otAmount`
+- Updated payroll GET endpoint to compute and return Sunday earnings for backward compatibility
+- Updated PayrollAutomation component: added sundayCount/sundayEarnings/earnedSundayHrs fields, updated formula info card, changed "Sunday Hrs" column to "Earn Sunday" with count/hours/amount display
+- Updated SalarySlipGenerator: replaced "HRA" with "Sunday Earnings" row in all three formats (on-screen, Excel export, print)
+- Updated baseSalaryCalc to exclude Sunday earnings (Sundays paid separately)
+- Rebuilt and restarted PM2
+- Verified: Kamlesh 17000/31/9 = ₹60.93, Sunday Count=5, Earned Sunday Hrs=45
+
+Stage Summary:
+- Hourly Rate now correctly uses base_salary / daysInMonth / 9 for all employees
+- Sunday Earnings are now shown and included in gross salary
+- Earned Sunday Hours = sundayCount × 9 (e.g., 5 Sun × 9 = 45h)
+- Formula verified: 17000/279=₹60.93 (31-day), 17000/270=₹62.96 (30-day)
+- All 35 employees generated successfully with new formula

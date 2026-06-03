@@ -73,6 +73,9 @@ interface PayrollRecord {
   otRate: number;
   otAmount: number;
   sundayHrs: number;
+  sundayCount: number;
+  sundayEarnings: number;
+  earnedSundayHrs: number;
   phHours: number;
   totalHrs: number;
   presentDays: number;
@@ -99,6 +102,7 @@ interface PayrollRecord {
   // Compat fields
   baseSalary?: number;
   perDaySalary?: number;
+  perDayRate?: number;
   daysInMonth?: number;
   basicSalary: number;
   totalWorkHours: number;
@@ -253,28 +257,27 @@ export function PayrollAutomation() {
   }, [employees, form.employeeId]);
 
   // ── Salary preview calculation ──
-  // Uses baseSalary (= perDayRate × earnedDays) as the starting point
-  // earnedDays = presentDays + halfDays×0.5 + paidLeaves (Sundays NOT counted)
-  // Net = baseSalary + OT + bonus + incentive + arrear − totalDeductions
+  // Gross = baseSalary + sundayEarnings + OT
+  // Net = grossSalary + bonus + incentive + arrear − totalDeductions
   const salaryPreview = useMemo(() => {
     if (!selectedEmp) return null;
     const existing = payrolls.find((p) => p.employeeId === form.employeeId);
     if (!existing) return null;
 
-    // Base Salary from the payroll's computed field (perDayRate × earnedDays)
-    // earnedDays = presentDays + paidLeaves (Sundays NOT counted as earned)
     const daysInMonth = existing.daysInMonth || new Date(parseInt(filterYear), parseInt(filterMonth), 0).getDate();
-    const perDayRate = Math.round((existing.monthlySalary / daysInMonth) * 100) / 100;
-    const earnedDays = (existing.presentDays || 0) + (existing.paidLeaves || 0) + ((existing.halfDays || 0) * 0.5);
+    const perDayRate = existing.perDayRate || Math.round((existing.monthlySalary / daysInMonth) * 100) / 100;
+    const earnedDays = (existing.presentDays || 0) + (existing.paidLeaves || 0);
     const baseSalary = existing.baseSalary != null
       ? existing.baseSalary
       : Math.round((perDayRate * earnedDays) * 100) / 100;
 
-    // Gross includes OT, Sunday, PH on top of baseSalary
+    // Sunday Earnings (paid weekly off)
+    const sundayEarnings = existing.sundayEarnings || 0;
+
+    // Gross includes baseSalary + sundayEarnings + OT
     const grossSalary = existing.grossSalary;
 
-    // Deductions: form values are the TOTAL deductions (not additions to existing)
-    // The payroll API replaces deductions with form values
+    // Deductions
     const totalDeductions = Math.round((form.tdsDeduction + form.loanDeduction + form.advanceDeduction + form.securityDeposit) * 100) / 100;
 
     // Net = grossSalary + bonus + incentive + arrear − totalDeductions
@@ -282,6 +285,7 @@ export function PayrollAutomation() {
 
     return {
       baseSalary: Math.round(baseSalary * 100) / 100,
+      sundayEarnings,
       grossSalary: Math.round(grossSalary * 100) / 100,
       bonus: form.bonus,
       incentive: form.incentive,
@@ -665,7 +669,7 @@ export function PayrollAutomation() {
             Payroll Automation
           </h2>
           <p className="text-sm text-muted-foreground">
-            Hourly Rate = Monthly Salary ÷ (Days in Month × 9) | OT at normal hourly rate (1x)
+            Hourly Rate = Monthly Salary ÷ (Days in Month × 9) | Sundays are paid weekly off
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
@@ -815,11 +819,15 @@ export function PayrollAutomation() {
               </p>
               <p className="flex items-center gap-2">
                 <Badge variant="outline" className="text-[9px] h-4 px-1.5">Hourly</Badge>
-                <span>Hourly Rate = Monthly Salary ÷ (Days in Month × Shift Hours)</span>
+                <span>Hourly Rate = Monthly Salary ÷ (Days in Month × 9)</span>
               </p>
               <p className="flex items-center gap-2">
                 <Badge variant="outline" className="text-[9px] h-4 px-1.5">Base</Badge>
-                <span>Base Salary = Per Day Rate × Earned Days (Sundays NOT counted)</span>
+                <span>Base Salary = Per Day Rate × Earned Days (working days only)</span>
+              </p>
+              <p className="flex items-center gap-2">
+                <Badge variant="outline" className="text-[9px] h-4 px-1.5">Sunday</Badge>
+                <span>Sunday Earnings = Per Day Rate × Sunday Count (e.g., 5 Sun × 9 = 45 hrs earned)</span>
               </p>
               <p className="flex items-center gap-2">
                 <Badge variant="outline" className="text-[9px] h-4 px-1.5">OT</Badge>
@@ -827,7 +835,7 @@ export function PayrollAutomation() {
               </p>
               <p className="flex items-center gap-2">
                 <Badge variant="outline" className="text-[9px] h-4 px-1.5">Gross</Badge>
-                <span>Gross = Base Salary + OT Amount</span>
+                <span>Gross = Base Salary + Sunday Earnings + OT Amount</span>
               </p>
               <p className="flex items-center gap-2">
                 <Badge variant="outline" className="text-[9px] h-4 px-1.5">Net</Badge>
@@ -835,7 +843,7 @@ export function PayrollAutomation() {
               </p>
             </div>
             <p className="text-[10px] text-muted-foreground">
-              Full attendance = Full monthly salary + OT &nbsp;|&nbsp; Sundays are weekly off (not counted as earned)
+              Full attendance = Full monthly salary + OT &nbsp;|&nbsp; Sundays are paid weekly off (e.g., 31 days with 5 Sundays = 45 earned Sunday hrs)
             </p>
           </div>
         </div>
@@ -859,7 +867,7 @@ export function PayrollAutomation() {
                     <TableHead className="hidden xl:table-cell">Hourly Rate</TableHead>
                     <TableHead className="hidden lg:table-cell">OT Hrs</TableHead>
                     <TableHead className="hidden sm:table-cell">OT Amount</TableHead>
-                    <TableHead className="hidden lg:table-cell">Sunday Hrs</TableHead>
+                    <TableHead className="hidden lg:table-cell">Earn Sunday</TableHead>
 
                     <TableHead>Gross</TableHead>
                     <TableHead className="hidden md:table-cell">Deductions</TableHead>
@@ -933,8 +941,11 @@ export function PayrollAutomation() {
                           ) : '—'}
                         </TableCell>
                         <TableCell className="hidden lg:table-cell text-sm whitespace-nowrap">
-                          {(p.sundayHrs || 0) > 0 ? (
-                            <span className="text-blue-600 dark:text-blue-400 font-medium">{displayHHMM(p.sundayHrs)}h</span>
+                          {(p.sundayCount || 0) > 0 ? (
+                            <div className="flex flex-col">
+                              <span className="text-blue-600 dark:text-blue-400 font-medium">{p.sundayCount} Sun × 9 = {p.earnedSundayHrs || p.sundayCount * 9}h</span>
+                              <span className="text-[10px] text-muted-foreground">₹{(p.sundayEarnings || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
+                            </div>
                           ) : '—'}
                         </TableCell>
 

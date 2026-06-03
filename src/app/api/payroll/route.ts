@@ -39,11 +39,35 @@ export async function GET(request: NextRequest) {
       orderBy: { employeeId: 'asc' },
     });
 
-    // Enrich with computed fields (not stored in DB)
-    const enrichedPayrolls = payrolls.map(p => ({
-      ...p,
-      baseSalary: p.grossSalary - (p.otAmount || 0),
-    }));
+    // Enrich with computed fields (not stored in DB or dynamically computed)
+    const enrichedPayrolls = payrolls.map(p => {
+      const daysInMonth = new Date(p.year, p.month, 0).getDate();
+      const perDayRate = Math.round((p.monthlySalary / daysInMonth) * 100) / 100;
+      // Compute Sunday earnings if not stored (for backward compat with old records)
+      let sundayCount = (p as any).sundayCount || 0;
+      let sundayEarnings = (p as any).sundayEarnings || 0;
+      if (!sundayCount || !sundayEarnings) {
+        // Compute from month/year
+        let sundays = 0;
+        for (let d = 1; d <= daysInMonth; d++) {
+          if (new Date(p.year, p.month - 1, d).getDay() === 0) sundays++;
+        }
+        sundayCount = sundays;
+        sundayEarnings = Math.round((perDayRate * sundayCount) * 100) / 100;
+      }
+      const earnedSundayHrs = sundayCount * 9;
+      const baseSalary = Math.round((p.grossSalary - (p.otAmount || 0) - sundayEarnings) * 100) / 100;
+
+      return {
+        ...p,
+        baseSalary: baseSalary > 0 ? baseSalary : p.grossSalary - (p.otAmount || 0),
+        perDayRate,
+        daysInMonth,
+        sundayCount,
+        sundayEarnings,
+        earnedSundayHrs,
+      };
+    });
 
     return NextResponse.json(enrichedPayrolls);
   } catch (error: any) {
@@ -74,19 +98,20 @@ export async function POST(request: NextRequest) {
 
     // ─── LAXREE PAYROLL FORMULA ───
     // Per Day Rate = monthlySalary / daysInMonth (31, 30, 28 as per calendar)
-    // Hourly Rate = monthlySalary / (daysInMonth × shiftHours) — NO intermediate rounding
-    //   30 days × 9 hrs = 270 hrs → ₹20,000 / 270 = ₹74.07
-    //   31 days × 9 hrs = 279 hrs → ₹20,000 / 279 = ₹71.68
-    //   28 days × 9 hrs = 252 hrs → ₹20,000 / 252 = ₹79.37
+    // Hourly Rate = monthlySalary / (daysInMonth × 9) — NO intermediate rounding
+    //   30 days × 9 hrs = 270 hrs → ₹17,000 / 270 = ₹62.96
+    //   31 days × 9 hrs = 279 hrs → ₹17,000 / 279 = ₹60.93
     // Base Salary = perDayRate × earnedDays (Sundays NOT counted as earned)
     //   earnedDays = effectivePresentDays + effectivePaidLeaves
-    //   Sundays are weekly off — NOT counted as present or earned days
+    // Sunday Earnings = perDayRate × sundayCount (Sundays are paid weekly off)
+    //   sundayCount = number of Sundays in the month
+    //   Earned Sunday Hours = sundayCount × 9 (e.g., 5 Sundays = 45 hrs)
     // OT Amount = otHours × hourlyRate (1x normal rate, NOT 1.5x)
-    // Gross Salary = baseSalary + otAmount
+    // Gross Salary = baseSalary + sundayEarnings + otAmount
     // Net Salary = grossSalary + bonus + incentive + arrear - totalDeductions
 
     const perDayRate = Math.round((employee.monthlySalary / daysInMonth) * 100) / 100;
-    const hourlyRate = Math.round((employee.monthlySalary / (daysInMonth * employee.shiftHours)) * 100) / 100;
+    const hourlyRate = Math.round((employee.monthlySalary / (daysInMonth * 9)) * 100) / 100;  // Always use 9 shift hours
 
     // Get attendance records for the month
     const attendance = await db.attendance.findMany({
@@ -175,11 +200,18 @@ export async function POST(request: NextRequest) {
     const absentDays = Math.max(0, totalWorkingDays - presentDays - halfDays - effectivePaidLeaves - effectiveUnpaidLeaves);
 
     // ─── BASE SALARY = perDayRate × earnedDays ───
-    // earnedDays = effectivePresentDays + effectivePaidLeaves
-    // Sundays are weekly off — NOT counted as earned days
-    // Unpaid leaves are NOT counted as earned days
+    // earnedDays = effectivePresentDays + effectivePaidLeaves (Sundays NOT included)
+    // Sunday Earnings are calculated separately and added to gross
     const earnedDays = effectivePresentDays + effectivePaidLeaves;
     const baseSalary = Math.round((perDayRate * earnedDays) * 100) / 100;
+
+    // ─── SUNDAY EARNINGS (Paid Weekly Off) ───
+    // Each Sunday earns perDayRate. Earned Sunday Hours = sundayCount × 9.
+    // Example: 31-day month with 5 Sundays → 5 × 9 = 45 hrs earned
+    // Example: 30-day month with 4 Sundays → 4 × 9 = 36 hrs earned
+    const sundayCount = sundays;
+    const sundayEarnings = Math.round((perDayRate * sundayCount) * 100) / 100;
+    const earnedSundayHrs = sundayCount * 9;  // e.g., 5 Sundays × 9 = 45 hrs
 
     // ─── ACTUAL Sunday/PH worked hours (for display/records only) ───
     let sundayWorkMinutes = 0;
@@ -202,8 +234,8 @@ export async function POST(request: NextRequest) {
     // ─── OT Amount = otHoursDecimal × hourlyRate (1x normal rate, NOT 1.5x) ───
     const otAmount = Math.round(otHoursDecimal * hourlyRate * 100) / 100;
 
-    // ─── GROSS SALARY ───
-    const grossSalary = Math.round((baseSalary + otAmount) * 100) / 100;
+    // ─── GROSS SALARY = baseSalary + sundayEarnings + otAmount ───
+    const grossSalary = Math.round((baseSalary + sundayEarnings + otAmount) * 100) / 100;
 
     // ─── DEDUCTIONS ───
     const tdsDeduction = body.tdsDeduction || 0;
@@ -227,6 +259,8 @@ export async function POST(request: NextRequest) {
       otRate: hourlyRate,
       otAmount,
       sundayHrs: sundayWorkedHrs,
+      sundayCount,
+      sundayEarnings,
       phHours: phWorkedHrs,
       totalHrs: totalWorkedHrs,
       presentDays: presentDays,
@@ -253,7 +287,7 @@ export async function POST(request: NextRequest) {
         where: { id: existing.id },
         data: payrollData,
       });
-      return NextResponse.json({ ...updated, baseSalary, perDayRate, earnedDays, totalWorkingDays, daysInMonth });
+      return NextResponse.json({ ...updated, baseSalary, perDayRate, earnedDays, totalWorkingDays, daysInMonth, sundayCount, sundayEarnings, earnedSundayHrs });
     }
 
     const payroll = await db.payroll.create({
@@ -277,7 +311,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    return NextResponse.json({ ...payroll, baseSalary, perDayRate, earnedDays, totalWorkingDays, daysInMonth }, { status: 201 });
+    return NextResponse.json({ ...payroll, baseSalary, perDayRate, earnedDays, totalWorkingDays, daysInMonth, sundayCount, sundayEarnings, earnedSundayHrs }, { status: 201 });
   } catch (error: any) {
     console.error('Payroll error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });

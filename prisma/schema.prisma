@@ -156,6 +156,8 @@ model Payroll {
   otRate           Float    @default(0)
   otAmount         Float    @default(0)
   sundayHrs        Float    @default(0)
+  sundayCount      Float    @default(0)
+  sundayEarnings   Float    @default(0)
   phHours          Float    @default(0)
   totalHrs         Float    @default(0)
   presentDays      Float    @default(0)

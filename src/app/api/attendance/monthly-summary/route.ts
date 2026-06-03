@@ -215,20 +215,22 @@ export async function GET(request: NextRequest) {
 
     // ─── LAXREE SALARY CALCULATION (consistent with payroll) ───
     // Per Day Rate = monthlySalary / daysInMonth
-    // Hourly Rate = monthlySalary / (daysInMonth × shiftHours) — NO intermediate rounding
-    //   30 days × 9 hrs = 270 hrs → ₹20,000 / 270 = ₹74.07
-    //   31 days × 9 hrs = 279 hrs → ₹20,000 / 279 = ₹71.68
-    //   28 days × 9 hrs = 252 hrs → ₹20,000 / 252 = ₹79.37
+    // Hourly Rate = monthlySalary / (daysInMonth × 9) — NO intermediate rounding
     // Base Salary = perDayRate × earnedDays (Sundays NOT counted as earned)
     //   earnedDays = effectivePresentDays + effectivePaidLeaves
-    //   Sundays are weekly off — NOT counted as present or earned days
+    // Sunday Earnings = perDayRate × sundayCount (Sundays are paid weekly off)
+    //   Earned Sunday Hours = sundayCount × 9 (e.g., 5 Sundays = 45 hrs)
     // OT Amount = totalOvertimeHours × hourlyRate (1x normal rate, NOT 1.5x)
+    // Gross Salary = baseSalary + sundayEarnings + otAmount
     const earnedDays = effectivePresentDays + effectivePaidLeaves;
     const perDayRate = Math.round((employee.monthlySalary / daysInMonth) * 100) / 100;
-    const calculatedHourlyRate = Math.round((employee.monthlySalary / (daysInMonth * employee.shiftHours)) * 100) / 100;
+    const calculatedHourlyRate = Math.round((employee.monthlySalary / (daysInMonth * 9)) * 100) / 100;
     const calculatedBaseSalary = Math.round((perDayRate * earnedDays) * 100) / 100;
+    const sundayCount = sundays;
+    const calculatedSundayEarnings = Math.round((perDayRate * sundayCount) * 100) / 100;
+    const calculatedEarnedSundayHrs = sundayCount * 9;
     const calculatedOtAmount = Math.round(totalOvertimeHoursDecimal * calculatedHourlyRate * 100) / 100;
-    const calculatedGrossSalary = Math.round((calculatedBaseSalary + calculatedOtAmount) * 100) / 100;
+    const calculatedGrossSalary = Math.round((calculatedBaseSalary + calculatedSundayEarnings + calculatedOtAmount) * 100) / 100;
 
     return NextResponse.json({
       employee: {
@@ -269,6 +271,10 @@ export async function GET(request: NextRequest) {
       calculatedBaseSalary,
       calculatedOtAmount,
       calculatedGrossSalary,
+      // Sunday Earnings fields
+      sundayCount,
+      calculatedSundayEarnings,
+      calculatedEarnedSundayHrs,
     });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

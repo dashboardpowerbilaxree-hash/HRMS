@@ -215,7 +215,8 @@ export function SalarySlipGenerator() {
     const p = slip.payroll;
     const e = slip.employee;
     const perDayRate = Math.round((p.monthlySalary / (new Date(year, month, 0).getDate())) * 100) / 100;
-    const baseSalary = p.baseSalary != null ? p.baseSalary : Math.round((perDayRate * ((p.presentDays || 0) + (p.paidLeaves || 0) + ((p.halfDays || 0) * 0.5))) * 100) / 100;
+    const baseSalary = p.baseSalary != null ? p.baseSalary : Math.round((perDayRate * ((p.presentDays || 0) + (p.paidLeaves || 0)))) * 100 / 100;
+    const sundayEarn = p.sundayEarnings || 0;
     const totalEarnings = p.grossSalary + (p.bonus || 0) + (p.incentive || 0) + (p.arrear || 0);
 
     // Color constants
@@ -267,7 +268,7 @@ export function SalarySlipGenerator() {
       ['Earnings', 'Amount', '', 'Deductions', 'Amount'],
       // Rows 16-24: Earnings & Deductions rows
       ['Basic', baseSalary.toLocaleString('en-IN'), '', 'Provident Fund', '0'],
-      ['HRA', '0', '', 'ESI', '0'],
+      ['Sunday Earnings', sundayEarn.toLocaleString('en-IN'), '', 'ESI', '0'],
       ['Special Allowance', '0', '', 'Professional Tax', '0'],
       ['Gross Salary', p.grossSalary.toLocaleString('en-IN'), '', 'Salary Advance', (p.advanceDeduction || 0).toLocaleString('en-IN')],
       ['Other Earnings', (p.arrear || 0).toLocaleString('en-IN'), '', 'TDS', (p.tdsDeduction || 0).toLocaleString('en-IN')],
@@ -390,7 +391,8 @@ export function SalarySlipGenerator() {
       [],
       ['Hours Breakdown'],
       ['Total Worked Hrs', displayHHMM(p.totalWorkedHrs || 0), '', 'OT Hours', displayHHMM(p.otHours || 0)],
-      ['Sunday Hours', displayHHMM(p.sundayHrs || 0), '', 'OT Amount', (p.otAmount || 0).toLocaleString('en-IN')],
+      ['Sunday Earnings', (p.sundayEarnings || 0).toLocaleString('en-IN'), '', 'Earn Sunday Hrs', (p.earnedSundayHrs || (p.sundayCount || 0) * 9).toFixed(0) + 'h'],
+      ['Sunday Worked Hrs', displayHHMM(p.sundayHrs || 0), '', 'OT Amount', (p.otAmount || 0).toLocaleString('en-IN')],
     ];
 
     const ws2 = XLSX.utils.aoa_to_sheet(detailData);
@@ -437,7 +439,8 @@ export function SalarySlipGenerator() {
     const p = slip.payroll;
     const e = slip.employee;
     const perDayRate = Math.round((p.monthlySalary / (new Date(year, month, 0).getDate())) * 100) / 100;
-    const baseSalary = p.baseSalary != null ? p.baseSalary : Math.round((perDayRate * ((p.presentDays || 0) + (p.paidLeaves || 0) + ((p.halfDays || 0) * 0.5))) * 100) / 100;
+    const baseSalary = p.baseSalary != null ? p.baseSalary : Math.round((perDayRate * ((p.presentDays || 0) + (p.paidLeaves || 0)))) * 100 / 100;
+    const sundayEarn = p.sundayEarnings || 0;
     const totalEarnings = p.grossSalary + (p.bonus || 0) + (p.incentive || 0) + (p.arrear || 0);
 
     const logoAbsUrl = `${window.location.origin}${firmLogo}`;
@@ -514,7 +517,7 @@ export function SalarySlipGenerator() {
         <table>
           <tr><th>Earnings</th><th>Amount</th><th class="ded">Deductions</th><th class="ded">Amount</th></tr>
           <tr><td>Basic</td><td>₹${baseSalary.toLocaleString('en-IN')}</td><td class="ded-cell">Provident Fund</td><td class="ded-cell">₹0</td></tr>
-          <tr><td>HRA</td><td>₹0</td><td class="ded-cell">ESI</td><td class="ded-cell">₹0</td></tr>
+          <tr><td>Sunday Earnings</td><td>₹${sundayEarn.toLocaleString('en-IN')}</td><td class="ded-cell">ESI</td><td class="ded-cell">₹0</td></tr>
           <tr><td>Special Allowance</td><td>₹0</td><td class="ded-cell">Professional Tax</td><td class="ded-cell">₹0</td></tr>
           <tr><td>Gross Salary</td><td>₹${p.grossSalary.toLocaleString('en-IN')}</td><td class="ded-cell">Salary Advance</td><td class="ded-cell">₹${(p.advanceDeduction || 0).toLocaleString('en-IN')}</td></tr>
           <tr><td>Other Earnings</td><td>₹${(p.arrear || 0).toLocaleString('en-IN')}</td><td class="ded-cell">TDS</td><td class="ded-cell">₹${(p.tdsDeduction || 0).toLocaleString('en-IN')}</td></tr>
@@ -544,7 +547,10 @@ export function SalarySlipGenerator() {
   const p = slip?.payroll;
   const e = slip?.employee;
   const perDayRateCalc = p ? Math.round((p.monthlySalary / (new Date(year, month, 0).getDate())) * 100) / 100 : 0;
-  const baseSalaryCalc = p ? (p.baseSalary != null ? p.baseSalary : Math.round((perDayRateCalc * ((p.presentDays || 0) + (p.paidLeaves || 0) + ((p.halfDays || 0) * 0.5))) * 100) / 100) : 0;
+  const baseSalaryCalc = p ? (p.baseSalary != null ? p.baseSalary : Math.round((perDayRateCalc * ((p.presentDays || 0) + (p.paidLeaves || 0)))) * 100 / 100) : 0;
+  const sundayEarningsCalc = p ? (p.sundayEarnings || 0) : 0;
+  const sundayCountCalc = p ? (p.sundayCount || 0) : 0;
+  const earnedSundayHrsCalc = p ? (p.earnedSundayHrs || sundayCountCalc * 9) : 0;
   const totalEarningsCalc = p ? p.grossSalary + (p.bonus || 0) + (p.incentive || 0) + (p.arrear || 0) : 0;
 
   return (
@@ -665,7 +671,7 @@ export function SalarySlipGenerator() {
                   <tbody>
                     {[
                       { earn: 'Basic', earnVal: baseSalaryCalc, ded: 'Provident Fund', dedVal: 0 },
-                      { earn: 'HRA', earnVal: 0, ded: 'ESI', dedVal: 0 },
+                      { earn: 'Sunday Earnings', earnVal: sundayEarningsCalc, ded: 'ESI', dedVal: 0 },
                       { earn: 'Special Allowance', earnVal: 0, ded: 'Professional Tax', dedVal: 0 },
                       { earn: 'Gross Salary', earnVal: p.grossSalary, ded: 'Salary Advance', dedVal: p.advanceDeduction || 0 },
                       { earn: 'Other Earnings', earnVal: p.arrear || 0, ded: 'TDS', dedVal: p.tdsDeduction || 0 },
