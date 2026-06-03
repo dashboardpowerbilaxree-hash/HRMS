@@ -43,8 +43,13 @@ export async function GET(request: NextRequest) {
     // This ensures Late/Early-Out deductions and hourly rate are always correct
     const enrichedPayrolls = await Promise.all(payrolls.map(async (p) => {
       const daysInMonth = new Date(p.year, p.month, 0).getDate();
+
+      // Fetch employee for shift hours
+      const emp = await db.employee.findUnique({ where: { employeeId: p.employeeId }, select: { shiftHours: true } });
+      const shiftHrs = emp?.shiftHours || 9;
+
       const perDayRate = Math.round((p.monthlySalary / daysInMonth) * 100) / 100;
-      const hourlyRate = Math.round((p.monthlySalary / (daysInMonth * 9)) * 100) / 100;
+      const hourlyRate = Math.round((p.monthlySalary / (daysInMonth * shiftHrs)) * 100) / 100;
 
       // Always recount Sundays dynamically
       let sundays = 0;
@@ -52,56 +57,42 @@ export async function GET(request: NextRequest) {
         if (new Date(p.year, p.month - 1, d).getDay() === 0) sundays++;
       }
       const sundayCount = sundays;
-      const sundayEarnings = Math.round((perDayRate * sundayCount) * 100) / 100;
-      const earnedSundayHrs = sundayCount * 9;
+      const sundayHrs = sundayCount * shiftHrs;
+      const sundayEarnings = Math.round(hourlyRate * sundayHrs * 100) / 100;
+      const earnedSundayHrs = sundayHrs;
 
-      // ─── Recalculate base salary from attendance (with Late/Early-Out deduction) ───
+      // ─── Recalculate base salary from attendance (HOUR-BASED, matching Excel) ───
       const startDate = new Date(p.year, p.month - 1, 1);
       const endDate = new Date(p.year, p.month, 1);
 
-      // Fetch attendance to calculate effective present days
       const attendance = await db.attendance.findMany({
         where: { employeeId: p.employeeId, date: { gte: startDate, lt: endDate } },
       });
-
-      // Fetch employee for shift hours
-      const emp = await db.employee.findUnique({ where: { employeeId: p.employeeId }, select: { shiftHours: true } });
-      const shiftMinutes = Math.round((emp?.shiftHours || 9) * 60);
 
       // Get holidays
       const holidays = await db.holiday.findMany({ where: { date: { gte: startDate, lt: endDate } } });
       const holidayDays = holidays.length;
       const totalWorkingDays = daysInMonth - sundays - holidayDays;
 
-      // Calculate effective present days with Late/Early-Out deduction
+      // Calculate effective present days and total base hours (HOUR-BASED)
       const rawPresentDays = attendance.filter(a => ['present', 'late', 'early-out'].includes(a.status)).length;
       const halfDays = attendance.filter(a => a.status === 'half-day' || a.status === 'half_day').length;
       const presentDays = rawPresentDays;
 
+      let totalBaseHours = 0;
       let effectivePresentDays = 0;
       for (const a of attendance) {
-        if (a.status === 'present') {
-          effectivePresentDays += 1.0;
-        } else if (a.status === 'late') {
-          if (a.checkIn && a.checkOut) {
-            const [h1, m1] = a.checkIn.split(':').map(Number);
-            const [h2, m2] = a.checkOut.split(':').map(Number);
-            const workedMin = Math.max(0, (h2 * 60 + m2) - (h1 * 60 + m1));
-            effectivePresentDays += Math.min(1, workedMin / shiftMinutes);
+        if (['present', 'late', 'early-out', 'half-day', 'half_day'].includes(a.status)) {
+          // Base hours = totalHours - overtimeHours (excludes OT)
+          const baseHrs = Math.max(0, (a.totalHours || 0) - (a.overtimeHours || 0));
+          totalBaseHours += baseHrs;
+
+          // Effective present days = baseHrs / shiftHours
+          if (a.status === 'half-day' || a.status === 'half_day') {
+            effectivePresentDays += 0.5;
           } else {
-            effectivePresentDays += 1.0;
+            effectivePresentDays += Math.min(1, baseHrs / shiftHrs);
           }
-        } else if (a.status === 'early-out') {
-          if (a.checkIn && a.checkOut) {
-            const [h1, m1] = a.checkIn.split(':').map(Number);
-            const [h2, m2] = a.checkOut.split(':').map(Number);
-            const workedMin = Math.max(0, (h2 * 60 + m2) - (h1 * 60 + m1));
-            effectivePresentDays += Math.min(1, workedMin / shiftMinutes);
-          } else {
-            effectivePresentDays += 1.0;
-          }
-        } else if (a.status === 'half-day' || a.status === 'half_day') {
-          effectivePresentDays += 0.5;
         }
       }
       effectivePresentDays = Math.round(effectivePresentDays * 100) / 100;
@@ -147,12 +138,11 @@ export async function GET(request: NextRequest) {
       const otHours = Math.round(attendance.filter(a => ['present', 'late', 'half-day', 'half_day', 'early-out'].includes(a.status)).reduce((sum, a) => sum + (a.overtimeHours || 0), 0) * 100) / 100;
       const otAmount = Math.round(otHours * hourlyRate * 100) / 100;
 
-      // Base salary with Late/Early-Out deduction
-      const earnedDays = effectivePresentDays + effectivePaidLeaves;
-      const baseSalary = Math.round((perDayRate * earnedDays) * 100) / 100;
-
-      // Gross = base + sunday earnings + OT
-      const grossSalary = Math.round((baseSalary + sundayEarnings + otAmount) * 100) / 100;
+      // HOUR-BASED salary: Gross = hourlyRate × (baseHrs + sundayHrs + otHrs + paidLeaveHrs)
+      const paidLeaveHrs = effectivePaidLeaves * shiftHrs;
+      const totalHrs = Math.round((totalBaseHours + sundayHrs + otHours + paidLeaveHrs) * 100) / 100;
+      const baseSalary = Math.round(hourlyRate * totalBaseHours * 100) / 100;
+      const grossSalary = Math.round(hourlyRate * totalHrs * 100) / 100;
 
       // Net = gross + bonus + incentive + arrear - totalDeductions
       const netSalary = Math.round((grossSalary + (p.bonus || 0) + (p.incentive || 0) + (p.arrear || 0) - (p.totalDeductions || 0)) * 100) / 100;
@@ -177,6 +167,8 @@ export async function GET(request: NextRequest) {
         paidLeaves: effectivePaidLeaves,
         totalWorkingDays,
         effectivePresentDays,
+        totalBaseHours: Math.round(totalBaseHours * 100) / 100,
+        totalHrs,
       };
     }));
 
@@ -222,16 +214,21 @@ export async function POST(request: NextRequest) {
     // Net Salary = grossSalary + bonus + incentive + arrear - totalDeductions
 
     const perDayRate = Math.round((employee.monthlySalary / daysInMonth) * 100) / 100;
-    const hourlyRate = Math.round((employee.monthlySalary / (daysInMonth * 9)) * 100) / 100;  // Always use 9 shift hours
+    const hourlyRate = Math.round((employee.monthlySalary / (daysInMonth * employee.shiftHours)) * 100) / 100;
 
     // Get attendance records for the month
     const attendance = await db.attendance.findMany({
       where: { employeeId, date: { gte: startDate, lt: endDate } },
     });
 
-    // Total worked hours from attendance — calculate from RAW check-in/check-out times for accuracy
+    // ─── HOUR-BASED salary calculation (matching Excel Payroll Master) ───
+    // Base hours per day = totalHours - overtimeHours (excludes OT)
+    // For late employees: base hours reflect actual time during shift (late arrival deducted)
+    // For early-out: base hours reflect actual time (early departure deducted)
+    // For present: base hours = shift hours (even if they worked extra = OT)
+    let totalBaseHours = 0;
     let totalWorkMinutes = 0;
-    const shiftMinutes = Math.round(employee.shiftHours * 60);
+    let effectivePresentDays = 0;
 
     for (const a of attendance) {
       if (a.checkIn && a.checkOut && ['present', 'late', 'half-day', 'half_day', 'early-out'].includes(a.status)) {
@@ -240,79 +237,39 @@ export async function POST(request: NextRequest) {
         const workMin = Math.max(0, (h2 * 60 + m2) - (h1 * 60 + m1));
         totalWorkMinutes += workMin;
       }
+
+      if (['present', 'late', 'early-out', 'half-day', 'half_day'].includes(a.status)) {
+        // Base hours = totalHours - overtimeHours (excludes OT)
+        const baseHrs = Math.max(0, (a.totalHours || 0) - (a.overtimeHours || 0));
+        totalBaseHours += baseHrs;
+
+        // Effective present days = baseHrs / shiftHours
+        if (a.status === 'half-day' || a.status === 'half_day') {
+          effectivePresentDays += 0.5;
+        } else {
+          effectivePresentDays += Math.min(1, baseHrs / employee.shiftHours);
+        }
+      }
     }
+    effectivePresentDays = Math.round(effectivePresentDays * 100) / 100;
 
     // Display values in HH.MM format
     const totalWorkedHrs = Math.floor(totalWorkMinutes / 60) + (totalWorkMinutes % 60) / 100;
-    // Decimal hours for salary calculation
-    const totalWorkedHrsDecimal = Math.round(totalWorkMinutes / 60 * 100) / 100;
 
     // ─── OT Hours: Sum stored overtimeHours directly (decimal sum) ───
-    // This ensures the total matches the sum of individual OT values the user sees.
-    // The stored overtimeHours are already calculated as decimal hours per record.
     const otHoursDecimal = Math.round(attendance.filter(a => ['present', 'late', 'half-day', 'half_day', 'early-out'].includes(a.status)).reduce((sum, a) => sum + (a.overtimeHours || 0), 0) * 100) / 100;
-    // For display, show as decimal (e.g., 4.45 not 4.27) to match user's manual calculation
     const otHours = otHoursDecimal;
 
     // Attendance counts
     const rawPresentDays = attendance.filter(a => ['present', 'late', 'early-out'].includes(a.status)).length;
     const halfDays = attendance.filter(a => a.status === 'half-day' || a.status === 'half_day').length;
-    // Track Sunday/holiday work separately — does NOT compensate for absent days
-    const holidayWorked = attendance.filter(a => a.isHoliday && a.totalHours > 0).length;
-    const weeklyOffWorked = attendance.filter(a => a.isWeeklyOff && a.totalHours > 0).length;
-
-    // Present days = full present days only (half-days tracked separately for display)
-    // Sunday/holiday work does NOT inflate present count
     const presentDays = rawPresentDays;
 
-    // ─── For salary: effectivePresentDays accounts for Late/Early-Out deductions ───
-    // "present" = 1.0 day (full pay)
-    // "late" = actual_worked_minutes / shift_minutes (deducted for late arrival)
-    // "early-out" = actual_worked_minutes / shift_minutes (deducted for early departure)
-    // "half-day" = 0.5 day
-    let effectivePresentDays = 0;
-    let lateDeductionDays = 0;   // Track how many days worth of late deduction
-    let earlyOutDeductionDays = 0; // Track how many days worth of early-out deduction
-    for (const a of attendance) {
-      if (a.status === 'present') {
-        effectivePresentDays += 1.0; // Full day — no deduction
-      } else if (a.status === 'late') {
-        // Calculate actual worked hours from check-in/check-out
-        if (a.checkIn && a.checkOut) {
-          const [h1, m1] = a.checkIn.split(':').map(Number);
-          const [h2, m2] = a.checkOut.split(':').map(Number);
-          const workedMin = Math.max(0, (h2 * 60 + m2) - (h1 * 60 + m1));
-          const ratio = Math.min(1, workedMin / shiftMinutes);
-          effectivePresentDays += ratio;
-          lateDeductionDays += (1 - ratio); // Track the deduction
-        } else {
-          effectivePresentDays += 1.0; // No check-in/out data, default to full day
-        }
-      } else if (a.status === 'early-out') {
-        // Calculate actual worked hours from check-in/check-out
-        if (a.checkIn && a.checkOut) {
-          const [h1, m1] = a.checkIn.split(':').map(Number);
-          const [h2, m2] = a.checkOut.split(':').map(Number);
-          const workedMin = Math.max(0, (h2 * 60 + m2) - (h1 * 60 + m1));
-          const ratio = Math.min(1, workedMin / shiftMinutes);
-          effectivePresentDays += ratio;
-          earlyOutDeductionDays += (1 - ratio); // Track the deduction
-        } else {
-          effectivePresentDays += 1.0; // No check-in/out data, default to full day
-        }
-      } else if (a.status === 'half-day' || a.status === 'half_day') {
-        effectivePresentDays += 0.5;
-      }
-    }
-    // Round to avoid floating point issues
-    effectivePresentDays = Math.round(effectivePresentDays * 100) / 100;
-
-    // Approved leaves — calculate EFFECTIVE leave days
+    // Approved leaves
     const leaves = await db.leave.findMany({
       where: { employeeId, status: 'approved', startDate: { gte: startDate }, endDate: { lt: endDate } },
     });
 
-    // Build sets for effective leave calculation
     const holidayDateStrs = new Set(
       holidays.map(h => {
         const hd = new Date(h.date);
@@ -327,7 +284,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Count leave days on working days where employee was NOT already present
     let effectivePaidLeaves = 0;
     let effectiveUnpaidLeaves = 0;
     for (const leave of leaves) {
@@ -346,23 +302,19 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Absent days = totalWorkingDays - fullPresentDays - halfDays - effectivePaidLeaves - effectiveUnpaidLeaves
-    // Half-days are tracked separately, NOT counted as absent
     const absentDays = Math.max(0, totalWorkingDays - presentDays - halfDays - effectivePaidLeaves - effectiveUnpaidLeaves);
 
-    // ─── BASE SALARY = perDayRate × earnedDays ───
-    // earnedDays = effectivePresentDays + effectivePaidLeaves (Sundays NOT included)
-    // Sunday Earnings are calculated separately and added to gross
-    const earnedDays = effectivePresentDays + effectivePaidLeaves;
-    const baseSalary = Math.round((perDayRate * earnedDays) * 100) / 100;
-
-    // ─── SUNDAY EARNINGS (Paid Weekly Off) ───
-    // Each Sunday earns perDayRate. Earned Sunday Hours = sundayCount × 9.
-    // Example: 31-day month with 5 Sundays → 5 × 9 = 45 hrs earned
-    // Example: 30-day month with 4 Sundays → 4 × 9 = 36 hrs earned
+    // ─── HOUR-BASED SALARY CALCULATION ───
+    // Gross = hourlyRate × (baseHrs + sundayHrs + otHrs + paidLeaveHrs)
     const sundayCount = sundays;
-    const sundayEarnings = Math.round((perDayRate * sundayCount) * 100) / 100;
-    const earnedSundayHrs = sundayCount * 9;  // e.g., 5 Sundays × 9 = 45 hrs
+    const sundayHrs = sundayCount * employee.shiftHours;
+    const paidLeaveHrs = effectivePaidLeaves * employee.shiftHours;
+    const totalHrs = Math.round((totalBaseHours + sundayHrs + otHoursDecimal + paidLeaveHrs) * 100) / 100;
+    const baseSalary = Math.round(hourlyRate * totalBaseHours * 100) / 100;
+    const sundayEarnings = Math.round(hourlyRate * sundayHrs * 100) / 100;
+    const earnedSundayHrs = sundayHrs;
+    const otAmount = Math.round(otHoursDecimal * hourlyRate * 100) / 100;
+    const grossSalary = Math.round(hourlyRate * totalHrs * 100) / 100;
 
     // ─── ACTUAL Sunday/PH worked hours (for display/records only) ───
     let sundayWorkMinutes = 0;
@@ -381,12 +333,6 @@ export async function POST(request: NextRequest) {
     }
     const sundayWorkedHrs = Math.floor(sundayWorkMinutes / 60) + (sundayWorkMinutes % 60) / 100;
     const phWorkedHrs = Math.floor(phWorkMinutes / 60) + (phWorkMinutes % 60) / 100;
-
-    // ─── OT Amount = otHoursDecimal × hourlyRate (1x normal rate, NOT 1.5x) ───
-    const otAmount = Math.round(otHoursDecimal * hourlyRate * 100) / 100;
-
-    // ─── GROSS SALARY = baseSalary + sundayEarnings + otAmount ───
-    const grossSalary = Math.round((baseSalary + sundayEarnings + otAmount) * 100) / 100;
 
     // ─── DEDUCTIONS ───
     const tdsDeduction = body.tdsDeduction || 0;
@@ -413,7 +359,7 @@ export async function POST(request: NextRequest) {
       sundayCount,
       sundayEarnings,
       phHours: phWorkedHrs,
-      totalHrs: totalWorkedHrs,
+      totalHrs,
       presentDays: presentDays,
       absentDays,
       holidayDays,
@@ -433,12 +379,13 @@ export async function POST(request: NextRequest) {
     };
 
     const existing = await db.payroll.findFirst({ where: { employeeId, month, year } });
+    const earnedDays = effectivePresentDays + effectivePaidLeaves;
     if (existing) {
       const updated = await db.payroll.update({
         where: { id: existing.id },
         data: payrollData,
       });
-      return NextResponse.json({ ...updated, baseSalary, perDayRate, earnedDays, totalWorkingDays, daysInMonth, sundayCount, sundayEarnings, earnedSundayHrs });
+      return NextResponse.json({ ...updated, baseSalary, perDayRate, earnedDays, totalWorkingDays, daysInMonth, sundayCount, sundayEarnings, earnedSundayHrs, totalBaseHours: Math.round(totalBaseHours * 100) / 100, totalHrs });
     }
 
     const payroll = await db.payroll.create({
@@ -462,7 +409,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    return NextResponse.json({ ...payroll, baseSalary, perDayRate, earnedDays, totalWorkingDays, daysInMonth, sundayCount, sundayEarnings, earnedSundayHrs }, { status: 201 });
+    return NextResponse.json({ ...payroll, baseSalary, perDayRate, earnedDays, totalWorkingDays, daysInMonth, sundayCount, sundayEarnings, earnedSundayHrs, totalBaseHours: Math.round(totalBaseHours * 100) / 100, totalHrs }, { status: 201 });
   } catch (error: any) {
     console.error('Payroll error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });

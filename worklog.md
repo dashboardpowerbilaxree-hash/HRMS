@@ -151,3 +151,28 @@ Stage Summary:
 - Example: taraChand - 26 present days, 25.55 effective days (0.45 days deducted)
 - Formula: effective day = actual_worked_minutes / shift_minutes (capped at 1.0)
 - Applies to May 2026 and all future months when payroll is generated
+---
+Task ID: 1
+Agent: Main
+Task: Fix discrepancies between Excel Payroll Master and Dashboard calculations
+
+Work Log:
+- Read the uploaded Payroll Master Excel file with 16 sheets (Master, Daily_Input, attendance/salary sheets for each company)
+- Identified 3 critical discrepancies between Excel and Dashboard:
+  1. OT Calculation: Dashboard used `totalHours - shiftHours` but should use time after shift end (e.g., late employee at 10:25-19:36: old OT=0.18, correct OT=0.6)
+  2. Salary Calculation: Dashboard used day-based formula that included OT in worked minutes, canceling out late penalties
+  3. Late/Early-Out deduction: When late employees worked overtime, their effectivePresentDays got capped at 1.0, nullifying the late deduction
+- Fixed OT calculation in `/api/attendance/route.ts` and `/api/attendance/bulk-upload/route.ts` to use time after shift end
+- Switched all salary calculations to hour-based approach matching the Excel: `Gross = hourlyRate × (baseHrs + sundayHrs + otHrs + paidLeaveHrs)`
+- Base hours now = totalHours - overtimeHours (excludes OT), correctly deducting late/early-out
+- Updated `/api/attendance/monthly-summary/route.ts`, `/api/payroll/route.ts` (GET and POST), `/api/payroll/generate-all/route.ts`
+- Recalculated 116 overtimeHours records in May 2026 database
+- Rebuilt and restarted PM2
+
+Stage Summary:
+- Key formula change: Gross = hourlyRate × totalHrs (hour-based, matching Excel Payroll Master)
+- baseHrs = totalHours - overtimeHours per record (correctly deducts late arrivals and early departures)
+- OT = time after shift end (not totalHours - shiftHours)
+- Sunday hours = sundayCount × shiftHours (per employee's shift)
+- Kamlesh comparison: Excel gross=17084 vs Dashboard gross=17129 (difference due to biometric precision)
+- Saurabh comparison: Late deductions now properly applied (base hours reduced for late days)

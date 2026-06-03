@@ -138,8 +138,11 @@ export async function POST(request: NextRequest) {
       // Half day detection
       halfDay = totalHours < employee.shiftHours / 2;
 
-      // OT calculation: if totalHours > shiftHours, OT = totalHours - shiftHours
-      overtimeHours = Math.max(0, Math.round((totalHours - employee.shiftHours) * 100) / 100);
+      // OT calculation: OT = time worked AFTER shift end
+      // For a late employee who works past shift end, OT is only the time after shift end
+      // e.g., checkIn=10:25, checkOut=19:36, shiftEnd=19:00 → OT = 36 min = 0.6 hrs
+      const otMinutes = Math.max(0, checkOutMinutes - shiftEndMinutes);
+      overtimeHours = Math.round((otMinutes / 60) * 100) / 100;
 
       // Sunday hours: if worked on Sunday, all hours are Sunday hours
       if (isSunday) {
