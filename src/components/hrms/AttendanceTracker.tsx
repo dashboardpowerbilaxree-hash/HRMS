@@ -8,7 +8,7 @@ import {
   Upload, FileSpreadsheet, Pencil, Trash2,
   Download, FileDown, ChevronRight, Users
 } from 'lucide-react';
-import * as XLSXStyle from 'xlsx-js-style';
+// xlsx-js-style moved to server-side API routes for reliable export
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -402,397 +402,58 @@ export function AttendanceTracker() {
 
   useEffect(() => { loadMonthlySummary(); }, [loadMonthlySummary]);
 
-  // ── Styling helpers for Excel (Beautiful & Eye-Catching) ──
-  const GOLD = 'D4A843';
-  const DARK = '1A1A1A';
-  const WHITE = 'FFFFFF';
-  const EMERALD = '059669';
-  const RED = 'DC2626';
-  const AMBER = 'D97706';
-  const CYAN = '0891B2';
-  const PURPLE = '7C3AED';
-  const SKY = '0284C7';
-  const LIGHT_BG = 'FFF8E7';
-  const LIGHT_GREEN = 'ECFDF5';
-  const LIGHT_RED = 'FEF2F2';
-  const LIGHT_AMBER = 'FFFBEB';
-  const LIGHT_BLUE = 'DBEAFE';
-  const LIGHT_PURPLE = 'F3E8FF';
-  const DEEP_BLUE = '1E3A5F';
-  const TEAL = '0D9488';
-  const CORAL = 'F43F5E';
-
-  // Full border helper
-  const fullBorder = (color: string = 'B0B0B0', style: 'thin' | 'medium' = 'thin') => ({
-    top: { style, color: { rgb: color } },
-    bottom: { style, color: { rgb: color } },
-    left: { style, color: { rgb: color } },
-    right: { style, color: { rgb: color } },
-  });
-  const goldBorder = {
-    top: { style: 'medium' as const, color: { rgb: GOLD } },
-    bottom: { style: 'medium' as const, color: { rgb: GOLD } },
-    left: { style: 'medium' as const, color: { rgb: GOLD } },
-    right: { style: 'medium' as const, color: { rgb: GOLD } },
-  };
-
-  const styleHeader = (rgb: string = DARK) => ({
-    font: { bold: true, color: { rgb: GOLD }, sz: 16 },
-    fill: { fgColor: { rgb } },
-    alignment: { horizontal: 'center' as const, vertical: 'center' as const },
-    border: goldBorder,
-  });
-  const styleSubHeader = (rgb: string = DEEP_BLUE) => ({
-    font: { bold: true, color: { rgb: WHITE }, sz: 12 },
-    fill: { fgColor: { rgb } },
-    alignment: { horizontal: 'center' as const, vertical: 'center' as const },
-    border: fullBorder('FFFFFF', 'medium'),
-  });
-  const styleColHeader = (rgb: string = TEAL) => ({
-    font: { bold: true, color: { rgb: WHITE }, sz: 10 },
-    fill: { fgColor: { rgb } },
-    alignment: { horizontal: 'center' as const, vertical: 'center' as const, wrapText: true },
-    border: fullBorder(WHITE, 'medium'),
-  });
-  const styleData = (bg?: string) => ({
-    font: { sz: 10, color: { rgb: '333333' } },
-    fill: bg ? { fgColor: { rgb: bg } } : undefined,
-    alignment: { horizontal: 'center' as const, vertical: 'center' as const },
-    border: fullBorder('D0D0D0'),
-  });
-  const styleBold = (rgb: string = DARK, bg?: string) => ({
-    font: { bold: true, color: { rgb }, sz: 10 },
-    fill: bg ? { fgColor: { rgb: bg } } : undefined,
-    alignment: { horizontal: 'center' as const, vertical: 'center' as const },
-    border: fullBorder('D0D0D0'),
-  });
-
-
-
-  // ── Safe cell styling helper (prevents "Cannot set properties of undefined") ──
-  const safeStyle = (ws: any, cellRef: string, style: any) => {
-    if (ws[cellRef]) ws[cellRef].s = style;
-  };
-
-  // ── Export Daily Attendance as Beautiful Excel ──
-  const handleExportDailyExcel = () => {
+  // ── Export Daily Attendance — via server-side API ──
+  const handleExportDailyExcel = async () => {
     if (filteredRecords.length === 0) {
       toast.error('No records to export');
       return;
     }
     try {
-    const XLSX = XLSXStyle;
-    const wb = XLSX.utils.book_new();
+      const params = new URLSearchParams();
+      if (filterDate) params.set('date', filterDate);
+      else { params.set('month', filterMonth); params.set('year', filterYear); }
+      if (filterFirm !== 'all') params.set('department', filterFirm);
+      if (filterLocation !== 'all') params.set('location', filterLocation);
 
-    // Company Header
-    const headerData: any[][] = [
-      ['LAXREE GROUP OF COMPANIES'],
-      [`Daily Attendance Report — ${MONTHS[parseInt(filterMonth) - 1]} ${filterYear}`],
-      [`Generated: ${new Date().toLocaleString('en-IN')}`],
-      [],
-    ];
-    const ws = XLSX.utils.aoa_to_sheet(headerData);
-
-    // Apply styles to header rows
-    ['A1', 'B1', 'C1', 'D1', 'E1', 'F1', 'G1', 'H1', 'I1'].forEach(c => {
-      safeStyle(ws, c, styleHeader());
-    });
-    ['A2', 'B2', 'C2', 'D2', 'E2', 'F2', 'G2', 'H2', 'I2'].forEach(c => {
-      safeStyle(ws, c, { font: { bold: true, color: { rgb: WHITE }, sz: 12 }, fill: { fgColor: { rgb: '2D2D2D' } }, alignment: { horizontal: 'center' as const } });
-    });
-    ['A3', 'B3', 'C3', 'D3', 'E3', 'F3', 'G3', 'H3', 'I3'].forEach(c => {
-      safeStyle(ws, c, { font: { italic: true, color: { rgb: '888888' }, sz: 9 }, fill: { fgColor: { rgb: '2D2D2D' } }, alignment: { horizontal: 'center' as const } });
-    });
-
-    // Data rows
-    const dataRows = filteredRecords.map(rec => ({
-      'Employee Name': rec.employee?.fullName || rec.employeeId,
-      'Emp Code': rec.employeeId,
-      'Company': rec.employee?.department || '',
-      'Date': new Date(rec.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
-      'In Time': rec.checkIn || '-',
-      'Out Time': rec.checkOut || '-',
-      'Hours': rec.totalHours > 0 ? formatHours(rec.totalHours) : '0.00',
-      'Status': rec.status.charAt(0).toUpperCase() + rec.status.slice(1).replace('-', ' '),
-      'OT Hours': rec.overtimeHours > 0 ? formatHours(rec.overtimeHours) : '0.00',
-    }));
-    XLSX.utils.sheet_add_json(ws, dataRows, { origin: 'A5' });
-
-    // Style column headers (row 5)
-    const colKeys = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'];
-    colKeys.forEach(c => {
-      const cell = ws[`${c}5`];
-      if (cell) cell.s = styleColHeader(EMERALD);
-    });
-
-    // Style data rows with alternating colors
-    for (let i = 0; i < dataRows.length; i++) {
-      const row = i + 6;
-      const bg = i % 2 === 0 ? LIGHT_BG : undefined;
-      colKeys.forEach(c => {
-        const cell = ws[`${c}${row}`];
-        if (cell) {
-          // Color-code Status column
-          if (c === 'H') {
-            const status = String(cell.v || '');
-            if (status === 'Present') cell.s = styleBold(EMERALD, LIGHT_GREEN);
-            else if (status === 'Absent') cell.s = styleBold(RED, LIGHT_RED);
-            else if (status === 'Late') cell.s = styleBold(AMBER, LIGHT_AMBER);
-            else if (status === 'Early Out') cell.s = styleBold('E11D48', LIGHT_RED);
-            else if (status === 'Half Day') cell.s = styleBold(AMBER, LIGHT_AMBER);
-            else cell.s = styleData(bg);
-          } else {
-            cell.s = styleData(bg);
-          }
-        }
-      });
-    }
-
-    // Column widths
-    ws['!cols'] = [
-      { wch: 20 }, { wch: 12 }, { wch: 10 }, { wch: 14 },
-      { wch: 10 }, { wch: 10 }, { wch: 8 }, { wch: 12 }, { wch: 10 },
-    ];
-    ws['!merges'] = [
-      { s: { r: 0, c: 0 }, e: { r: 0, c: 8 } },
-      { s: { r: 1, c: 0 }, e: { r: 1, c: 8 } },
-      { s: { r: 2, c: 0 }, e: { r: 2, c: 8 } },
-    ];
-
-    XLSX.utils.book_append_sheet(wb, ws, 'Daily Attendance');
-
-    // ── Summary Sheet ──
-    const summaryRows: any[][] = [
-      ['Attendance Summary'],
-      [],
-      ['Category', 'Count'],
-      ['Present', summary.present],
-      ['Absent', summary.absent],
-      ['Late', summary.late],
-      ['Early Out', summary.earlyOut],
-      ['OT Hours', formatHours(summary.ot)],
-    ];
-    const ws2 = XLSX.utils.aoa_to_sheet(summaryRows);
-    // Style summary
-    ['A1', 'B1'].forEach(c => { safeStyle(ws2, c, styleHeader()); });
-    ['A3', 'B3'].forEach(c => { safeStyle(ws2, c, styleColHeader(EMERALD)); });
-    safeStyle(ws2, 'A4', styleBold(EMERALD, LIGHT_GREEN)); safeStyle(ws2, 'B4', styleBold(EMERALD, LIGHT_GREEN));
-    safeStyle(ws2, 'A5', styleBold(RED, LIGHT_RED)); safeStyle(ws2, 'B5', styleBold(RED, LIGHT_RED));
-    safeStyle(ws2, 'A6', styleBold(AMBER, LIGHT_AMBER)); safeStyle(ws2, 'B6', styleBold(AMBER, LIGHT_AMBER));
-    safeStyle(ws2, 'A7', styleBold('E11D48', LIGHT_RED)); safeStyle(ws2, 'B7', styleBold('E11D48', LIGHT_RED));
-    safeStyle(ws2, 'A8', styleBold(CYAN)); safeStyle(ws2, 'B8', styleBold(CYAN));
-    ws2['!cols'] = [{ wch: 18 }, { wch: 14 }];
-    ws2['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 1 } }];
-    XLSX.utils.book_append_sheet(wb, ws2, 'Summary');
-
-    XLSX.writeFile(wb, `Daily_Attendance_${MONTHS[parseInt(filterMonth) - 1]}_${filterYear}.xlsx`);
-    toast.success('Daily Attendance Excel downloaded successfully!');
+      const res = await fetch(`/api/attendance/export-daily?${params}`);
+      if (!res.ok) { toast.error('Export failed'); return; }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Daily_Attendance_${MONTHS[parseInt(filterMonth) - 1]}_${filterYear}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      toast.success('Daily Attendance Excel downloaded successfully!');
     } catch (err) {
       console.error('Daily export error:', err);
       toast.error('Export failed. Please try again.');
     }
   };
 
-  // ── Export Monthly Attendance Register as Beautiful Excel ──
-  const handleExportExcel = () => {
+  // ── Export Monthly Attendance Register — via server-side API ──
+  const handleExportExcel = async () => {
     if (!monthlySummary) return;
     try {
-    const XLSX = XLSXStyle;
-    const s = monthlySummary;
-    const wb = XLSX.utils.book_new();
-
-    const firmFullName = s.employee.firmFullName || FIRM_NAMES[s.employee.firm] || s.employee.firm;
-    const firmCode = getFirmFromEmployeeId(s.employee.employeeId) || s.employee.firm || s.employee.department;
-
-    // ═══════════════════════════════════════════════════
-    // SHEET 1: Monthly Attendance Register (Day-by-Day)
-    // ═══════════════════════════════════════════════════
-    const headerRows: any[][] = [
-      [firmFullName],
-      ['MONTHLY ATTENDANCE REGISTER'],
-      [`Employee: ${s.employee.fullName} (${s.employee.employeeId})`, '', '', `Month: ${s.monthName} ${s.year}`, '', '', `Generated: ${new Date().toLocaleString('en-IN')}`],
-      [`Company: ${firmFullName}`, '', '', `Location: ${s.employee.location}`, '', '', `Designation: ${s.employee.designation || 'N/A'}`],
-      [`Shift Hours: ${formatHours(s.employee.shiftHours)} hrs`, '', '', `Department: ${s.employee.department || 'N/A'}`],
-      [],
-    ];
-    const ws1 = XLSX.utils.aoa_to_sheet(headerRows);
-
-    // Style header rows
-    const cols12 = ['A','B','C','D','E','F','G','H','I','J','K','L'];
-    cols12.forEach(c => {
-      safeStyle(ws1, `${c}1`, styleHeader());
-      safeStyle(ws1, `${c}2`, styleSubHeader('2D2D2D'));
-    });
-    for (let r = 3; r <= 5; r++) {
-      cols12.forEach(c => {
-        safeStyle(ws1, `${c}${r}`, { font: { sz: 9, color: { rgb: 'CCCCCC' } }, fill: { fgColor: { rgb: '2D2D2D' } } });
+      const params = new URLSearchParams({
+        employeeId: monthlyEmpId,
+        month: filterMonth,
+        year: filterYear,
       });
-    }
-
-    // Add day-by-day attendance data starting from row 7
-    const dayHeaders = [
-      'S.No', 'Date', 'Day', 'Check In', 'Check Out', 'Total Hrs',
-      'Status', 'OT Hrs', 'Sunday Hrs', 'PH Hrs', 'Late', 'Early Out',
-    ];
-    const dayRows: any[][] = [dayHeaders];
-
-    const daysInMonth = new Date(s.year, s.month, 0).getDate();
-    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-
-    for (let day = 1; day <= daysInMonth; day++) {
-      const dateStr = `${s.year}-${String(s.month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-      const dateObj = new Date(dateStr + 'T00:00:00');
-      const dayName = dayNames[dateObj.getDay()];
-      const isSunday = dateObj.getDay() === 0;
-
-      const rec = s.records.find((r: any) => {
-        const rDate = new Date(r.date);
-        return rDate.getFullYear() === s.year && rDate.getMonth() + 1 === s.month && rDate.getDate() === day;
-      });
-
-      if (rec) {
-        dayRows.push([
-          day,
-          dateObj.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
-          dayName,
-          rec.checkIn || '-',
-          rec.checkOut || '-',
-          rec.totalHours > 0 ? formatHours(rec.totalHours) : '0.00',
-          rec.status.charAt(0).toUpperCase() + rec.status.slice(1).replace('-', ' '),
-          rec.overtimeHours > 0 ? formatHours(rec.overtimeHours) : '0.00',
-          rec.sundayHours > 0 ? formatHours(rec.sundayHours) : '0.00',
-          rec.phHours > 0 ? formatHours(rec.phHours) : '0.00',
-          rec.lateEntry ? 'Yes' : '',
-          rec.earlyOut ? 'Yes' : '',
-        ]);
-      } else {
-        dayRows.push([
-          day,
-          dateObj.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
-          dayName,
-          '-', '-', isSunday ? '0.00' : '-',
-          isSunday ? 'Weekly Off' : 'No Record',
-          '0.00', '0.00', '0.00', '', '',
-        ]);
-      }
-    }
-
-    XLSX.utils.sheet_add_aoa(ws1, dayRows, { origin: 'A7' });
-
-    // Style column headers (row 7)
-    cols12.forEach(c => {
-      const cell = ws1[`${c}7`];
-      if (cell) cell.s = styleColHeader(EMERALD);
-    });
-
-    // Style data rows with color-coded status
-    for (let i = 0; i < dayRows.length - 1; i++) {
-      const row = i + 8;
-      const bg = i % 2 === 0 ? LIGHT_BG : undefined;
-      cols12.forEach(c => {
-        const cell = ws1[`${c}${row}`];
-        if (cell) {
-          if (c === 'G') { // Status column
-            const status = String(cell.v || '');
-            if (status === 'Present') cell.s = styleBold(EMERALD, LIGHT_GREEN);
-            else if (status === 'Absent') cell.s = styleBold(RED, LIGHT_RED);
-            else if (status === 'Late') cell.s = styleBold(AMBER, LIGHT_AMBER);
-            else if (status === 'Early Out') cell.s = styleBold('E11D48', LIGHT_RED);
-            else if (status === 'Half Day') cell.s = styleBold(AMBER, LIGHT_AMBER);
-            else if (status === 'Weekly Off') cell.s = styleBold(SKY, 'EFF6FF');
-            else if (status === 'Holiday') cell.s = styleBold(PURPLE, 'F5F3FF');
-            else cell.s = styleData(bg);
-          } else if (c === 'C') { // Day column - highlight Sundays
-            const dayVal = String(cell.v || '');
-            if (dayVal === 'Sunday') cell.s = styleBold(SKY, 'EFF6FF');
-            else cell.s = styleData(bg);
-          } else if (c === 'K') { // Late column
-            if (String(cell.v) === 'Yes') cell.s = styleBold(AMBER, LIGHT_AMBER);
-            else cell.s = styleData(bg);
-          } else if (c === 'L') { // Early Out column
-            if (String(cell.v) === 'Yes') cell.s = styleBold('E11D48', LIGHT_RED);
-            else cell.s = styleData(bg);
-          } else {
-            cell.s = styleData(bg);
-          }
-        }
-      });
-    }
-
-    ws1['!cols'] = [
-      { wch: 6 }, { wch: 16 }, { wch: 12 }, { wch: 10 }, { wch: 10 },
-      { wch: 10 }, { wch: 14 }, { wch: 10 }, { wch: 12 }, { wch: 10 },
-      { wch: 8 }, { wch: 10 },
-    ];
-    ws1['!merges'] = [
-      { s: { r: 0, c: 0 }, e: { r: 0, c: 11 } },
-      { s: { r: 1, c: 0 }, e: { r: 1, c: 11 } },
-    ];
-
-    XLSX.utils.book_append_sheet(wb, ws1, 'Attendance Register');
-
-    // ═══════════════════════════════════════════════════
-    // SHEET 2: Monthly Summary (Beautiful)
-    // ═══════════════════════════════════════════════════
-    const summaryData: any[][] = [
-      [firmFullName],
-      ['Attendance Summary'],
-      [`Employee: ${s.employee.fullName} (${s.employee.employeeId})`, '', '', `Month: ${s.monthName} ${s.year}`],
-      [],
-      ['Category', 'Count', '', 'Category', 'Count'],
-      ['Days Present', s.presentDays, '', 'Days Absent', s.absentDays],
-      ['Half Days', s.halfDays, '', 'Annual Leaves', s.annualLeaves || 0],
-      ['Unpaid Leaves', s.unpaidLeaves || 0, '', 'Public Holidays', s.holidayDays],
-      ['Working Days', s.totalWorkingDays, '', 'Weekly Offs', s.weeklyOffs],
-      ['Sundays', s.sundays, '', 'Sundays Earned', s.sundaysEarned || 0],
-      ['Late Entries', s.lateEntries, '', 'Early Outs', s.earlyOuts || 0],
-      [],
-      ['Hours Breakdown'],
-      ['Total Work Hours', formatHours(s.totalWorkHours)],
-      ['OT Hours', formatHours(s.totalOvertimeHours)],
-      ['Sunday Hours', formatHours(s.totalSundayHours)],
-      ['PH Hours', formatHours(s.totalPHHours)],
-      ['Total Hrs (incl. Sunday + PH)', formatHours(s.totalHrsInclSundayPH || (s.totalWorkHours + s.totalSundayHours + s.totalPHHours))],
-      ['Shift Hours', formatHours(s.employee.shiftHours)],
-    ];
-    const ws2 = XLSX.utils.aoa_to_sheet(summaryData);
-
-    // Style summary sheet
-    const cols5 = ['A','B','C','D','E'];
-    cols5.forEach(c => { safeStyle(ws2, `${c}1`, styleHeader()); });
-    cols5.forEach(c => { safeStyle(ws2, `${c}2`, styleSubHeader('2D2D2D')); });
-    cols5.forEach(c => { safeStyle(ws2, `${c}5`, styleColHeader(EMERALD)); });
-    // Color-coded rows
-    safeStyle(ws2, 'A6', styleBold(EMERALD, LIGHT_GREEN)); safeStyle(ws2, 'B6', styleBold(EMERALD, LIGHT_GREEN));
-    safeStyle(ws2, 'D6', styleBold(RED, LIGHT_RED)); safeStyle(ws2, 'E6', styleBold(RED, LIGHT_RED));
-    safeStyle(ws2, 'A7', styleBold(AMBER, LIGHT_AMBER)); safeStyle(ws2, 'B7', styleBold(AMBER, LIGHT_AMBER));
-    safeStyle(ws2, 'D7', styleBold(SKY, 'EFF6FF')); safeStyle(ws2, 'E7', styleBold(SKY, 'EFF6FF'));
-    safeStyle(ws2, 'A8', styleData(LIGHT_BG)); safeStyle(ws2, 'B8', styleData(LIGHT_BG));
-    safeStyle(ws2, 'D8', styleBold(PURPLE, 'F5F3FF')); safeStyle(ws2, 'E8', styleBold(PURPLE, 'F5F3FF'));
-    safeStyle(ws2, 'A9', styleData()); safeStyle(ws2, 'B9', styleData());
-    safeStyle(ws2, 'D9', styleBold(SKY, 'EFF6FF')); safeStyle(ws2, 'E9', styleBold(SKY, 'EFF6FF'));
-    safeStyle(ws2, 'A10', styleBold(SKY, 'EFF6FF')); safeStyle(ws2, 'B10', styleBold(SKY, 'EFF6FF'));
-    safeStyle(ws2, 'D10', styleBold(EMERALD, LIGHT_GREEN)); safeStyle(ws2, 'E10', styleBold(EMERALD, LIGHT_GREEN));
-    safeStyle(ws2, 'A11', styleBold(AMBER, LIGHT_AMBER)); safeStyle(ws2, 'B11', styleBold(AMBER, LIGHT_AMBER));
-    safeStyle(ws2, 'D11', styleBold('E11D48', LIGHT_RED)); safeStyle(ws2, 'E11', styleBold('E11D48', LIGHT_RED));
-    // Hours section
-    safeStyle(ws2, 'A13', styleSubHeader('2D2D2D')); cols5.filter(c => c !== 'A').forEach(c => { safeStyle(ws2, `${c}13`, styleSubHeader('2D2D2D')); });
-    for (let r = 14; r <= 20; r++) {
-      const bg2 = (r - 14) % 2 === 0 ? LIGHT_BG : undefined;
-      safeStyle(ws2, `A${r}`, styleData(bg2)); safeStyle(ws2, `B${r}`, styleBold(DARK, bg2));
-    }
-
-    ws2['!cols'] = [
-      { wch: 26 }, { wch: 14 }, { wch: 6 }, { wch: 26 }, { wch: 14 },
-    ];
-    ws2['!merges'] = [
-      { s: { r: 0, c: 0 }, e: { r: 0, c: 4 } },
-      { s: { r: 1, c: 0 }, e: { r: 1, c: 4 } },
-    ];
-    XLSX.utils.book_append_sheet(wb, ws2, 'Summary');
-
-    XLSX.writeFile(wb, `Monthly_Attendance_${s.employee.fullName}_${s.monthName}_${s.year}.xlsx`);
-    toast.success('Monthly Attendance Excel downloaded successfully!');
+      const res = await fetch(`/api/attendance/export-monthly?${params}`);
+      if (!res.ok) { toast.error('Export failed'); return; }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Monthly_Attendance_${monthlySummary.employee.fullName}_${monthlySummary.monthName}_${monthlySummary.year}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      toast.success('Monthly Attendance Excel downloaded successfully!');
     } catch (err) {
       console.error('Monthly export error:', err);
       toast.error('Export failed. Please try again.');

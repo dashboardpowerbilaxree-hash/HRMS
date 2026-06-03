@@ -65,8 +65,6 @@ export async function GET(request: NextRequest) {
       where: { employeeId, status: 'approved', startDate: { gte: startDate }, endDate: { lt: endDate } },
     });
     const leaveDays = leaves.reduce((sum, l) => sum + l.days, 0);
-    // Paid leaves exclude unpaid/LOP types — used for absentDays calculation
-    const paidLeaves = leaves.filter(l => l.type !== 'unpaid' && l.type !== 'UL' && l.type !== 'LOP').reduce((sum, l) => sum + l.days, 0);
 
     // Get holidays in this month
     const holidays = await db.holiday.findMany({
@@ -81,17 +79,23 @@ export async function GET(request: NextRequest) {
     }
 
     // Calculate summary
-    const presentDays = attendance.filter(a => ['present', 'late', 'early-out'].includes(a.status)).length;
+    // rawPresentDays = actual days with present/late/early-out status (working days only)
+    const rawPresentDays = attendance.filter(a => ['present', 'late', 'early-out'].includes(a.status)).length;
     const explicitAbsentDays = attendance.filter(a => a.status === 'absent').length;
     const halfDays = attendance.filter(a => a.status === 'half-day' || a.halfDay).length;
     const weeklyOffs = attendance.filter(a => a.isWeeklyOff || a.isSunday).length;
     // Only count holidays where the employee actually worked (totalHours > 0)
     const holidayAttendance = attendance.filter(a => a.isHoliday && a.totalHours > 0).length;
-
-    // Effective present days (consistent with payroll calculation):
-    // Includes half-days as 0.5 and holiday attendance + weekly off worked
+    // Count Sunday/weekly-off days where employee worked
     const weeklyOffWorked = attendance.filter(a => a.isWeeklyOff && a.totalHours > 0).length;
-    const effectivePresentDays = presentDays + halfDays * 0.5 + holidayAttendance + weeklyOffWorked;
+
+    // Present days for DISPLAY = full present days only (half-days tracked separately)
+    // Sunday/holiday work is tracked separately — it should NOT inflate present count
+    // because working on a Sunday does NOT compensate for being absent on a working day
+    const presentDays = rawPresentDays;
+
+    // For salary: effectivePresentDays includes half-days as 0.5
+    const effectivePresentDays = rawPresentDays + halfDays * 0.5;
 
     const totalWorkHours = Math.round(attendance.reduce((sum, a) => sum + a.totalHours, 0) * 100) / 100;
     const totalOvertimeHours = Math.round(attendance.reduce((sum, a) => sum + a.overtimeHours, 0) * 100) / 100;
@@ -103,12 +107,59 @@ export async function GET(request: NextRequest) {
     // Working days in month = total days - sundays - holidays
     const totalWorkingDays = daysInMonth - sundays - holidayDays;
 
-    // Total attendance = present + half days counted as 0.5
-    const totalAttendance = presentDays + halfDays * 0.5;
+    // Total attendance = present days (full present + half as 0.5)
+    const totalAttendance = effectivePresentDays;
 
-    // Absent days = totalWorkingDays - effectivePresentDays - paidLeaves
-    // (Unpaid/LOP leaves are NOT subtracted — they count as absent)
-    const absentDays = Math.max(0, totalWorkingDays - effectivePresentDays - paidLeaves);
+    // ─── Calculate EFFECTIVE paid leave days ───
+    // Only count leave days that fall on WORKING days (not Sundays, not holidays)
+    // AND where the employee was NOT already present (no double-counting)
+    const holidayDateStrs = new Set(
+      holidays.map(h => {
+        const hd = new Date(h.date);
+        return `${hd.getFullYear()}-${String(hd.getMonth() + 1).padStart(2, '0')}-${String(hd.getDate()).padStart(2, '0')}`;
+      })
+    );
+
+    // Set of dates where employee was present/half-day/absent (has an attendance record)
+    const presentDateStrs = new Set();
+    const absentDateStrs = new Set();
+    for (const a of attendance) {
+      const ad = new Date(a.date);
+      const dateStr = `${ad.getFullYear()}-${String(ad.getMonth() + 1).padStart(2, '0')}-${String(ad.getDate()).padStart(2, '0')}`;
+      if (['present', 'late', 'early-out', 'half-day'].includes(a.status)) {
+        presentDateStrs.add(dateStr);
+      }
+      if (a.status === 'absent') {
+        absentDateStrs.add(dateStr);
+      }
+    }
+
+    // Count leave days on working days where employee was NOT present
+    let effectivePaidLeaves = 0;
+    let effectiveUnpaidLeaves = 0;
+    for (const leave of leaves) {
+      const isUnpaid = leave.type === 'unpaid' || leave.type === 'UL' || leave.type === 'LOP';
+      let d = new Date(leave.startDate);
+      const end = new Date(leave.endDate);
+      while (d <= end) {
+        const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        const isSunday = d.getDay() === 0;
+        const isHoliday = holidayDateStrs.has(dateStr);
+        // Only count if it's a working day AND employee was NOT already present
+        if (!isSunday && !isHoliday && !presentDateStrs.has(dateStr)) {
+          if (isUnpaid) {
+            effectiveUnpaidLeaves++;
+          } else {
+            effectivePaidLeaves++;
+          }
+        }
+        d.setDate(d.getDate() + 1);
+      }
+    }
+
+    // Absent days = totalWorkingDays - fullPresentDays - halfDays - effectivePaidLeaves - effectiveUnpaidLeaves
+    // Half-days are tracked separately, NOT counted as absent
+    const absentDays = Math.max(0, totalWorkingDays - presentDays - halfDays - effectivePaidLeaves - effectiveUnpaidLeaves);
 
     // Determine firm from employee ID prefix (fallback to employee.firm)
     const firmFromId = getFirmFromEmployeeId(employeeId);
@@ -137,11 +188,14 @@ export async function GET(request: NextRequest) {
     // ─── LAXREE SALARY CALCULATION (consistent with payroll) ───
     // Per Day Rate = monthlySalary / daysInMonth
     // Hourly Rate = perDayRate / shiftHours
-    // Base Salary = monthlySalary - (perDayRate × absentDays)
+    // Base Salary = monthlySalary - (perDayRate × salaryAbsentDays)
+    //   where salaryAbsentDays = totalWorkingDays - effectivePresentDays - effectivePaidLeaves - effectiveUnpaidLeaves
+    //   effectivePresentDays includes half-days as 0.5
     // OT Amount = otHours × hourlyRate (1x normal rate, NOT 1.5x)
+    const salaryAbsentDays = Math.max(0, totalWorkingDays - effectivePresentDays - effectivePaidLeaves - effectiveUnpaidLeaves);
     const perDayRate = Math.round((employee.monthlySalary / daysInMonth) * 100) / 100;
     const calculatedHourlyRate = Math.round((perDayRate / employee.shiftHours) * 100) / 100;
-    const calculatedBaseSalary = Math.round((employee.monthlySalary - (perDayRate * absentDays)) * 100) / 100;
+    const calculatedBaseSalary = Math.round((employee.monthlySalary - (perDayRate * salaryAbsentDays)) * 100) / 100;
     const calculatedOtAmount = Math.round(otHoursFromOT * calculatedHourlyRate * 100) / 100;
     const calculatedGrossSalary = Math.round((calculatedBaseSalary + calculatedOtAmount) * 100) / 100;
 
@@ -157,13 +211,13 @@ export async function GET(request: NextRequest) {
       monthName: new Date(year, month - 1, 1).toLocaleString('en-IN', { month: 'long' }),
       daysInMonth,
       totalWorkingDays,
-      presentDays: effectivePresentDays,
-      rawPresentDays: presentDays,
+      presentDays,
+      rawPresentDays,
       absentDays,
       leaveDays,
-      paidLeaves,
-      annualLeaves,
-      unpaidLeaves,
+      paidLeaves: effectivePaidLeaves,
+      annualLeaves: effectivePaidLeaves,
+      unpaidLeaves: effectiveUnpaidLeaves,
       halfDays,
       holidayDays,
       weeklyOffs,

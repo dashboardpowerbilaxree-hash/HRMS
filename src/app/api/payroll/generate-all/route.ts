@@ -54,23 +54,61 @@ export async function POST(request: NextRequest) {
         const otHours = Math.round(overtimeRecords.reduce((sum, o) => sum + o.hours, 0) * 100) / 100;
 
         // Attendance counts
-        const presentDays = attendance.filter(a => ['present', 'late', 'early-out'].includes(a.status)).length;
+        const rawPresentDays = attendance.filter(a => ['present', 'late', 'early-out'].includes(a.status)).length;
         const halfDays = attendance.filter(a => a.status === 'half-day' || a.status === 'half_day').length;
         const holidayWorked = attendance.filter(a => a.isHoliday && a.totalHours > 0).length;
         const weeklyOffWorked = attendance.filter(a => a.isWeeklyOff && a.totalHours > 0).length;
 
-        // Effective present days
-        const effectivePresentDays = presentDays + halfDays * 0.5 + holidayWorked + weeklyOffWorked;
+        // Present days = full present days only (half-days tracked separately for display)
+        // Sunday/holiday work does NOT inflate present count
+        const presentDays = rawPresentDays;
+        // For salary: effectivePresentDays includes half-days as 0.5
+        const effectivePresentDays = rawPresentDays + halfDays * 0.5;
 
         const leaves = await db.leave.findMany({
           where: { employeeId: emp.employeeId, status: 'approved', startDate: { gte: startDate }, endDate: { lt: endDate } },
         });
-        const paidLeaves = leaves.filter(l => l.type !== 'unpaid' && l.type !== 'UL' && l.type !== 'LOP').reduce((sum, l) => sum + l.days, 0);
 
-        const absentDays = Math.max(0, totalWorkingDays - effectivePresentDays - paidLeaves);
+        // Build sets for effective leave calculation
+        const holidayDateStrs = new Set(
+          holidays.map(h => {
+            const hd = new Date(h.date);
+            return `${hd.getFullYear()}-${String(hd.getMonth() + 1).padStart(2, '0')}-${String(hd.getDate()).padStart(2, '0')}`;
+          })
+        );
+        const presentDateStrs = new Set();
+        for (const a of attendance) {
+          if (['present', 'late', 'early-out', 'half-day', 'half_day'].includes(a.status)) {
+            const ad = new Date(a.date);
+            presentDateStrs.add(`${ad.getFullYear()}-${String(ad.getMonth() + 1).padStart(2, '0')}-${String(ad.getDate()).padStart(2, '0')}`);
+          }
+        }
 
-        // ─── BASE SALARY = monthlySalary - (perDayRate × absentDays) ───
-        const baseSalary = Math.round((emp.monthlySalary - (perDayRate * absentDays)) * 100) / 100;
+        let effectivePaidLeaves = 0;
+        let effectiveUnpaidLeaves = 0;
+        for (const leave of leaves) {
+          const isUnpaid = leave.type === 'unpaid' || leave.type === 'UL' || leave.type === 'LOP';
+          let d = new Date(leave.startDate);
+          const end = new Date(leave.endDate);
+          while (d <= end) {
+            const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            const isSunday = d.getDay() === 0;
+            const isHoliday = holidayDateStrs.has(dateStr);
+            if (!isSunday && !isHoliday && !presentDateStrs.has(dateStr)) {
+              if (isUnpaid) effectiveUnpaidLeaves++;
+              else effectivePaidLeaves++;
+            }
+            d.setDate(d.getDate() + 1);
+          }
+        }
+
+        // Absent days = totalWorkingDays - fullPresentDays - halfDays - effectivePaidLeaves - effectiveUnpaidLeaves
+        const absentDays = Math.max(0, totalWorkingDays - presentDays - halfDays - effectivePaidLeaves - effectiveUnpaidLeaves);
+
+        // ─── BASE SALARY = monthlySalary - (perDayRate × salaryAbsentDays) ───
+        // salaryAbsentDays uses effectivePresentDays (includes half-days as 0.5)
+        const salaryAbsentDays = Math.max(0, totalWorkingDays - effectivePresentDays - effectivePaidLeaves - effectiveUnpaidLeaves);
+        const baseSalary = Math.round((emp.monthlySalary - (perDayRate * salaryAbsentDays)) * 100) / 100;
 
         // ─── ACTUAL Sunday/PH worked hours (for display/records only) ───
         const sundayWorkedHrs = Math.round(attendance.filter(a => a.isSunday && a.totalHours > 0).reduce((sum, a) => sum + a.totalHours, 0) * 100) / 100;
@@ -95,10 +133,10 @@ export async function POST(request: NextRequest) {
           sundayHrs: sundayWorkedHrs,
           phHours: phWorkedHrs,
           totalHrs: totalWorkedHrs,
-          presentDays: effectivePresentDays,
+          presentDays: presentDays,
           absentDays,
           holidayDays,
-          paidLeaves,
+          paidLeaves: effectivePaidLeaves,
           grossSalary,
           tdsDeduction: 0,
           loanDeduction: 0,
