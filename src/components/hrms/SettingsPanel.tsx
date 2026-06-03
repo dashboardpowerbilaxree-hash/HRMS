@@ -206,7 +206,7 @@ export function SettingsPanel() {
               </div>
               <div className="flex items-start gap-2">
                 <Badge variant="outline" className="text-[9px] h-4 px-1.5 mt-0.5 shrink-0">Daily</Badge>
-                <span>Net = (Daily Rate × Days Present) + Sunday Amt + PH Amt − Deductions</span>
+                <span>Net = (Daily Rate × Days Present) + Sunday Amt − Deductions</span>
               </div>
               <Separator />
               <p className="text-xs">

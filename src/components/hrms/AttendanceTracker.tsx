@@ -1173,7 +1173,7 @@ export function AttendanceTracker() {
                           <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider border-r border-emerald-600/30">OT Hrs</th>
                           <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider border-r border-emerald-600/30">Sundays Earned</th>
                           <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider border-r border-emerald-600/30">Sunday Hrs</th>
-                          <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider">Total Hrs (incl. Sunday + PH)</th>
+                          <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider">Total Hrs (incl. Sunday)</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1188,21 +1188,20 @@ export function AttendanceTracker() {
                           <td className="px-3 py-3 font-bold text-yellow-600 dark:text-yellow-400 border-r border-border/30">{formatHours(monthlySummary.totalOvertimeHours)}</td>
                           <td className="px-3 py-3 text-sky-600 dark:text-sky-400 border-r border-border/30">{monthlySummary.sundaysEarned || 0}</td>
                           <td className="px-3 py-3 text-blue-600 dark:text-blue-400 border-r border-border/30">{formatHours(monthlySummary.sundayEarnedHours || monthlySummary.totalSundayHours)}</td>
-                          <td className="px-3 py-3 font-bold text-gold">{formatHours(monthlySummary.totalHrsInclSundayPH || (monthlySummary.totalWorkHours + monthlySummary.totalSundayHours + monthlySummary.totalPHHours))}</td>
+                          <td className="px-3 py-3 font-bold text-gold">{formatHours((monthlySummary.totalWorkHours || 0) + (monthlySummary.totalSundayHours || 0))}</td>
                         </tr>
                       </tbody>
                     </table>
                   </div>
 
                   {/* Additional Info Row */}
-                  <div className="grid grid-cols-4 sm:grid-cols-7 gap-2">
+                  <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
                     {[
                       { label: 'Working Days', value: monthlySummary.totalWorkingDays, color: 'text-foreground' },
                       { label: 'Weekly Offs', value: monthlySummary.weeklyOffs, color: 'text-sky-500' },
                       { label: 'Sundays', value: monthlySummary.sundays, color: 'text-blue-500' },
                       { label: 'Late Entries', value: monthlySummary.lateEntries, color: 'text-amber-500' },
                       { label: 'Early Outs', value: monthlySummary.earlyOuts || 0, color: 'text-rose-500' },
-                      { label: 'PH Hours', value: `${formatHours(monthlySummary.totalPHHours)}h`, color: 'text-purple-500' },
                       { label: 'Shift Hrs', value: `${formatHours(monthlySummary.employee.shiftHours)}h`, color: 'text-muted-foreground' },
                     ].map(item => (
                       <div key={item.label} className="p-2 rounded-lg bg-muted/20 text-center">

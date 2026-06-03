@@ -849,7 +849,7 @@ export function PayrollAutomation() {
                     <TableHead className="hidden lg:table-cell">OT Hrs</TableHead>
                     <TableHead className="hidden sm:table-cell">OT Amount</TableHead>
                     <TableHead className="hidden lg:table-cell">Sunday Hrs</TableHead>
-                    <TableHead className="hidden lg:table-cell">PH Hrs</TableHead>
+
                     <TableHead>Gross</TableHead>
                     <TableHead className="hidden md:table-cell">Deductions</TableHead>
                     <TableHead className="hidden xl:table-cell">Arrear</TableHead>
@@ -861,7 +861,7 @@ export function PayrollAutomation() {
                   {loading ? (
                     Array.from({ length: 5 }).map((_, i) => (
                       <TableRow key={i}>
-                        {Array.from({ length: 13 }).map((_, j) => (
+                        {Array.from({ length: 12 }).map((_, j) => (
                           <TableCell key={j}>
                             <div className="h-4 bg-muted/50 rounded animate-pulse" />
                           </TableCell>
@@ -870,7 +870,7 @@ export function PayrollAutomation() {
                     ))
                   ) : filteredRecords.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={13} className="text-center py-12 text-muted-foreground">
+                      <TableCell colSpan={12} className="text-center py-12 text-muted-foreground">
                         <FileText className="w-8 h-8 mx-auto mb-2 opacity-30" />
                         <p>No payroll records for this period.</p>
                         <p className="text-xs mt-1">Click &quot;Generate All&quot; to create payroll records.</p>
@@ -926,11 +926,7 @@ export function PayrollAutomation() {
                             <span className="text-blue-600 dark:text-blue-400 font-medium">{formatHours(p.sundayHrs)}h</span>
                           ) : '—'}
                         </TableCell>
-                        <TableCell className="hidden lg:table-cell text-sm whitespace-nowrap">
-                          {(p.phHours || 0) > 0 ? (
-                            <span className="text-purple-600 dark:text-purple-400 font-medium">{formatHours(p.phHours)}h</span>
-                          ) : '—'}
-                        </TableCell>
+
                         <TableCell className="text-sm whitespace-nowrap">
                           ₹{p.grossSalary.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
                         </TableCell>

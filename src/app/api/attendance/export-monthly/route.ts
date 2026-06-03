@@ -153,11 +153,11 @@ export async function GET(request: NextRequest) {
     // Attendance calculations (consistent with monthly-summary API)
     const rawPresentDays = attendance.filter(a => ['present', 'late', 'early-out'].includes(a.status)).length;
     const halfDays = attendance.filter(a => a.status === 'half-day' || a.halfDay).length;
-    const presentDays = rawPresentDays; // Full present days only (half-days tracked separately)
-    const effectivePresentDays = rawPresentDays + halfDays * 0.5; // For salary calculation
+    const presentDays = rawPresentDays;
+    const effectivePresentDays = rawPresentDays + halfDays * 0.5;
     const totalWorkingDays = daysInMonth - sundays - holidayDays;
 
-    // Effective paid leave calculation (same as monthly-summary API)
+    // Effective paid leave calculation
     const holidayDateStrs = new Set(
       holidays.map(h => {
         const hd = new Date(h.date);
@@ -195,11 +195,30 @@ export async function GET(request: NextRequest) {
     const firmFullName = FIRM_NAMES[effectiveFirm] || employee.firm;
     const monthName = MONTHS[month - 1];
 
+    // Computed totals
+    const totalWorkHours = Math.round(attendance.reduce((sum, a) => sum + a.totalHours, 0) * 100) / 100;
+    const totalOvertimeHours = Math.round(attendance.reduce((sum, a) => sum + a.overtimeHours, 0) * 100) / 100;
+    const totalSundayHours = Math.round(attendance.reduce((sum, a) => sum + a.sundayHours, 0) * 100) / 100;
+    const lateEntries = attendance.filter(a => a.lateEntry).length;
+    const earlyOuts = attendance.filter(a => a.earlyOut).length;
+    const weeklyOffs = attendance.filter(a => a.isWeeklyOff || a.isSunday).length;
+    const annualLeaves = effectivePaidLeaves;
+    const unpaidLeaves = effectiveUnpaidLeaves;
+    const sundaysEarned = employee.employmentType === 'Full Time' || !employee.employmentType ? Math.floor(rawPresentDays / 6) : 0;
+    const sundayEarnedHours = Math.round(sundaysEarned * employee.shiftHours * 100) / 100;
+    const totalHrsInclSunday = Math.round((totalWorkHours + totalSundayHours) * 100) / 100;
+
     // ═══════════════════════════════════════════════════
     // SHEET 1: Monthly Attendance Register (Day-by-Day)
     // ═══════════════════════════════════════════════════
     const wb = XLSXStyle.utils.book_new();
 
+    // ── Row 1: Company Name (merged) ──
+    // ── Row 2: Title (merged) ──
+    // ── Row 3: Employee info + Month ──
+    // ── Row 4: Company + Location + Designation ──
+    // ── Row 5: Shift Hours + Department ──
+    // ── Row 6: empty ──
     const headerRows: any[][] = [
       [firmFullName],
       ['MONTHLY ATTENDANCE REGISTER'],
@@ -210,20 +229,22 @@ export async function GET(request: NextRequest) {
     ];
     const ws1 = XLSXStyle.utils.aoa_to_sheet(headerRows);
 
-    const cols12 = ['A','B','C','D','E','F','G','H','I','J','K','L'];
-    cols12.forEach(c => {
+    // Style header rows (11 columns now, no PH Hrs column)
+    const cols11 = ['A','B','C','D','E','F','G','H','I','J','K'];
+    cols11.forEach(c => {
       safeStyle(ws1, `${c}1`, styleHeader());
       safeStyle(ws1, `${c}2`, styleSubHeader('2D2D2D'));
     });
     for (let r = 3; r <= 5; r++) {
-      cols12.forEach(c => {
+      cols11.forEach(c => {
         safeStyle(ws1, `${c}${r}`, { font: { sz: 9, color: { rgb: 'CCCCCC' } }, fill: { fgColor: { rgb: '2D2D2D' } } });
       });
     }
 
+    // ── Row 7: Column headers for daily register (NO PH Hrs column) ──
     const dayHeaders = [
       'S.No', 'Date', 'Day', 'Check In', 'Check Out', 'Total Hrs',
-      'Status', 'OT Hrs', 'Sunday Hrs', 'PH Hrs', 'Late', 'Early Out',
+      'Status', 'OT Hrs', 'Sunday Hrs', 'Late', 'Early Out',
     ];
     const dayRows: any[][] = [dayHeaders];
     const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -250,7 +271,6 @@ export async function GET(request: NextRequest) {
           rec.status.charAt(0).toUpperCase() + rec.status.slice(1).replace('-', ' '),
           rec.overtimeHours > 0 ? formatHours(rec.overtimeHours) : '0.00',
           rec.sundayHours > 0 ? formatHours(rec.sundayHours) : '0.00',
-          rec.phHours > 0 ? formatHours(rec.phHours) : '0.00',
           rec.lateEntry ? 'Yes' : '',
           rec.earlyOut ? 'Yes' : '',
         ]);
@@ -261,22 +281,24 @@ export async function GET(request: NextRequest) {
           dayName,
           '-', '-', isSunday ? '0.00' : '-',
           isSunday ? 'Weekly Off' : 'No Record',
-          '0.00', '0.00', '0.00', '', '',
+          '0.00', '0.00', '', '',
         ]);
       }
     }
 
     XLSXStyle.utils.sheet_add_aoa(ws1, dayRows, { origin: 'A7' });
 
-    cols12.forEach(c => {
+    // Style column headers
+    cols11.forEach(c => {
       const cell = ws1[`${c}7`];
       if (cell) cell.s = styleColHeader(EMERALD);
     });
 
+    // Style data rows
     for (let i = 0; i < dayRows.length - 1; i++) {
       const row = i + 8;
       const bg = i % 2 === 0 ? LIGHT_BG : undefined;
-      cols12.forEach(c => {
+      cols11.forEach(c => {
         const cell = ws1[`${c}${row}`];
         if (cell) {
           if (c === 'G') {
@@ -293,10 +315,10 @@ export async function GET(request: NextRequest) {
             const dayVal = String(cell.v || '');
             if (dayVal === 'Sunday') cell.s = styleBold(SKY, 'EFF6FF');
             else cell.s = styleData(bg);
-          } else if (c === 'K') {
+          } else if (c === 'J') {
             if (String(cell.v) === 'Yes') cell.s = styleBold(AMBER, LIGHT_AMBER);
             else cell.s = styleData(bg);
-          } else if (c === 'L') {
+          } else if (c === 'K') {
             if (String(cell.v) === 'Yes') cell.s = styleBold('E11D48', LIGHT_RED);
             else cell.s = styleData(bg);
           } else {
@@ -308,84 +330,100 @@ export async function GET(request: NextRequest) {
 
     ws1['!cols'] = [
       { wch: 6 }, { wch: 16 }, { wch: 12 }, { wch: 10 }, { wch: 10 },
-      { wch: 10 }, { wch: 14 }, { wch: 10 }, { wch: 12 }, { wch: 10 },
+      { wch: 10 }, { wch: 14 }, { wch: 10 }, { wch: 12 },
       { wch: 8 }, { wch: 10 },
     ];
     ws1['!merges'] = [
-      { s: { r: 0, c: 0 }, e: { r: 0, c: 11 } },
-      { s: { r: 1, c: 0 }, e: { r: 1, c: 11 } },
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 10 } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: 10 } },
     ];
 
     XLSXStyle.utils.book_append_sheet(wb, ws1, 'Attendance Register');
 
     // ═══════════════════════════════════════════════════
-    // SHEET 2: Monthly Summary (Beautiful)
+    // SHEET 2: Monthly Summary — Match Dashboard Format
     // ═══════════════════════════════════════════════════
-    const totalWorkHours = Math.round(attendance.reduce((sum, a) => sum + a.totalHours, 0) * 100) / 100;
-    const totalOvertimeHours = Math.round(attendance.reduce((sum, a) => sum + a.overtimeHours, 0) * 100) / 100;
-    const totalSundayHours = Math.round(attendance.reduce((sum, a) => sum + a.sundayHours, 0) * 100) / 100;
-    const totalPHHours = Math.round(attendance.reduce((sum, a) => sum + a.phHours, 0) * 100) / 100;
-    const lateEntries = attendance.filter(a => a.lateEntry).length;
-    const earlyOuts = attendance.filter(a => a.earlyOut).length;
-    const weeklyOffs = attendance.filter(a => a.isWeeklyOff || a.isSunday).length;
-    const annualLeaves = effectivePaidLeaves;
-    const unpaidLeaves = effectiveUnpaidLeaves;
-    const sundaysEarned = employee.employmentType === 'Full Time' || !employee.employmentType ? Math.floor(rawPresentDays / 6) : 0;
-    const sundayEarnedHours = Math.round(sundaysEarned * employee.shiftHours * 100) / 100;
-    const totalHrsInclSundayPH = Math.round((totalWorkHours + totalSundayHours + totalPHHours) * 100) / 100;
+    // Layout matching the reference image:
+    // Row 1: Company Name (merged)
+    // Row 2: "Attendance Summary" (merged)
+    // Row 3: Employee info | Month
+    // Row 4: empty
+    // Row 5: Summary header row (green) — same as dashboard
+    // Row 6: Summary data row (dark bg, colored values)
+    // Row 7: empty
+    // Row 8: Additional info header
+    // Row 9: Additional info data
 
     const summaryData: any[][] = [
       [firmFullName],
       ['Attendance Summary'],
       [`Employee: ${employee.fullName} (${employee.employeeId})`, '', '', `Month: ${monthName} ${year}`],
       [],
-      ['Category', 'Count', '', 'Category', 'Count'],
-      ['Days Present', presentDays, '', 'Days Absent', absentDays],
-      ['Half Days', halfDays, '', 'Annual Leaves', annualLeaves],
-      ['Unpaid Leaves', unpaidLeaves, '', 'Public Holidays', holidayDays],
-      ['Working Days', totalWorkingDays, '', 'Weekly Offs', weeklyOffs],
-      ['Sundays', sundays, '', 'Sundays Earned', sundaysEarned],
-      ['Late Entries', lateEntries, '', 'Early Outs', earlyOuts],
+      // Row 5: Summary headers matching dashboard (NO PH Hours column)
+      ['Days Present', 'Days Absent', 'Half Days', 'AL', 'UL', 'PH', 'Total Hrs Worked', 'OT Hrs', 'Sundays Earned', 'Sunday Hrs', 'Total Hrs (incl. Sunday)'],
+      // Row 6: Summary values
+      [presentDays, absentDays, halfDays, annualLeaves, unpaidLeaves, holidayDays, formatHours(totalWorkHours), formatHours(totalOvertimeHours), sundaysEarned, formatHours(sundayEarnedHours), formatHours(totalHrsInclSunday)],
       [],
-      ['Hours Breakdown'],
-      ['Total Work Hours', formatHours(totalWorkHours)],
-      ['OT Hours', formatHours(totalOvertimeHours)],
-      ['Sunday Hours', formatHours(totalSundayHours)],
-      ['PH Hours', formatHours(totalPHHours)],
-      ['Total Hrs (incl. Sunday + PH)', formatHours(totalHrsInclSundayPH)],
-      ['Shift Hours', formatHours(employee.shiftHours)],
+      // Row 8: Additional info headers
+      ['Working Days', 'Weekly Offs', 'Sundays', 'Late Entries', 'Early Outs', 'Shift Hrs'],
+      // Row 9: Additional info values
+      [totalWorkingDays, weeklyOffs, sundays, lateEntries, earlyOuts, formatHours(employee.shiftHours)],
     ];
+
     const ws2 = XLSXStyle.utils.aoa_to_sheet(summaryData);
 
-    const cols5 = ['A','B','C','D','E'];
-    cols5.forEach(c => { safeStyle(ws2, `${c}1`, styleHeader()); });
-    cols5.forEach(c => { safeStyle(ws2, `${c}2`, styleSubHeader('2D2D2D')); });
-    cols5.forEach(c => { safeStyle(ws2, `${c}5`, styleColHeader(EMERALD)); });
-    safeStyle(ws2, 'A6', styleBold(EMERALD, LIGHT_GREEN)); safeStyle(ws2, 'B6', styleBold(EMERALD, LIGHT_GREEN));
-    safeStyle(ws2, 'D6', styleBold(RED, LIGHT_RED)); safeStyle(ws2, 'E6', styleBold(RED, LIGHT_RED));
-    safeStyle(ws2, 'A7', styleBold(AMBER, LIGHT_AMBER)); safeStyle(ws2, 'B7', styleBold(AMBER, LIGHT_AMBER));
-    safeStyle(ws2, 'D7', styleBold(SKY, 'EFF6FF')); safeStyle(ws2, 'E7', styleBold(SKY, 'EFF6FF'));
-    safeStyle(ws2, 'A8', styleData(LIGHT_BG)); safeStyle(ws2, 'B8', styleData(LIGHT_BG));
-    safeStyle(ws2, 'D8', styleBold(PURPLE, 'F5F3FF')); safeStyle(ws2, 'E8', styleBold(PURPLE, 'F5F3FF'));
-    safeStyle(ws2, 'A9', styleData()); safeStyle(ws2, 'B9', styleData());
-    safeStyle(ws2, 'D9', styleBold(SKY, 'EFF6FF')); safeStyle(ws2, 'E9', styleBold(SKY, 'EFF6FF'));
-    safeStyle(ws2, 'A10', styleBold(SKY, 'EFF6FF')); safeStyle(ws2, 'B10', styleBold(SKY, 'EFF6FF'));
-    safeStyle(ws2, 'D10', styleBold(EMERALD, LIGHT_GREEN)); safeStyle(ws2, 'E10', styleBold(EMERALD, LIGHT_GREEN));
-    safeStyle(ws2, 'A11', styleBold(AMBER, LIGHT_AMBER)); safeStyle(ws2, 'B11', styleBold(AMBER, LIGHT_AMBER));
-    safeStyle(ws2, 'D11', styleBold('E11D48', LIGHT_RED)); safeStyle(ws2, 'E11', styleBold('E11D48', LIGHT_RED));
-    safeStyle(ws2, 'A13', styleSubHeader('2D2D2D')); cols5.filter(c => c !== 'A').forEach(c => { safeStyle(ws2, `${c}13`, styleSubHeader('2D2D2D')); });
-    for (let r = 14; r <= 20; r++) {
-      const bg2 = (r - 14) % 2 === 0 ? LIGHT_BG : undefined;
-      safeStyle(ws2, `A${r}`, styleData(bg2)); safeStyle(ws2, `B${r}`, styleBold(DARK, bg2));
-    }
+    const cols11s = ['A','B','C','D','E','F','G','H','I','J','K'];
+
+    // Row 1: Company header
+    cols11s.forEach(c => { safeStyle(ws2, `${c}1`, styleHeader()); });
+    // Row 2: Sub header
+    cols11s.forEach(c => { safeStyle(ws2, `${c}2`, styleSubHeader('2D2D2D')); });
+    // Row 3: Employee info
+    ['A','D'].forEach(c => {
+      safeStyle(ws2, `${c}3`, { font: { sz: 10, color: { rgb: 'CCCCCC' } }, fill: { fgColor: { rgb: '2D2D2D' } } });
+    });
+
+    // Row 5: Summary column headers (green header like dashboard)
+    cols11s.forEach(c => {
+      safeStyle(ws2, `${c}5`, styleColHeader(EMERALD));
+    });
+
+    // Row 6: Summary data values (colored like dashboard)
+    safeStyle(ws2, 'A6', styleBold(EMERALD, LIGHT_GREEN));  // Days Present - green
+    safeStyle(ws2, 'B6', styleBold(RED, LIGHT_RED));          // Days Absent - red
+    safeStyle(ws2, 'C6', styleBold(AMBER, LIGHT_AMBER));      // Half Days - orange
+    safeStyle(ws2, 'D6', styleBold(SKY, 'EFF6FF'));           // AL - blue
+    safeStyle(ws2, 'E6', styleBold(AMBER, LIGHT_AMBER));      // UL - amber
+    safeStyle(ws2, 'F6', styleBold(PURPLE, 'F5F3FF'));        // PH - purple
+    safeStyle(ws2, 'G6', styleBold(CYAN, LIGHT_BG));          // Total Hrs Worked - cyan
+    safeStyle(ws2, 'H6', styleBold(AMBER, LIGHT_AMBER));      // OT Hrs - yellow/amber
+    safeStyle(ws2, 'I6', styleBold(SKY, 'EFF6FF'));           // Sundays Earned - blue
+    safeStyle(ws2, 'J6', styleBold(SKY, 'EFF6FF'));           // Sunday Hrs - blue
+    safeStyle(ws2, 'K6', styleBold(GOLD, LIGHT_BG));          // Total Hrs (incl. Sunday) - gold
+
+    // Row 8: Additional info headers
+    ['A','B','C','D','E','F'].forEach(c => {
+      safeStyle(ws2, `${c}8`, styleColHeader('2D2D2D'));
+    });
+
+    // Row 9: Additional info values
+    safeStyle(ws2, 'A9', styleBold(DARK));         // Working Days
+    safeStyle(ws2, 'B9', styleBold(SKY));           // Weekly Offs
+    safeStyle(ws2, 'C9', styleBold(SKY));           // Sundays
+    safeStyle(ws2, 'D9', styleBold(AMBER));         // Late Entries
+    safeStyle(ws2, 'E9', styleBold('E11D48'));      // Early Outs
+    safeStyle(ws2, 'F9', styleBold('666666'));      // Shift Hrs
 
     ws2['!cols'] = [
-      { wch: 26 }, { wch: 14 }, { wch: 6 }, { wch: 26 }, { wch: 14 },
+      { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 8 }, { wch: 8 },
+      { wch: 8 }, { wch: 16 }, { wch: 10 }, { wch: 16 }, { wch: 12 },
+      { wch: 22 },
     ];
     ws2['!merges'] = [
-      { s: { r: 0, c: 0 }, e: { r: 0, c: 4 } },
-      { s: { r: 1, c: 0 }, e: { r: 1, c: 4 } },
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 10 } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: 10 } },
     ];
+
     XLSXStyle.utils.book_append_sheet(wb, ws2, 'Summary');
 
     // Generate buffer

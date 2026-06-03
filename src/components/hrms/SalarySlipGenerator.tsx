@@ -384,8 +384,7 @@ export function SalarySlipGenerator() {
       [],
       ['Hours Breakdown'],
       ['Total Worked Hrs', formatHours(p.totalWorkedHrs || 0), '', 'OT Hours', formatHours(p.otHours || 0)],
-      ['Sunday Hours', formatHours(p.sundayHrs || 0), '', 'PH Hours', formatHours(p.phHours || 0)],
-      ['OT Amount', (p.otAmount || 0).toLocaleString('en-IN'), '', '', ''],
+      ['Sunday Hours', formatHours(p.sundayHrs || 0), '', 'OT Amount', (p.otAmount || 0).toLocaleString('en-IN')],
     ];
 
     const ws2 = XLSX.utils.aoa_to_sheet(detailData);
