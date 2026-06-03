@@ -164,7 +164,36 @@ export async function GET(request: NextRequest) {
     const rawPresentDays = attendance.filter(a => ['present', 'late', 'early-out'].includes(a.status)).length;
     const halfDays = attendance.filter(a => a.status === 'half-day' || a.halfDay).length;
     const presentDays = rawPresentDays;
-    const effectivePresentDays = rawPresentDays + halfDays * 0.5;
+    // Shift minutes needed for Late/Early-Out deduction
+    const shiftMinutes = Math.round(employee.shiftHours * 60);
+    // ─── effectivePresentDays with Late/Early-Out hour-based deduction ───
+    let effectivePresentDays = 0;
+    for (const a of attendance) {
+      if (a.status === 'present') {
+        effectivePresentDays += 1.0;
+      } else if (a.status === 'late') {
+        if (a.checkIn && a.checkOut) {
+          const [h1, m1] = a.checkIn.split(':').map(Number);
+          const [h2, m2] = a.checkOut.split(':').map(Number);
+          const workedMin = Math.max(0, (h2 * 60 + m2) - (h1 * 60 + m1));
+          effectivePresentDays += Math.min(1, workedMin / shiftMinutes);
+        } else {
+          effectivePresentDays += 1.0;
+        }
+      } else if (a.status === 'early-out') {
+        if (a.checkIn && a.checkOut) {
+          const [h1, m1] = a.checkIn.split(':').map(Number);
+          const [h2, m2] = a.checkOut.split(':').map(Number);
+          const workedMin = Math.max(0, (h2 * 60 + m2) - (h1 * 60 + m1));
+          effectivePresentDays += Math.min(1, workedMin / shiftMinutes);
+        } else {
+          effectivePresentDays += 1.0;
+        }
+      } else if (a.status === 'half-day' || a.status === 'half_day') {
+        effectivePresentDays += 0.5;
+      }
+    }
+    effectivePresentDays = Math.round(effectivePresentDays * 100) / 100;
     const totalWorkingDays = daysInMonth - sundays - holidayDays;
 
     const holidayDateStrs = new Set(
@@ -208,7 +237,6 @@ export async function GET(request: NextRequest) {
     // OT is summed from stored overtimeHours to match the individual OT values users see.
     let totalWorkMinutes = 0;
     let totalSundayMinutes = 0;
-    const shiftMinutes = Math.round(employee.shiftHours * 60);
 
     for (const a of attendance) {
       if (a.checkIn && a.checkOut) {

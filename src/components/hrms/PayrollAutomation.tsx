@@ -823,7 +823,7 @@ export function PayrollAutomation() {
               </p>
               <p className="flex items-center gap-2">
                 <Badge variant="outline" className="text-[9px] h-4 px-1.5">Base</Badge>
-                <span>Base Salary = Per Day Rate × Earned Days (working days only)</span>
+                <span>Base Salary = Per Day Rate × Earned Days (Late/Early-Out deducted by actual hours)</span>
               </p>
               <p className="flex items-center gap-2">
                 <Badge variant="outline" className="text-[9px] h-4 px-1.5">Sunday</Badge>
@@ -843,7 +843,7 @@ export function PayrollAutomation() {
               </p>
             </div>
             <p className="text-[10px] text-muted-foreground">
-              Full attendance = Full monthly salary + OT &nbsp;|&nbsp; Sundays are paid weekly off (e.g., 31 days with 5 Sundays = 45 earned Sunday hrs)
+              Full attendance = Full monthly salary + OT &nbsp;|&nbsp; Sundays are paid weekly off &nbsp;|&nbsp; Late/Early-Out: pay deducted based on actual hours worked
             </p>
           </div>
         </div>

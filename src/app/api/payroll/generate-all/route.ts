@@ -73,8 +73,39 @@ export async function POST(request: NextRequest) {
         // Present days = full present days only (half-days tracked separately for display)
         // Sunday/holiday work does NOT inflate present count
         const presentDays = rawPresentDays;
-        // For salary: effectivePresentDays includes half-days as 0.5
-        const effectivePresentDays = rawPresentDays + halfDays * 0.5;
+
+        // ─── For salary: effectivePresentDays accounts for Late/Early-Out deductions ───
+        // "present" = 1.0 day (full pay)
+        // "late" = actual_worked_minutes / shift_minutes (deducted for late arrival)
+        // "early-out" = actual_worked_minutes / shift_minutes (deducted for early departure)
+        // "half-day" = 0.5 day
+        let effectivePresentDays = 0;
+        for (const a of attendance) {
+          if (a.status === 'present') {
+            effectivePresentDays += 1.0;
+          } else if (a.status === 'late') {
+            if (a.checkIn && a.checkOut) {
+              const [h1, m1] = a.checkIn.split(':').map(Number);
+              const [h2, m2] = a.checkOut.split(':').map(Number);
+              const workedMin = Math.max(0, (h2 * 60 + m2) - (h1 * 60 + m1));
+              effectivePresentDays += Math.min(1, workedMin / shiftMinutes);
+            } else {
+              effectivePresentDays += 1.0;
+            }
+          } else if (a.status === 'early-out') {
+            if (a.checkIn && a.checkOut) {
+              const [h1, m1] = a.checkIn.split(':').map(Number);
+              const [h2, m2] = a.checkOut.split(':').map(Number);
+              const workedMin = Math.max(0, (h2 * 60 + m2) - (h1 * 60 + m1));
+              effectivePresentDays += Math.min(1, workedMin / shiftMinutes);
+            } else {
+              effectivePresentDays += 1.0;
+            }
+          } else if (a.status === 'half-day' || a.status === 'half_day') {
+            effectivePresentDays += 0.5;
+          }
+        }
+        effectivePresentDays = Math.round(effectivePresentDays * 100) / 100;
 
         const leaves = await db.leave.findMany({
           where: { employeeId: emp.employeeId, status: 'approved', startDate: { gte: startDate }, endDate: { lt: endDate } },

@@ -94,8 +94,41 @@ export async function GET(request: NextRequest) {
     // because working on a Sunday does NOT compensate for being absent on a working day
     const presentDays = rawPresentDays;
 
-    // For salary: effectivePresentDays includes half-days as 0.5
-    const effectivePresentDays = rawPresentDays + halfDays * 0.5;
+    // Shift minutes needed for Late/Early-Out deduction
+    const shiftMinutes = Math.round(employee.shiftHours * 60);
+
+    // ─── For salary: effectivePresentDays accounts for Late/Early-Out deductions ───
+    // "present" = 1.0 day (full pay)
+    // "late" = actual_worked_minutes / shift_minutes (deducted for late arrival)
+    // "early-out" = actual_worked_minutes / shift_minutes (deducted for early departure)
+    // "half-day" = 0.5 day
+    let effectivePresentDays = 0;
+    for (const a of attendance) {
+      if (a.status === 'present') {
+        effectivePresentDays += 1.0;
+      } else if (a.status === 'late') {
+        if (a.checkIn && a.checkOut) {
+          const [h1, m1] = a.checkIn.split(':').map(Number);
+          const [h2, m2] = a.checkOut.split(':').map(Number);
+          const workedMin = Math.max(0, (h2 * 60 + m2) - (h1 * 60 + m1));
+          effectivePresentDays += Math.min(1, workedMin / shiftMinutes);
+        } else {
+          effectivePresentDays += 1.0;
+        }
+      } else if (a.status === 'early-out') {
+        if (a.checkIn && a.checkOut) {
+          const [h1, m1] = a.checkIn.split(':').map(Number);
+          const [h2, m2] = a.checkOut.split(':').map(Number);
+          const workedMin = Math.max(0, (h2 * 60 + m2) - (h1 * 60 + m1));
+          effectivePresentDays += Math.min(1, workedMin / shiftMinutes);
+        } else {
+          effectivePresentDays += 1.0;
+        }
+      } else if (a.status === 'half-day' || a.status === 'half_day') {
+        effectivePresentDays += 0.5;
+      }
+    }
+    effectivePresentDays = Math.round(effectivePresentDays * 100) / 100;
 
     // ─── Calculate totals from stored attendance values ───
     // Use the per-record overtimeHours directly (these are already calculated accurately
@@ -107,7 +140,6 @@ export async function GET(request: NextRequest) {
     let totalWorkMinutes = 0;
     let totalSundayMinutes = 0;
     let totalPHMinutes = 0;
-    const shiftMinutes = Math.round(employee.shiftHours * 60);
 
     for (const a of attendance) {
       if (a.checkIn && a.checkOut) {

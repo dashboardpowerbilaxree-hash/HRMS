@@ -123,3 +123,31 @@ Stage Summary:
 - Sunday earnings correctly shown: 5 Sundays in 31-day month = 45 earned Sunday hours
 - Kamlesh verification: 17000/31/9 = ₹60.93 ✅, Sunday Earnings = ₹2741.95 ✅
 - User should hard-refresh browser (Ctrl+Shift+R) to clear cached old chunk hashes
+---
+Task ID: 2
+Agent: main
+Task: Fix Late/Early-Out working hour deduction in salary calculation
+
+Work Log:
+- Identified that Late and Early-Out employees were counted as full present days with no pay deduction
+- Implemented hour-based effective present days calculation:
+  - "present" status = 1.0 day (full pay)
+  - "late" status = actual_worked_minutes / shift_minutes (deducted for late arrival)
+  - "early-out" status = actual_worked_minutes / shift_minutes (deducted for early departure)
+  - "half-day" status = 0.5 day
+- Fixed in ALL payroll-related files:
+  - /api/payroll/route.ts (GET + POST)
+  - /api/payroll/generate-all/route.ts
+  - /api/attendance/monthly-summary/route.ts
+  - /api/attendance/export-monthly/route.ts
+  - PayrollAutomation.tsx (formula description)
+- Fixed shiftMinutes variable ordering bug in monthly-summary and export-monthly routes
+- Updated payroll GET endpoint to fully recalculate from attendance data (not use stale DB values)
+- Rebuilt and restarted PM2 successfully
+
+Stage Summary:
+- Late/Early-Out deduction now works correctly across all calculation endpoints
+- Example: Sandeep Sawilani - 25 present days, 23.77 effective days (1.23 days deducted for 18 lates)
+- Example: taraChand - 26 present days, 25.55 effective days (0.45 days deducted)
+- Formula: effective day = actual_worked_minutes / shift_minutes (capped at 1.0)
+- Applies to May 2026 and all future months when payroll is generated
