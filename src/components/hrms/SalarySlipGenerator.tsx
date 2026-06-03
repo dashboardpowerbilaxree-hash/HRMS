@@ -10,6 +10,7 @@ import { useHRMSStore } from '@/lib/store';
 import { motion } from 'framer-motion';
 import Image from 'next/image';
 import { toast } from 'sonner';
+import * as XLSX from 'xlsx-js-style';
 
 // ── Advance Section Component ──
 function AdvanceSection({ employeeId, month, year, advanceDeduction }: { employeeId: string; month: number; year: number; advanceDeduction: number }) {
@@ -202,35 +203,9 @@ export function SalarySlipGenerator() {
   const firmEmail = FIRM_EMAILS[firmCode] || firmDetails?.contactEmail || 'hr@laxree.com';
   const firmLogo = FIRM_LOGOS[firmCode] || '/laxree-logo.png';
 
-  // ── Helper: Download XLSX workbook reliably (always uses blob approach) ──
-  const downloadWorkbook = async (wb: any, filename: string) => {
-    try {
-      const XLSX = await import('xlsx-js-style');
-      const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-      const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      a.style.display = 'none';
-      document.body.appendChild(a);
-      setTimeout(() => {
-        a.click();
-        setTimeout(() => {
-          document.body.removeChild(a);
-          URL.revokeObjectURL(url);
-        }, 250);
-      }, 50);
-    } catch (e2) {
-      toast.error('Download failed. Please try again.');
-      console.error('Excel download error:', e2);
-    }
-  };
-
   // ── Professional Excel Export (Beautiful & Colorful — Matching Payslip Format) ──
-  const handleExportExcel = async () => {
+  const handleExportExcel = () => {
     if (!slip?.payroll) return;
-    const XLSX = await import('xlsx-js-style');
     const p = slip.payroll;
     const e = slip.employee;
     const baseSalary = p.baseSalary != null ? p.baseSalary : Math.round((p.monthlySalary - ((p.monthlySalary / (new Date(year, month, 0).getDate())) * p.absentDays)) * 100) / 100;
@@ -447,7 +422,7 @@ export function SalarySlipGenerator() {
     ];
     XLSX.utils.book_append_sheet(wb, ws2, 'Breakdown');
 
-    await downloadWorkbook(wb, `Payslip_${e.fullName}_${months[month - 1]}_${year}.xlsx`);
+    XLSX.writeFile(wb, `Payslip_${e.fullName}_${months[month - 1]}_${year}.xlsx`);
     toast.success('Payslip Excel downloaded successfully!');
   };
 

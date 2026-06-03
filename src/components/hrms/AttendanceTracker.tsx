@@ -8,6 +8,7 @@ import {
   Upload, FileSpreadsheet, Pencil, Trash2,
   Download, FileDown, ChevronRight, Users
 } from 'lucide-react';
+import * as XLSXStyle from 'xlsx-js-style';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -466,39 +467,15 @@ export function AttendanceTracker() {
     border: fullBorder('D0D0D0'),
   });
 
-  // ── Helper: Download XLSX workbook reliably (always uses blob approach) ──
-  const downloadWorkbook = async (wb: any, filename: string) => {
-    try {
-      const XLSX = await import('xlsx-js-style');
-      const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-      const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      a.style.display = 'none';
-      document.body.appendChild(a);
-      // Use setTimeout to ensure the element is in the DOM
-      setTimeout(() => {
-        a.click();
-        setTimeout(() => {
-          document.body.removeChild(a);
-          URL.revokeObjectURL(url);
-        }, 250);
-      }, 50);
-    } catch (e2) {
-      toast.error('Download failed. Please try again.');
-      console.error('Excel download error:', e2);
-    }
-  };
+
 
   // ── Export Daily Attendance as Beautiful Excel ──
-  const handleExportDailyExcel = async () => {
+  const handleExportDailyExcel = () => {
     if (filteredRecords.length === 0) {
       toast.error('No records to export');
       return;
     }
-    const XLSX = await import('xlsx-js-style');
+    const XLSX = XLSXStyle;
     const wb = XLSX.utils.book_new();
 
     // Company Header
@@ -602,14 +579,14 @@ export function AttendanceTracker() {
     ws2['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 1 } }];
     XLSX.utils.book_append_sheet(wb, ws2, 'Summary');
 
-    await downloadWorkbook(wb, `Daily_Attendance_${MONTHS[parseInt(filterMonth) - 1]}_${filterYear}.xlsx`);
+    XLSX.writeFile(wb, `Daily_Attendance_${MONTHS[parseInt(filterMonth) - 1]}_${filterYear}.xlsx`);
     toast.success('Daily Attendance Excel downloaded successfully!');
   };
 
   // ── Export Monthly Attendance Register as Beautiful Excel ──
-  const handleExportExcel = async () => {
+  const handleExportExcel = () => {
     if (!monthlySummary) return;
-    const XLSX = await import('xlsx-js-style');
+    const XLSX = XLSXStyle;
     const s = monthlySummary;
     const wb = XLSX.utils.book_new();
 
@@ -803,7 +780,7 @@ export function AttendanceTracker() {
     ];
     XLSX.utils.book_append_sheet(wb, ws2, 'Summary');
 
-    await downloadWorkbook(wb, `Monthly_Attendance_${s.employee.fullName}_${s.monthName}_${s.year}.xlsx`);
+    XLSX.writeFile(wb, `Monthly_Attendance_${s.employee.fullName}_${s.monthName}_${s.year}.xlsx`);
     toast.success('Monthly Attendance Excel downloaded successfully!');
   };
 

@@ -1,18 +1,15 @@
 'use client';
 
 import { useHRMSStore } from '@/lib/store';
-import { Bell, Moon, Sun, Menu, Clock, LogOut, Crown } from 'lucide-react';
+import { Moon, Sun, Menu, Clock, LogOut, Crown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import Image from 'next/image';
 
 export function Header() {
   const { currentPage, darkMode, toggleDarkMode, setCurrentPage, setSidebarOpen, sidebarOpen, selectedFirm, adminName, logout } = useHRMSStore();
-  const [notifCount, setNotifCount] = useState(0);
   const [clock, setClock] = useState('');
 
   const displayName = adminName || 'Admin';
@@ -33,17 +30,6 @@ export function Header() {
     return () => clearInterval(interval);
   }, []);
 
-  // Notification count
-  const loadNotifs = useCallback(async () => {
-    try {
-      const res = await fetch('/api/notifications');
-      const data = await res.json();
-      setNotifCount(data.unreadCount || 0);
-    } catch {}
-  }, []);
-
-  useEffect(() => { loadNotifs(); }, [currentPage, loadNotifs]);
-
   const pageTitle: Record<string, string> = {
     dashboard: 'Dashboard',
     employees: 'Employee Management',
@@ -57,10 +43,7 @@ export function Header() {
     'ai-assistant': 'AI HR Assistant',
     'salary-slip': 'Salary Slip Generator',
     settings: 'Settings',
-    notifications: 'Notification Center',
     'employee-profile': 'Employee Profile',
-    'admin-panel': 'Admin Panel',
-    'audit-logs': 'Audit Logs',
   };
 
   const firmLabel = selectedFirm && selectedFirm !== '__all__' ? selectedFirm : 'All Firms';
@@ -112,16 +95,6 @@ export function Header() {
         {/* Dark Mode Toggle */}
         <Button variant="ghost" size="icon" onClick={toggleDarkMode} className="relative hover:bg-gold/5 shrink-0 h-8 w-8" title="Toggle dark mode">
           {darkMode ? <Sun className="w-4 h-4 text-gold" /> : <Moon className="w-4 h-4" />}
-        </Button>
-
-        {/* Notifications */}
-        <Button variant="ghost" size="icon" className="relative hover:bg-gold/5 shrink-0 h-8 w-8" onClick={() => setCurrentPage('notifications')} title="Notifications">
-          <Bell className="w-4 h-4" />
-          {notifCount > 0 && (
-            <Badge className="absolute -top-1 -right-1 h-4 w-4 p-0 flex items-center justify-center text-[10px] bg-destructive border-0">
-              {notifCount}
-            </Badge>
-          )}
         </Button>
 
         {/* Logout */}

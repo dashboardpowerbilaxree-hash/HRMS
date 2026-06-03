@@ -426,7 +426,7 @@ export function OvertimeManagement() {
       >
         <Card className="glass-card card-gold-hover border-0">
           <CardContent className="p-0">
-            <ScrollArea className="max-h-[45vh]">
+            <div className="overflow-auto max-h-[55vh]" style={{ WebkitOverflowScrolling: 'touch' }}>
               <Table>
                 <TableHeader>
                   <TableRow className="hover:bg-transparent">
@@ -495,7 +495,7 @@ export function OvertimeManagement() {
                   )}
                 </TableBody>
               </Table>
-            </ScrollArea>
+            </div>
           </CardContent>
         </Card>
       </motion.div>

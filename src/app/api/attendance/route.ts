@@ -20,10 +20,11 @@ export async function GET(request: NextRequest) {
     const where: any = {};
     if (employeeId) where.employeeId = employeeId;
     if (date) {
-      const d = new Date(date);
+      // Use date string directly for timezone-safe comparison
+      // date format from frontend: YYYY-MM-DD
       where.date = {
-        gte: new Date(d.getFullYear(), d.getMonth(), d.getDate()),
-        lt: new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1),
+        gte: new Date(date + 'T00:00:00'),
+        lt: new Date(date + 'T23:59:59.999'),
       };
     } else {
       const start = new Date(year, month - 1, 1);

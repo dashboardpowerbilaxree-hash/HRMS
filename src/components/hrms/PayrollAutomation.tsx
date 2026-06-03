@@ -7,6 +7,7 @@ import {
   CalendarDays, Building2, Search, FileText, TrendingDown, Clock,
   Download, Loader2,
 } from 'lucide-react';
+import * as XLSX from 'xlsx-js-style';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -340,14 +341,13 @@ export function PayrollAutomation() {
   }, [employees, employeeSearch]);
 
   // ── Export Payroll Sheet as Excel ──
-  const handleExportSheet = async () => {
+  const handleExportSheet = () => {
     if (filteredRecords.length === 0) {
       toast.error('No payroll records to export');
       return;
     }
     setExporting(true);
     try {
-      const XLSX = await import('xlsx-js-style');
       const wb = XLSX.utils.book_new();
 
       const BLACK = '1A1A1A';
@@ -508,21 +508,7 @@ export function PayrollAutomation() {
       XLSX.utils.book_append_sheet(wb, ws2, 'Summary');
 
       // Download
-      const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-      const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `Payroll_${MONTHS[parseInt(filterMonth) - 1]}_${filterYear}.xlsx`;
-      a.style.display = 'none';
-      document.body.appendChild(a);
-      setTimeout(() => {
-        a.click();
-        setTimeout(() => {
-          document.body.removeChild(a);
-          URL.revokeObjectURL(url);
-        }, 250);
-      }, 50);
+      XLSX.writeFile(wb, `Payroll_${MONTHS[parseInt(filterMonth) - 1]}_${filterYear}.xlsx`);
 
       toast.success('Payroll Excel downloaded successfully!');
     } catch (err) {
@@ -852,7 +838,7 @@ export function PayrollAutomation() {
       >
         <Card className="glass-card card-gold-hover border-0">
           <CardContent className="p-0">
-            <ScrollArea className="max-h-[50vh]">
+            <div className="overflow-auto max-h-[65vh]" style={{ WebkitOverflowScrolling: 'touch' }}>
               <Table>
                 <TableHeader>
                   <TableRow className="hover:bg-transparent">
@@ -967,7 +953,7 @@ export function PayrollAutomation() {
                   )}
                 </TableBody>
               </Table>
-            </ScrollArea>
+            </div>
           </CardContent>
         </Card>
       </motion.div>
