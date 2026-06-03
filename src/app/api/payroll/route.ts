@@ -39,33 +39,36 @@ export async function GET(request: NextRequest) {
       orderBy: { employeeId: 'asc' },
     });
 
-    // Enrich with computed fields (not stored in DB or dynamically computed)
+    // Enrich with computed fields — ALWAYS recalculate dynamically for consistency
     const enrichedPayrolls = payrolls.map(p => {
       const daysInMonth = new Date(p.year, p.month, 0).getDate();
       const perDayRate = Math.round((p.monthlySalary / daysInMonth) * 100) / 100;
-      // Compute Sunday earnings if not stored (for backward compat with old records)
-      let sundayCount = (p as any).sundayCount || 0;
-      let sundayEarnings = (p as any).sundayEarnings || 0;
-      if (!sundayCount || !sundayEarnings) {
-        // Compute from month/year
-        let sundays = 0;
-        for (let d = 1; d <= daysInMonth; d++) {
-          if (new Date(p.year, p.month - 1, d).getDay() === 0) sundays++;
-        }
-        sundayCount = sundays;
-        sundayEarnings = Math.round((perDayRate * sundayCount) * 100) / 100;
+      const hourlyRate = Math.round((p.monthlySalary / (daysInMonth * 9)) * 100) / 100;
+
+      // Always recount Sundays dynamically
+      let sundays = 0;
+      for (let d = 1; d <= daysInMonth; d++) {
+        if (new Date(p.year, p.month - 1, d).getDay() === 0) sundays++;
       }
+      const sundayCount = sundays;
+      const sundayEarnings = Math.round((perDayRate * sundayCount) * 100) / 100;
       const earnedSundayHrs = sundayCount * 9;
+
+      // Recalculate baseSalary from components: grossSalary - sundayEarnings - otAmount
       const baseSalary = Math.round((p.grossSalary - (p.otAmount || 0) - sundayEarnings) * 100) / 100;
+      // Recalculate OT amount with correct hourly rate
+      const otAmount = Math.round((p.otHours || 0) * hourlyRate * 100) / 100;
 
       return {
         ...p,
-        baseSalary: baseSalary > 0 ? baseSalary : p.grossSalary - (p.otAmount || 0),
+        hourlyRate,  // Override stored value with dynamically calculated rate
         perDayRate,
         daysInMonth,
         sundayCount,
         sundayEarnings,
         earnedSundayHrs,
+        baseSalary: baseSalary > 0 ? baseSalary : p.grossSalary - (p.otAmount || 0),
+        otAmount,  // Override with recalculated value using correct hourly rate
       };
     });
 

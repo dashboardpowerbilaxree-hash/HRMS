@@ -101,3 +101,25 @@ Stage Summary:
 - Earned Sunday Hours = sundayCount × 9 (e.g., 5 Sun × 9 = 45h)
 - Formula verified: 17000/279=₹60.93 (31-day), 17000/270=₹62.96 (30-day)
 - All 35 employees generated successfully with new formula
+---
+Task ID: 1
+Agent: main
+Task: Fix chunk loading error and verify hourly rate + Sunday earnings calculations
+
+Work Log:
+- Analyzed user screenshot showing "Failed to load chunk 915af5a81489a42e.js" error
+- Identified root cause: `.next/standalone/.next/static/` directory was missing chunk files
+- After rebuild, copied `.next/static` to `.next/standalone/.next/static` and `public` to `.next/standalone/public`
+- Verified all backend API routes already have correct hourly rate formula: base_salary / (daysInMonth * 9)
+- Verified Sunday earnings are correctly included: perDayRate × sundayCount, earnedSundayHrs = sundayCount × 9
+- Fixed payroll GET endpoint (`/api/payroll/route.ts`) to dynamically recalculate hourlyRate instead of using stale DB values
+- Also dynamically recalculates otAmount using the correct hourly rate
+- Tested all calculations with real employee data - all match manual calculations
+- Rebuilt and restarted PM2 successfully
+
+Stage Summary:
+- Chunk loading error fixed by properly copying static files to standalone directory
+- Hourly rate now ALWAYS calculated dynamically as base_salary / (daysInMonth * 9)
+- Sunday earnings correctly shown: 5 Sundays in 31-day month = 45 earned Sunday hours
+- Kamlesh verification: 17000/31/9 = ₹60.93 ✅, Sunday Earnings = ₹2741.95 ✅
+- User should hard-refresh browser (Ctrl+Shift+R) to clear cached old chunk hashes
