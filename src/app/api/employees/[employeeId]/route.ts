@@ -34,7 +34,11 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const sh = body.shiftHours || 9;
     const monthlySalary = body.monthlySalary || body.basicSalary || 0;
 
-    // Hourly rate = monthlySalary / (shiftHours × totalWorkingDays)
+    // Hourly rate = monthlySalary / (daysInMonth × shiftHours)
+    // User's formula: daysInMonth is total calendar days (28, 29, 30, or 31)
+    //   30 days × 9 hrs = 270 hrs → ₹20,000 / 270 = ₹74.07
+    //   31 days × 9 hrs = 279 hrs → ₹20,000 / 279 = ₹71.68
+    //   28 days × 9 hrs = 252 hrs → ₹20,000 / 252 = ₹79.37
     const now = new Date();
     const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
     let totalWorkingDays = daysInMonth;
@@ -47,7 +51,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     totalWorkingDays -= holidays.length;
     if (totalWorkingDays < 1) totalWorkingDays = 26;
 
-    const hourlyRate = Math.round((monthlySalary / (sh * totalWorkingDays)) * 100) / 100;
+    const hourlyRate = Math.round((monthlySalary / (sh * daysInMonth)) * 100) / 100;
     // OT at normal hourly rate (1x), NOT 1.5x — user explicitly confirmed
     const overtimeRate = Math.round(hourlyRate * 100) / 100;
 
@@ -61,7 +65,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         location: body.location,
         salaryType,
         monthlySalary,
-        dailyRate: body.dailyRate || Math.round(monthlySalary / totalWorkingDays),
+        dailyRate: body.dailyRate || Math.round(monthlySalary / daysInMonth),
         hourlyRate,
         overtimeRate,
         employmentType: body.employmentType,

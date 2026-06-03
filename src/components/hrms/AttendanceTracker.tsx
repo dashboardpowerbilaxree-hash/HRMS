@@ -136,8 +136,6 @@ interface MonthlySummary {
   holidayDays: number;
   weeklyOffs: number;
   sundays: number;
-  sundaysEarned?: number;
-  sundayEarnedHours?: number;
   totalAttendance: number;
   totalWorkHours: number;
   totalOvertimeHours: number;
@@ -1178,7 +1176,6 @@ export function AttendanceTracker() {
                           <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider border-r border-emerald-600/30">PH</th>
                           <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider border-r border-emerald-600/30">Total Hrs Worked</th>
                           <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider border-r border-emerald-600/30">OT Hrs</th>
-                          <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider border-r border-emerald-600/30">Sundays Earned</th>
                           <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider border-r border-emerald-600/30">Sunday Hrs</th>
                           <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider">Total Hrs (incl. Sunday)</th>
                         </tr>
@@ -1193,8 +1190,7 @@ export function AttendanceTracker() {
                           <td className="px-3 py-3 text-purple-500 border-r border-border/30">{monthlySummary.holidayDays}</td>
                           <td className="px-3 py-3 font-bold text-cyan-600 dark:text-cyan-400 border-r border-border/30">{displayHHMM(monthlySummary.totalWorkHours)}</td>
                           <td className="px-3 py-3 font-bold text-yellow-600 dark:text-yellow-400 border-r border-border/30">{displayHHMM(monthlySummary.totalOvertimeHours)}</td>
-                          <td className="px-3 py-3 text-sky-600 dark:text-sky-400 border-r border-border/30">{monthlySummary.sundaysEarned || 0}</td>
-                          <td className="px-3 py-3 text-blue-600 dark:text-blue-400 border-r border-border/30">{displayHHMM(monthlySummary.sundayEarnedHours || monthlySummary.totalSundayHours)}</td>
+                          <td className="px-3 py-3 text-blue-600 dark:text-blue-400 border-r border-border/30">{displayHHMM(monthlySummary.totalSundayHours)}</td>
                           <td className="px-3 py-3 font-bold text-gold">{displayHHMM(monthlySummary.totalHrsInclSundayPH || (monthlySummary.totalWorkHours || 0))}</td>
                         </tr>
                       </tbody>

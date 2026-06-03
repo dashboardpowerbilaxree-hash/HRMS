@@ -205,13 +205,6 @@ export async function GET(request: NextRequest) {
     const effectiveFirm = firmFromId || employee.firm;
     const firmFullName = FIRM_NAMES[effectiveFirm] || employee.firm;
 
-    // Sundays earned: 1 per 6 full working days (for Full Time employees)
-    const sundaysEarned = employee.employmentType === 'Full Time' || !employee.employmentType
-      ? Math.floor(presentDays / 6)
-      : 0;
-    const sundayEarnedHoursDecimal = sundaysEarned * employee.shiftHours;
-    const sundayEarnedHours = Math.floor(sundayEarnedHoursDecimal) + (Math.round((sundayEarnedHoursDecimal - Math.floor(sundayEarnedHoursDecimal)) * 60)) / 100;
-
     // Total hours including Sunday + PH (sum minutes then convert to HH.MM)
     const totalHrsInclSundayPHMinutes = totalWorkMinutes + totalSundayMinutes + totalPHMinutes;
     const totalHrsInclSundayPH = Math.floor(totalHrsInclSundayPHMinutes / 60) + (totalHrsInclSundayPHMinutes % 60) / 100;
@@ -222,7 +215,10 @@ export async function GET(request: NextRequest) {
 
     // ─── LAXREE SALARY CALCULATION (consistent with payroll) ───
     // Per Day Rate = monthlySalary / daysInMonth
-    // Hourly Rate = perDayRate / shiftHours
+    // Hourly Rate = monthlySalary / (daysInMonth × shiftHours) — NO intermediate rounding
+    //   30 days × 9 hrs = 270 hrs → ₹20,000 / 270 = ₹74.07
+    //   31 days × 9 hrs = 279 hrs → ₹20,000 / 279 = ₹71.68
+    //   28 days × 9 hrs = 252 hrs → ₹20,000 / 252 = ₹79.37
     // Base Salary = monthlySalary - (perDayRate × salaryAbsentDays)
     //   where salaryAbsentDays = totalWorkingDays - effectivePresentDays - effectivePaidLeaves - effectiveUnpaidLeaves
     //   effectivePresentDays includes half-days as 0.5
@@ -230,7 +226,7 @@ export async function GET(request: NextRequest) {
     // NOTE: Use attendance.overtimeHours as source of truth (not overtime table which can have stale records)
     const salaryAbsentDays = Math.max(0, totalWorkingDays - effectivePresentDays - effectivePaidLeaves - effectiveUnpaidLeaves);
     const perDayRate = Math.round((employee.monthlySalary / daysInMonth) * 100) / 100;
-    const calculatedHourlyRate = Math.round((perDayRate / employee.shiftHours) * 100) / 100;
+    const calculatedHourlyRate = Math.round((employee.monthlySalary / (daysInMonth * employee.shiftHours)) * 100) / 100;
     const calculatedBaseSalary = Math.round((employee.monthlySalary - (perDayRate * salaryAbsentDays)) * 100) / 100;
     const calculatedOtAmount = Math.round(totalOvertimeHoursDecimal * calculatedHourlyRate * 100) / 100;
     const calculatedGrossSalary = Math.round((calculatedBaseSalary + calculatedOtAmount) * 100) / 100;
@@ -258,8 +254,6 @@ export async function GET(request: NextRequest) {
       holidayDays,
       weeklyOffs,
       sundays,
-      sundaysEarned,
-      sundayEarnedHours,
       totalAttendance,
       totalWorkHours,
       totalOvertimeHours,

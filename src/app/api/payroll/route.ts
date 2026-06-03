@@ -74,14 +74,17 @@ export async function POST(request: NextRequest) {
 
     // ─── LAXREE PAYROLL FORMULA ───
     // Per Day Rate = monthlySalary / daysInMonth (31, 30, 28 as per calendar)
-    // Hourly Rate = perDayRate / shiftHours
+    // Hourly Rate = monthlySalary / (daysInMonth × shiftHours) — NO intermediate rounding
+    //   30 days × 9 hrs = 270 hrs → ₹20,000 / 270 = ₹74.07
+    //   31 days × 9 hrs = 279 hrs → ₹20,000 / 279 = ₹71.68
+    //   28 days × 9 hrs = 252 hrs → ₹20,000 / 252 = ₹79.37
     // Base Salary = monthlySalary - (perDayRate × absentDays)
     // OT Amount = otHours × hourlyRate (1x normal rate, NOT 1.5x)
     // Gross Salary = baseSalary + otAmount
     // Net Salary = grossSalary + bonus + incentive + arrear - totalDeductions
 
     const perDayRate = Math.round((employee.monthlySalary / daysInMonth) * 100) / 100;
-    const hourlyRate = Math.round((perDayRate / employee.shiftHours) * 100) / 100;
+    const hourlyRate = Math.round((employee.monthlySalary / (daysInMonth * employee.shiftHours)) * 100) / 100;
 
     // Get attendance records for the month
     const attendance = await db.attendance.findMany({
