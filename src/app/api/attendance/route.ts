@@ -232,7 +232,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Create overtime record if applicable (OT at normal hourly rate, NOT 1.5x)
+    // Create or update overtime record if applicable (OT at normal hourly rate, NOT 1.5x)
     if (overtimeHours > 0) {
       // Calculate normal hourly rate: monthlySalary / (daysInMonth × shiftHours)
       const daysInMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
@@ -259,6 +259,13 @@ export async function POST(request: NextRequest) {
           status: 'approved',
         },
       });
+    } else {
+      // No overtime — delete any stale overtime record from previous update
+      try {
+        await db.overtime.delete({ where: { id: `ot-${record.id}` } });
+      } catch {
+        // Record may not exist, that's fine
+      }
     }
 
     return NextResponse.json(record, { status: 201 });

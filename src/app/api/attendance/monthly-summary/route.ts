@@ -179,24 +179,19 @@ export async function GET(request: NextRequest) {
     const annualLeaves = leaves.filter(l => l.type === 'annual' || l.type === 'AL' || l.type === 'Casual' || l.type === 'CL').reduce((sum, l) => sum + l.days, 0);
     const unpaidLeaves = leaves.filter(l => l.type === 'unpaid' || l.type === 'UL' || l.type === 'LOP').reduce((sum, l) => sum + l.days, 0);
 
-    // Get overtime records
-    const overtimeRecords = await db.overtime.findMany({
-      where: { employeeId, date: { gte: startDate, lt: endDate } },
-    });
-    const otHoursFromOT = Math.round(overtimeRecords.reduce((sum, o) => sum + o.hours, 0) * 100) / 100;
-
     // ─── LAXREE SALARY CALCULATION (consistent with payroll) ───
     // Per Day Rate = monthlySalary / daysInMonth
     // Hourly Rate = perDayRate / shiftHours
     // Base Salary = monthlySalary - (perDayRate × salaryAbsentDays)
     //   where salaryAbsentDays = totalWorkingDays - effectivePresentDays - effectivePaidLeaves - effectiveUnpaidLeaves
     //   effectivePresentDays includes half-days as 0.5
-    // OT Amount = otHours × hourlyRate (1x normal rate, NOT 1.5x)
+    // OT Amount = totalOvertimeHours × hourlyRate (1x normal rate, NOT 1.5x)
+    // NOTE: Use attendance.overtimeHours as source of truth (not overtime table which can have stale records)
     const salaryAbsentDays = Math.max(0, totalWorkingDays - effectivePresentDays - effectivePaidLeaves - effectiveUnpaidLeaves);
     const perDayRate = Math.round((employee.monthlySalary / daysInMonth) * 100) / 100;
     const calculatedHourlyRate = Math.round((perDayRate / employee.shiftHours) * 100) / 100;
     const calculatedBaseSalary = Math.round((employee.monthlySalary - (perDayRate * salaryAbsentDays)) * 100) / 100;
-    const calculatedOtAmount = Math.round(otHoursFromOT * calculatedHourlyRate * 100) / 100;
+    const calculatedOtAmount = Math.round(totalOvertimeHours * calculatedHourlyRate * 100) / 100;
     const calculatedGrossSalary = Math.round((calculatedBaseSalary + calculatedOtAmount) * 100) / 100;
 
     return NextResponse.json({
@@ -226,7 +221,7 @@ export async function GET(request: NextRequest) {
       sundayEarnedHours,
       totalAttendance,
       totalWorkHours,
-      totalOvertimeHours: otHoursFromOT || totalOvertimeHours,
+      totalOvertimeHours,
       totalSundayHours,
       totalPHHours,
       totalHrsInclSundayPH,
