@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 import {
   IndianRupee, Zap, DollarSign, Users, Info,
   CalendarDays, Building2, Search, FileText, TrendingDown, Clock,
+  Download, Loader2,
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -155,6 +156,7 @@ export function PayrollAutomation() {
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [generatingAll, setGeneratingAll] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   // ── Form for Generate One ──
   const [form, setForm] = useState({
@@ -325,6 +327,199 @@ export function PayrollAutomation() {
     );
   }, [employees, employeeSearch]);
 
+  // ── Export Payroll Sheet as Excel ──
+  const handleExportSheet = async () => {
+    if (filteredRecords.length === 0) {
+      toast.error('No payroll records to export');
+      return;
+    }
+    setExporting(true);
+    try {
+      const XLSX = await import('xlsx-js-style');
+      const wb = XLSX.utils.book_new();
+
+      const BLACK = '1A1A1A';
+      const WHITE = 'FFFFFF';
+      const GOLD = 'D4A843';
+      const BLUE = '1E3A5F';
+      const EMERALD = '059669';
+      const RED = 'DC2626';
+      const LIGHT_BG = 'FFF8E7';
+      const LIGHT_GREEN = 'ECFDF5';
+      const LIGHT_RED = 'FEF2F2';
+
+      const fullBorder = (color: string = 'B0B0B0', style: 'thin' | 'medium' = 'thin') => ({
+        top: { style, color: { rgb: color } },
+        bottom: { style, color: { rgb: color } },
+        left: { style, color: { rgb: color } },
+        right: { style, color: { rgb: color } },
+      });
+
+      // ═══ SHEET 1: Payroll Register ═══
+      const headerData: any[][] = [
+        ['LAXREE GROUP OF COMPANIES'],
+        [`Payroll Register — ${MONTHS[parseInt(filterMonth) - 1]} ${filterYear}`],
+        [`Generated: ${new Date().toLocaleString('en-IN')}`, '', '', `Total Employees: ${filteredRecords.length}`, '', '', `Total Net Payroll: ₹${totalNet.toLocaleString('en-IN')}`],
+        [],
+      ];
+      const ws = XLSX.utils.aoa_to_sheet(headerData);
+
+      // Style header rows
+      const allCols = ['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O'];
+      allCols.forEach(c => {
+        if (ws[`${c}1`]) ws[`${c}1`].s = { font: { bold: true, color: { rgb: WHITE }, sz: 16 }, fill: { fgColor: { rgb: GOLD } }, alignment: { horizontal: 'center' as const }, border: fullBorder(GOLD, 'medium') };
+        if (ws[`${c}2`]) ws[`${c}2`].s = { font: { bold: true, color: { rgb: WHITE }, sz: 12 }, fill: { fgColor: { rgb: '2D2D2D' } }, alignment: { horizontal: 'center' as const } };
+      });
+      ['A3','B3','C3','D3','E3','F3','G3'].forEach(c => {
+        if (ws[`${c}3`]) ws[`${c}3`].s = { font: { sz: 9, color: { rgb: 'CCCCCC' } }, fill: { fgColor: { rgb: '2D2D2D' } } };
+      });
+
+      // Column headers
+      const colHeaders = [
+        'S.No', 'Employee Name', 'Emp Code', 'Firm', 'Monthly Salary',
+        'Present Days', 'Absent Days', 'Worked Hrs', 'OT Hrs', 'OT Amount',
+        'Gross Salary', 'Deductions', 'Arrear', 'Net Salary', 'Status',
+      ];
+      XLSX.utils.sheet_add_json(ws, [colHeaders.reduce((acc, h, i) => ({ ...acc, [allCols[i]]: h }), {})], { origin: 'A5' });
+
+      // Style column headers
+      allCols.forEach(c => {
+        const cell = ws[`${c}5`];
+        if (cell) cell.s = { font: { bold: true, color: { rgb: WHITE }, sz: 10 }, fill: { fgColor: { rgb: BLUE } }, alignment: { horizontal: 'center' as const }, border: fullBorder(BLUE, 'medium') };
+      });
+
+      // Data rows
+      const dataRows = filteredRecords.map((p, idx) => ({
+        'S.No': idx + 1,
+        'Employee Name': p.employee?.fullName || p.employeeId,
+        'Emp Code': p.employeeId,
+        'Firm': getFirmFromEmployeeId(p.employeeId) || p.employee?.department || '',
+        'Monthly Salary': p.monthlySalary,
+        'Present Days': p.presentDays || 0,
+        'Absent Days': p.absentDays || 0,
+        'Worked Hrs': formatHours(p.totalWorkedHrs || p.totalWorkHours || 0),
+        'OT Hrs': formatHours(p.otHours || 0),
+        'OT Amount': p.otAmount || 0,
+        'Gross Salary': p.grossSalary,
+        'Deductions': p.totalDeductions,
+        'Arrear': p.arrear || 0,
+        'Net Salary': p.netSalary,
+        'Status': p.status.charAt(0).toUpperCase() + p.status.slice(1),
+      }));
+      XLSX.utils.sheet_add_json(ws, dataRows, { origin: 'A6' });
+
+      // Style data rows
+      for (let i = 0; i < dataRows.length; i++) {
+        const row = i + 6;
+        const isEven = i % 2 === 0;
+        allCols.forEach(c => {
+          const cell = ws[`${c}${row}`];
+          if (cell) {
+            const bg = isEven ? LIGHT_BG : undefined;
+            cell.s = { font: { sz: 10 }, fill: bg ? { fgColor: { rgb: bg } } : undefined, border: fullBorder('D0D0D0') };
+            // Highlight net salary column
+            if (c === 'N') {
+              cell.s = { ...cell.s, font: { bold: true, sz: 10, color: { rgb: EMERALD } }, fill: { fgColor: { rgb: LIGHT_GREEN } }, border: fullBorder(EMERALD) };
+            }
+            // Highlight deductions column
+            if (c === 'L') {
+              cell.s = { ...cell.s, font: { sz: 10, color: { rgb: RED } }, fill: { fgColor: { rgb: LIGHT_RED } }, border: fullBorder('D0D0D0') };
+            }
+          }
+        });
+      }
+
+      // Totals row
+      const totalRow = filteredRecords.length + 6;
+      const totalData: any = {
+        'S.No': '', 'Employee Name': 'TOTAL', 'Emp Code': '', 'Firm': '',
+        'Monthly Salary': payrolls.reduce((s, p) => s + p.monthlySalary, 0),
+        'Present Days': '', 'Absent Days': '', 'Worked Hrs': '', 'OT Hrs': '',
+        'OT Amount': payrolls.reduce((s, p) => s + (p.otAmount || 0), 0),
+        'Gross Salary': totalGross,
+        'Deductions': totalDeductions,
+        'Arrear': totalArrears,
+        'Net Salary': totalNet,
+        'Status': '',
+      };
+      XLSX.utils.sheet_add_json(ws, [totalData], { origin: `A${totalRow}` });
+      allCols.forEach(c => {
+        const cell = ws[`${c}${totalRow}`];
+        if (cell) {
+          cell.s = { font: { bold: true, sz: 11, color: { rgb: WHITE } }, fill: { fgColor: { rgb: BLUE } }, border: fullBorder(BLUE, 'medium') };
+        }
+      });
+
+      // Column widths
+      ws['!cols'] = [
+        { wch: 5 }, { wch: 22 }, { wch: 14 }, { wch: 8 }, { wch: 14 },
+        { wch: 10 }, { wch: 10 }, { wch: 11 }, { wch: 9 }, { wch: 12 },
+        { wch: 14 }, { wch: 12 }, { wch: 10 }, { wch: 14 }, { wch: 10 },
+      ];
+      ws['!merges'] = [
+        { s: { r: 0, c: 0 }, e: { r: 0, c: 14 } },
+        { s: { r: 1, c: 0 }, e: { r: 1, c: 14 } },
+      ];
+
+      XLSX.utils.book_append_sheet(wb, ws, 'Payroll Register');
+
+      // ═══ SHEET 2: Summary ═══
+      const summaryData: any[][] = [
+        ['Payroll Summary'],
+        [],
+        ['Category', 'Amount (₹)'],
+        ['Total Gross Salary', totalGross],
+        ['Total OT Amount', payrolls.reduce((s, p) => s + (p.otAmount || 0), 0)],
+        ['Total Arrears', totalArrears],
+        ['Total Deductions', totalDeductions],
+        ['Total Net Payroll', totalNet],
+        [],
+        ['Metric', 'Value'],
+        ['Employees Processed', filteredRecords.length],
+        ['Average Net Salary', filteredRecords.length > 0 ? Math.round(totalNet / filteredRecords.length) : 0],
+        ['Total OT Hours', formatHours(totalOTHours)],
+      ];
+      const ws2 = XLSX.utils.aoa_to_sheet(summaryData);
+      ['A1','B1'].forEach(c => { if (ws2[c]) ws2[c].s = { font: { bold: true, color: { rgb: WHITE }, sz: 14 }, fill: { fgColor: { rgb: GOLD } }, alignment: { horizontal: 'center' as const }, border: fullBorder(GOLD, 'medium') }; });
+      ['A3','B3'].forEach(c => { if (ws2[c]) ws2[c].s = { font: { bold: true, color: { rgb: WHITE }, sz: 10 }, fill: { fgColor: { rgb: BLUE } }, border: fullBorder(BLUE) }; });
+      ['A10','B10'].forEach(c => { if (ws2[c]) ws2[c].s = { font: { bold: true, color: { rgb: WHITE }, sz: 10 }, fill: { fgColor: { rgb: EMERALD } }, border: fullBorder(EMERALD) }; });
+      for (const r of [4,5,6,7,8]) {
+        if (ws2[`A${r}`]) ws2[`A${r}`].s = { font: { sz: 10, color: { rgb: '666666' } }, border: fullBorder('D0D0D0') };
+        if (ws2[`B${r}`]) ws2[`B${r}`].s = { font: { bold: true, sz: 10 }, fill: { fgColor: { rgb: LIGHT_BG } }, border: fullBorder('D0D0D0') };
+      }
+      for (const r of [11,12,13]) {
+        if (ws2[`A${r}`]) ws2[`A${r}`].s = { font: { sz: 10, color: { rgb: '666666' } }, border: fullBorder('D0D0D0') };
+        if (ws2[`B${r}`]) ws2[`B${r}`].s = { font: { bold: true, sz: 10 }, fill: { fgColor: { rgb: LIGHT_GREEN } }, border: fullBorder('D0D0D0') };
+      }
+      ws2['!cols'] = [{ wch: 22 }, { wch: 18 }];
+      ws2['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 1 } }];
+      XLSX.utils.book_append_sheet(wb, ws2, 'Summary');
+
+      // Download
+      const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Payroll_${MONTHS[parseInt(filterMonth) - 1]}_${filterYear}.xlsx`;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      setTimeout(() => {
+        a.click();
+        setTimeout(() => {
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        }, 250);
+      }, 50);
+
+      toast.success('Payroll Excel downloaded successfully!');
+    } catch (err) {
+      console.error('Payroll export error:', err);
+      toast.error('Export failed. Please try again.');
+    }
+    setExporting(false);
+  };
+
   // ── Summary cards ──
   const statCards = [
     {
@@ -388,7 +583,7 @@ export function PayrollAutomation() {
             Per Day = Monthly Salary ÷ Days in Month (31/30/28) | OT at normal hourly rate (1x)
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <Button
             variant="outline"
             size="sm"
@@ -404,6 +599,16 @@ export function PayrollAutomation() {
             disabled={generatingAll}
           >
             <Zap className="w-4 h-4" /> {generatingAll ? 'Generating...' : 'Generate All'}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            onClick={handleExportSheet}
+            disabled={exporting || filteredRecords.length === 0}
+          >
+            {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+            {exporting ? 'Exporting...' : 'Export Sheet'}
           </Button>
         </div>
       </motion.div>
@@ -616,7 +821,7 @@ export function PayrollAutomation() {
                           </motion.div>
                         </TableCell>
                         <TableCell className="hidden md:table-cell">
-                          <FirmBadge firm={getFirmFromEmployeeId(p.employeeId) || p.employee?.firm || p.employee?.department || ''} />
+                          <FirmBadge firm={getFirmFromEmployeeId(p.employeeId) || p.employee?.department || ''} />
                         </TableCell>
                         <TableCell className="hidden lg:table-cell text-sm whitespace-nowrap">
                           {(p.totalWorkedHrs || p.totalWorkHours || 0) > 0 ? `${formatHours(p.totalWorkedHrs || p.totalWorkHours || 0)}h` : '—'}

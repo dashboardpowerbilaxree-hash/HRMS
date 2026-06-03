@@ -28,10 +28,10 @@ export async function POST() {
 
     // Create Firms (from Excel data) — with company details for payslip
     const firms = [
-      { code: 'LAPL', name: 'Laxree Associates Pvt. Ltd.', address: 'Plot No. 45, Sector 32, Gurgaon, Haryana 122001', contactPhone: '+91-124-4567890', contactEmail: 'hr@laxree.com', logo: '/laxree-logo.png' },
-      { code: 'LRSL', name: 'Laxree Roofing Solutions Ltd.', address: 'Industrial Area, Ajmer, Rajasthan 305001', contactPhone: '+91-145-2678901', contactEmail: 'hr@laxree.com', logo: '/laxree-logo.png' },
-      { code: 'SI', name: 'Shree Industries', address: 'M.I.A., Madanganj, Kishangarh, Ajmer, Rajasthan 305801', contactPhone: '+91-145-3789012', contactEmail: 'hr@laxree.com', logo: '/laxree-logo.png' },
-      { code: 'SDF', name: 'SDF Division', address: 'M.I.A., Ajmer, Rajasthan 305001', contactPhone: '+91-145-4890123', contactEmail: 'hr@laxree.com', logo: '/laxree-logo.png' },
+      { code: 'LAPL', name: 'LAXREE AMENITIES PVT LTD', address: 'Plot No. 1 & 2, Harbilas Sharda Marg, Civil Lines, Ajmer, Rajasthan 305001', contactPhone: '+919251683663', contactEmail: 'hr@laxree.com', logo: '/laxree-logo.png' },
+      { code: 'LRSL', name: 'LAXREE ROOFING SOLUTION', address: 'Plot No. 1 & 2, Harbilas Sharda Marg, Civil Lines, Ajmer, Rajasthan 305001', contactPhone: '+919251683663', contactEmail: 'hr@laxree.com', logo: '/laxree-logo.png' },
+      { code: 'SI', name: 'SMARTH INTERNATIONAL', address: 'Plot No. 1 & 2, Harbilas Sharda Marg, Civil Lines, Ajmer, Rajasthan 305001', contactPhone: '+919251683663', contactEmail: 'hr@laxree.com', logo: '/laxree-logo.png' },
+      { code: 'SDF', name: 'SANGRAH DECOR & FURNITURE', address: 'Plot No. 1 & 2, Harbilas Sharda Marg, Civil Lines, Ajmer, Rajasthan 305001', contactPhone: '+919251683663', contactEmail: 'hr@laxree.com', logo: '/laxree-logo.png' },
     ];
     for (const f of firms) await db.firm.create({ data: f });
 

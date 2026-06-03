@@ -1,9 +1,12 @@
 #!/bin/bash
 cd /home/z/my-project/.next/standalone
-cp -f /home/z/my-project/db/custom.db db/custom.db 2>/dev/null
+
+# Copy static assets only (NEVER copy database — it must persist!)
+cp -rf /home/z/my-project/public /home/z/my-project/.next/standalone/public 2>/dev/null
+cp -rf /home/z/my-project/.next/static /home/z/my-project/.next/standalone/.next/static 2>/dev/null
 
 # Start server in background
-DATABASE_URL="file:/home/z/my-project/.next/standalone/db/custom.db" \
+DATABASE_URL="file:/home/z/my-project/db/custom.db" \
 PORT=3000 \
 HOSTNAME=0.0.0.0 \
 NODE_ENV=production \

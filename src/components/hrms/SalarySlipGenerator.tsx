@@ -33,10 +33,10 @@ const FIRM_LOGOS: Record<string, string> = {
 };
 
 const FIRM_ADDRESSES: Record<string, string> = {
-  LAPL: 'Gurgaon, Haryana, India',
-  LRSL: 'Roofing Factory, India',
-  SI: 'Ajmer, Rajasthan, India',
-  SDF: 'Palra Warehouse, India',
+  LAPL: 'Plot No. 1 & 2, Harbilas Sharda Marg, Civil Lines, Ajmer, Rajasthan 305001',
+  LRSL: 'Plot No. 1 & 2, Harbilas Sharda Marg, Civil Lines, Ajmer, Rajasthan 305001',
+  SI: 'Plot No. 1 & 2, Harbilas Sharda Marg, Civil Lines, Ajmer, Rajasthan 305001',
+  SDF: 'Plot No. 1 & 2, Harbilas Sharda Marg, Civil Lines, Ajmer, Rajasthan 305001',
 };
 
 const FIRM_PHONES: Record<string, string> = {
@@ -267,7 +267,6 @@ export function SalarySlipGenerator() {
       [],
       // Row 29: Footer
       [`This is a computer-generated payslip by ${firmFullName}`],
-      [`Formula: Base = Monthly - (PerDay x Absent) | PerDay = Monthly / Days in Month | OT = OT Hrs x Hourly Rate (1x)`],
     ];
 
     const ws = XLSX.utils.aoa_to_sheet(data);
@@ -430,9 +429,10 @@ export function SalarySlipGenerator() {
     if (!printWin) return;
     printWin.document.write(`<!DOCTYPE html><html><head><title>Salary Slip - ${e.fullName}</title>
     <style>
+      @import url('https://fonts.googleapis.com/css2?family=Merriweather:wght@300;400;700;900&display=swap');
       @page { size: A4; margin: 10mm; }
       * { margin: 0; padding: 0; box-sizing: border-box; }
-      body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 11px; color: #222; background: #fff; }
+      body { font-family: 'Merriweather', 'Georgia', 'Liberation Serif', serif; font-size: 11px; color: #222; background: #fff; }
       .payslip { max-width: 750px; margin: 0 auto; border: 2px solid #1E3A5F; border-radius: 8px; overflow: hidden; }
       .title { text-align: center; font-size: 20px; font-weight: 800; padding: 10px; color: #1A1A1A; border-bottom: 2px solid #1E3A5F; }
       .company-header { background: #1E3A5F; color: white; padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; }
@@ -569,7 +569,7 @@ export function SalarySlipGenerator() {
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
           <Card className="border-2 border-blue-900/30 dark:border-blue-500/20 overflow-hidden" ref={slipRef}>
             {/* ═══ SALARY SLIP FORMAT — Blue-White Professional ═══ */}
-            <div className="bg-white dark:bg-card">
+            <div className="bg-white dark:bg-card" style={{ fontFamily: "'Merriweather', 'Georgia', 'Liberation Serif', serif" }}>
               {/* Title */}
               <div className="text-center py-2 border-b-2 border-[#1E3A5F] dark:border-blue-500">
                 <h2 className="text-xl font-extrabold text-[#1E3A5F] dark:text-blue-400 tracking-wide">SALARY SLIP FORMAT</h2>
