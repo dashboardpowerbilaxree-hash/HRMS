@@ -6,7 +6,7 @@ import Image from 'next/image';
 import {
   LayoutDashboard, Users, Clock, DollarSign, CalendarDays,
   Palmtree, Timer, Building2, BarChart3, Bot, FileText,
-  Settings, Bell, ChevronLeft, ChevronRight, ShieldCheck, ScrollText, Filter, LogOut, Crown
+  Settings, ChevronLeft, ChevronRight, Filter, LogOut, Crown
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -23,10 +23,7 @@ const navItems: { key: PageKey; label: string; icon: any }[] = [
   { key: 'reports', label: 'Reports', icon: BarChart3 },
   { key: 'salary-slip', label: 'Salary Slip', icon: FileText },
   { key: 'ai-assistant', label: 'AI Assistant', icon: Bot },
-  { key: 'notifications', label: 'Notifications', icon: Bell },
   { key: 'settings', label: 'Settings', icon: Settings },
-  { key: 'admin-panel', label: 'Admin Panel', icon: ShieldCheck },
-  { key: 'audit-logs', label: 'Audit Logs', icon: ScrollText },
 ];
 
 const firms = [

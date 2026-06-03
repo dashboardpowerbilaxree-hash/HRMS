@@ -1,26 +1,26 @@
 ---
 Task ID: 1
-Agent: Main Agent
-Task: Fix data loss, add Advance feature, payroll export, salary slip improvements
+Agent: Main
+Task: Implement all pending features for Laxree HRMS Dashboard
 
 Work Log:
-- Diagnosed data loss: startup scripts overwrote active DB with stale copy on every restart
-- Fixed all startup scripts (start-daemon.sh, start-server.sh, start-with-warmup.sh) to use persistent DB path
-- Added DB backup to build script in package.json
-- Added Advance model to Prisma schema with employee relation
-- Created /api/advances route (GET + POST) and /api/advances/[id] route (DELETE)
-- Added Advance section to PayrollAutomation.tsx with Add Advance dialog and Advances list
-- Added AdvanceSection component to SalarySlipGenerator.tsx showing advance reason, date, amount
-- When advance is added, it auto-updates the payroll advanceDeduction and recalculates net salary
-- Added Export Sheet button with full XLSX export (Payroll Register + Summary sheets)
-- Changed salary slip font from sans-serif to Merriweather serif (human-like)
-- Updated firm addresses to correct Ajmer address
-- Updated firm names to match correct company names
-- Removed formula line from salary slip Excel footer
+- Checked current project state: all components exist (PayrollAutomation, SalarySlipGenerator, OvertimeManagement, DepartmentManagement, Advance API)
+- Verified data persistence: startup scripts use persistent DB path file:/home/z/my-project/db/custom.db
+- Removed Notifications, Admin Panel, Audit Logs from Sidebar.tsx navItems
+- Removed Notifications, Admin Panel, Audit Logs from store.ts PageKey type
+- Removed NotificationCenter import and AdminPanel/AuditLogs placeholder components from page.tsx
+- Removed renderPage cases for notifications, admin-panel, audit-logs
+- Fixed Salary Slip Excel export: removed OT Rate and formula lines from Breakdown sheet
+  - Changed "Salary Calculation" section to "Earnings & Deductions Summary"
+  - Removed "Per Day Rate", "Hourly Rate" rows
+  - Kept only Base Salary, Monthly Salary, Absent/Present Days, Gross Salary
+  - Removed "OT Rate (1x normal)" from Hours Breakdown, kept just OT Amount
+- Built and deployed successfully with PM2
+- Verified all APIs working: 4 firms, 35 employees, database intact
 
 Stage Summary:
-- Data persistence fixed permanently - no more data loss on restart
-- Advance feature fully implemented: Add advance → auto-deducts from payroll → shows on salary slip
-- Payroll Export Sheet added with premium styling
-- Salary slip now uses human-like Merriweather serif font
-- All firm details corrected
+- Notifications, Admin Panel, Audit Logs removed from sidebar and routing
+- Salary Slip no longer shows formula or OT hourly rate in Excel breakdown
+- All existing features confirmed working: Advance, Overtime, Department, Payroll Export
+- Server running on PM2 with persistent database at /home/z/my-project/db/custom.db
+- Build successful, all TypeScript compiles without errors

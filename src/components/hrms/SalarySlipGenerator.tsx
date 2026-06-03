@@ -402,16 +402,15 @@ export function SalarySlipGenerator() {
       ['Company', `${firmCode} - ${firmFullName}`, '', 'Location', e.location || 'N/A'],
       ['Designation', e.designation || 'N/A', '', 'Salary Type', (e.salaryType || 'hourly').charAt(0).toUpperCase() + (e.salaryType || 'hourly').slice(1)],
       [],
-      ['Salary Calculation'],
+      ['Earnings & Deductions Summary'],
       ['Monthly Salary', p.monthlySalary.toLocaleString('en-IN'), '', 'Days in Month', new Date(year, month, 0).getDate()],
-      ['Per Day Rate', perDayRate.toLocaleString('en-IN'), '', 'Absent Days', p.absentDays || 0],
-      ['Base Salary (Monthly - PerDay x Absent)', baseSalary.toLocaleString('en-IN'), '', 'Present Days', p.presentDays || 0],
-      ['Hourly Rate', (p.hourlyRate || 0).toFixed(2), '', 'Shift Hours', formatHours(e.shiftHours || 9)],
+      ['Base Salary', baseSalary.toLocaleString('en-IN'), '', 'Present Days', p.presentDays || 0],
+      ['Absent Days', (p.absentDays || 0).toString(), '', 'Gross Salary', p.grossSalary.toLocaleString('en-IN')],
       [],
       ['Hours Breakdown'],
       ['Total Worked Hrs', formatHours(p.totalWorkedHrs || 0), '', 'OT Hours', formatHours(p.otHours || 0)],
       ['Sunday Hours', formatHours(p.sundayHrs || 0), '', 'PH Hours', formatHours(p.phHours || 0)],
-      ['OT Rate (1x normal)', (p.otRate || 0).toFixed(2), '', 'OT Amount', (p.otAmount || 0).toLocaleString('en-IN')],
+      ['OT Amount', (p.otAmount || 0).toLocaleString('en-IN'), '', '', ''],
     ];
 
     const ws2 = XLSX.utils.aoa_to_sheet(detailData);

@@ -14,46 +14,19 @@ import { ReportsAnalytics } from '@/components/hrms/ReportsAnalytics';
 import { AIAssistant } from '@/components/hrms/AIAssistant';
 import { SalarySlipGenerator } from '@/components/hrms/SalarySlipGenerator';
 import { SettingsPanel } from '@/components/hrms/SettingsPanel';
-import { NotificationCenter } from '@/components/hrms/NotificationCenter';
+
 import { EmployeeProfile } from '@/components/hrms/EmployeeProfile';
 import { DepartmentManagement } from '@/components/hrms/DepartmentManagement';
 import { Header } from '@/components/hrms/Header';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ShieldCheck, ScrollText, Lock, User, Eye, EyeOff, Loader2, Crown, Sparkles } from 'lucide-react';
+import { Lock, User, Eye, EyeOff, Loader2, Crown, Sparkles } from 'lucide-react';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { toast } from 'sonner';
 
-// Placeholder components
-function AdminPanel() {
-  return (
-    <div className="flex flex-col items-center justify-center min-h-[60vh] glass-card p-8 border border-gold/15">
-      <div className="w-16 h-16 rounded-2xl gradient-laxree flex items-center justify-center mb-4 shadow-lg">
-        <ShieldCheck className="w-8 h-8 text-white" />
-      </div>
-      <h2 className="text-xl font-bold mb-2 text-gold-gradient">Admin Panel</h2>
-      <p className="text-muted-foreground text-sm text-center max-w-md">
-        Administrative controls and system configuration for Laxree HRMS. This module is under development.
-      </p>
-    </div>
-  );
-}
 
-function AuditLogs() {
-  return (
-    <div className="flex flex-col items-center justify-center min-h-[60vh] glass-card p-8 border border-gold/15">
-      <div className="w-16 h-16 rounded-2xl gradient-info flex items-center justify-center mb-4 shadow-lg">
-        <ScrollText className="w-8 h-8 text-white" />
-      </div>
-      <h2 className="text-xl font-bold mb-2">Audit Logs</h2>
-      <p className="text-muted-foreground text-sm text-center max-w-md">
-        Complete audit trail of all system actions and changes across Laxree Group. This module is under development.
-      </p>
-    </div>
-  );
-}
 
 // ── Premium Login Screen — Laxree Gold/Black ──
 function LoginScreen() {
@@ -281,10 +254,7 @@ export default function Home() {
       case 'ai-assistant': return <AIAssistant />;
       case 'salary-slip': return <SalarySlipGenerator />;
       case 'settings': return <SettingsPanel />;
-      case 'notifications': return <NotificationCenter />;
       case 'employee-profile': return <EmployeeProfile />;
-      case 'admin-panel': return <AdminPanel />;
-      case 'audit-logs': return <AuditLogs />;
       default: return <DashboardHome />;
     }
   };

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-export type PageKey = 'dashboard' | 'employees' | 'attendance' | 'payroll' | 'leaves' | 'holidays' | 'overtime' | 'departments' | 'reports' | 'ai-assistant' | 'salary-slip' | 'settings' | 'notifications' | 'employee-profile' | 'admin-panel' | 'audit-logs';
+export type PageKey = 'dashboard' | 'employees' | 'attendance' | 'payroll' | 'leaves' | 'holidays' | 'overtime' | 'departments' | 'reports' | 'ai-assistant' | 'salary-slip' | 'settings' | 'employee-profile';
 
 interface HRMSStore {
   currentPage: PageKey;
