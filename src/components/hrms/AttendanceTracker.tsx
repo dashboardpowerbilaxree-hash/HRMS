@@ -8,7 +8,7 @@ import {
   Upload, FileSpreadsheet, Pencil, Trash2,
   Download, FileDown, ChevronRight, Users
 } from 'lucide-react';
-
+import * as XLSXStyle from 'xlsx-js-style';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -469,13 +469,19 @@ export function AttendanceTracker() {
 
 
 
+  // ── Safe cell styling helper (prevents "Cannot set properties of undefined") ──
+  const safeStyle = (ws: any, cellRef: string, style: any) => {
+    if (ws[cellRef]) ws[cellRef].s = style;
+  };
+
   // ── Export Daily Attendance as Beautiful Excel ──
-  const handleExportDailyExcel = async () => {
+  const handleExportDailyExcel = () => {
     if (filteredRecords.length === 0) {
       toast.error('No records to export');
       return;
     }
-    const XLSX = await import('xlsx-js-style');
+    try {
+    const XLSX = XLSXStyle;
     const wb = XLSX.utils.book_new();
 
     // Company Header
@@ -489,13 +495,13 @@ export function AttendanceTracker() {
 
     // Apply styles to header rows
     ['A1', 'B1', 'C1', 'D1', 'E1', 'F1', 'G1', 'H1', 'I1'].forEach(c => {
-      if (ws[c]) ws[c].s = styleHeader();
+      safeStyle(ws, c, styleHeader());
     });
     ['A2', 'B2', 'C2', 'D2', 'E2', 'F2', 'G2', 'H2', 'I2'].forEach(c => {
-      if (ws[c]) ws[c].s = { font: { bold: true, color: { rgb: WHITE }, sz: 12 }, fill: { fgColor: { rgb: '2D2D2D' } }, alignment: { horizontal: 'center' as const } };
+      safeStyle(ws, c, { font: { bold: true, color: { rgb: WHITE }, sz: 12 }, fill: { fgColor: { rgb: '2D2D2D' } }, alignment: { horizontal: 'center' as const } });
     });
     ['A3', 'B3', 'C3', 'D3', 'E3', 'F3', 'G3', 'H3', 'I3'].forEach(c => {
-      if (ws[c]) ws[c].s = { font: { italic: true, color: { rgb: '888888' }, sz: 9 }, fill: { fgColor: { rgb: '2D2D2D' } }, alignment: { horizontal: 'center' as const } };
+      safeStyle(ws, c, { font: { italic: true, color: { rgb: '888888' }, sz: 9 }, fill: { fgColor: { rgb: '2D2D2D' } }, alignment: { horizontal: 'center' as const } });
     });
 
     // Data rows
@@ -568,25 +574,30 @@ export function AttendanceTracker() {
     ];
     const ws2 = XLSX.utils.aoa_to_sheet(summaryRows);
     // Style summary
-    ['A1', 'B1'].forEach(c => { if (ws2[c]) ws2[c].s = styleHeader(); });
-    ['A3', 'B3'].forEach(c => { if (ws2[c]) ws2[c].s = styleColHeader(EMERALD); });
-    ws2['A4'].s = styleBold(EMERALD, LIGHT_GREEN); ws2['B4'].s = styleBold(EMERALD, LIGHT_GREEN);
-    ws2['A5'].s = styleBold(RED, LIGHT_RED); ws2['B5'].s = styleBold(RED, LIGHT_RED);
-    ws2['A6'].s = styleBold(AMBER, LIGHT_AMBER); ws2['B6'].s = styleBold(AMBER, LIGHT_AMBER);
-    ws2['A7'].s = styleBold('E11D48', LIGHT_RED); ws2['B7'].s = styleBold('E11D48', LIGHT_RED);
-    ws2['A8'].s = styleBold(CYAN); ws2['B8'].s = styleBold(CYAN);
+    ['A1', 'B1'].forEach(c => { safeStyle(ws2, c, styleHeader()); });
+    ['A3', 'B3'].forEach(c => { safeStyle(ws2, c, styleColHeader(EMERALD)); });
+    safeStyle(ws2, 'A4', styleBold(EMERALD, LIGHT_GREEN)); safeStyle(ws2, 'B4', styleBold(EMERALD, LIGHT_GREEN));
+    safeStyle(ws2, 'A5', styleBold(RED, LIGHT_RED)); safeStyle(ws2, 'B5', styleBold(RED, LIGHT_RED));
+    safeStyle(ws2, 'A6', styleBold(AMBER, LIGHT_AMBER)); safeStyle(ws2, 'B6', styleBold(AMBER, LIGHT_AMBER));
+    safeStyle(ws2, 'A7', styleBold('E11D48', LIGHT_RED)); safeStyle(ws2, 'B7', styleBold('E11D48', LIGHT_RED));
+    safeStyle(ws2, 'A8', styleBold(CYAN)); safeStyle(ws2, 'B8', styleBold(CYAN));
     ws2['!cols'] = [{ wch: 18 }, { wch: 14 }];
     ws2['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 1 } }];
     XLSX.utils.book_append_sheet(wb, ws2, 'Summary');
 
     XLSX.writeFile(wb, `Daily_Attendance_${MONTHS[parseInt(filterMonth) - 1]}_${filterYear}.xlsx`);
     toast.success('Daily Attendance Excel downloaded successfully!');
+    } catch (err) {
+      console.error('Daily export error:', err);
+      toast.error('Export failed. Please try again.');
+    }
   };
 
   // ── Export Monthly Attendance Register as Beautiful Excel ──
-  const handleExportExcel = async () => {
+  const handleExportExcel = () => {
     if (!monthlySummary) return;
-    const XLSX = await import('xlsx-js-style');
+    try {
+    const XLSX = XLSXStyle;
     const s = monthlySummary;
     const wb = XLSX.utils.book_new();
 
@@ -609,12 +620,12 @@ export function AttendanceTracker() {
     // Style header rows
     const cols12 = ['A','B','C','D','E','F','G','H','I','J','K','L'];
     cols12.forEach(c => {
-      if (ws1[`${c}1`]) ws1[`${c}1`].s = styleHeader();
-      if (ws1[`${c}2`]) ws1[`${c}2`].s = styleSubHeader('2D2D2D');
+      safeStyle(ws1, `${c}1`, styleHeader());
+      safeStyle(ws1, `${c}2`, styleSubHeader('2D2D2D'));
     });
     for (let r = 3; r <= 5; r++) {
       cols12.forEach(c => {
-        if (ws1[`${c}${r}`]) ws1[`${c}${r}`].s = { font: { sz: 9, color: { rgb: 'CCCCCC' } }, fill: { fgColor: { rgb: '2D2D2D' } } };
+        safeStyle(ws1, `${c}${r}`, { font: { sz: 9, color: { rgb: 'CCCCCC' } }, fill: { fgColor: { rgb: '2D2D2D' } } });
       });
     }
 
@@ -748,27 +759,27 @@ export function AttendanceTracker() {
 
     // Style summary sheet
     const cols5 = ['A','B','C','D','E'];
-    cols5.forEach(c => { if (ws2[`${c}1`]) ws2[`${c}1`].s = styleHeader(); });
-    cols5.forEach(c => { if (ws2[`${c}2`]) ws2[`${c}2`].s = styleSubHeader('2D2D2D'); });
-    cols5.forEach(c => { if (ws2[`${c}5`]) ws2[`${c}5`].s = styleColHeader(EMERALD); });
+    cols5.forEach(c => { safeStyle(ws2, `${c}1`, styleHeader()); });
+    cols5.forEach(c => { safeStyle(ws2, `${c}2`, styleSubHeader('2D2D2D')); });
+    cols5.forEach(c => { safeStyle(ws2, `${c}5`, styleColHeader(EMERALD)); });
     // Color-coded rows
-    ws2['A6'].s = styleBold(EMERALD, LIGHT_GREEN); ws2['B6'].s = styleBold(EMERALD, LIGHT_GREEN);
-    ws2['D6'].s = styleBold(RED, LIGHT_RED); ws2['E6'].s = styleBold(RED, LIGHT_RED);
-    ws2['A7'].s = styleBold(AMBER, LIGHT_AMBER); ws2['B7'].s = styleBold(AMBER, LIGHT_AMBER);
-    ws2['D7'].s = styleBold(SKY, 'EFF6FF'); ws2['E7'].s = styleBold(SKY, 'EFF6FF');
-    ws2['A8'].s = styleData(LIGHT_BG); ws2['B8'].s = styleData(LIGHT_BG);
-    ws2['D8'].s = styleBold(PURPLE, 'F5F3FF'); ws2['E8'].s = styleBold(PURPLE, 'F5F3FF');
-    ws2['A9'].s = styleData(); ws2['B9'].s = styleData();
-    ws2['D9'].s = styleBold(SKY, 'EFF6FF'); ws2['E9'].s = styleBold(SKY, 'EFF6FF');
-    ws2['A10'].s = styleBold(SKY, 'EFF6FF'); ws2['B10'].s = styleBold(SKY, 'EFF6FF');
-    ws2['D10'].s = styleBold(EMERALD, LIGHT_GREEN); ws2['E10'].s = styleBold(EMERALD, LIGHT_GREEN);
-    ws2['A11'].s = styleBold(AMBER, LIGHT_AMBER); ws2['B11'].s = styleBold(AMBER, LIGHT_AMBER);
-    ws2['D11'].s = styleBold('E11D48', LIGHT_RED); ws2['E11'].s = styleBold('E11D48', LIGHT_RED);
+    safeStyle(ws2, 'A6', styleBold(EMERALD, LIGHT_GREEN)); safeStyle(ws2, 'B6', styleBold(EMERALD, LIGHT_GREEN));
+    safeStyle(ws2, 'D6', styleBold(RED, LIGHT_RED)); safeStyle(ws2, 'E6', styleBold(RED, LIGHT_RED));
+    safeStyle(ws2, 'A7', styleBold(AMBER, LIGHT_AMBER)); safeStyle(ws2, 'B7', styleBold(AMBER, LIGHT_AMBER));
+    safeStyle(ws2, 'D7', styleBold(SKY, 'EFF6FF')); safeStyle(ws2, 'E7', styleBold(SKY, 'EFF6FF'));
+    safeStyle(ws2, 'A8', styleData(LIGHT_BG)); safeStyle(ws2, 'B8', styleData(LIGHT_BG));
+    safeStyle(ws2, 'D8', styleBold(PURPLE, 'F5F3FF')); safeStyle(ws2, 'E8', styleBold(PURPLE, 'F5F3FF'));
+    safeStyle(ws2, 'A9', styleData()); safeStyle(ws2, 'B9', styleData());
+    safeStyle(ws2, 'D9', styleBold(SKY, 'EFF6FF')); safeStyle(ws2, 'E9', styleBold(SKY, 'EFF6FF'));
+    safeStyle(ws2, 'A10', styleBold(SKY, 'EFF6FF')); safeStyle(ws2, 'B10', styleBold(SKY, 'EFF6FF'));
+    safeStyle(ws2, 'D10', styleBold(EMERALD, LIGHT_GREEN)); safeStyle(ws2, 'E10', styleBold(EMERALD, LIGHT_GREEN));
+    safeStyle(ws2, 'A11', styleBold(AMBER, LIGHT_AMBER)); safeStyle(ws2, 'B11', styleBold(AMBER, LIGHT_AMBER));
+    safeStyle(ws2, 'D11', styleBold('E11D48', LIGHT_RED)); safeStyle(ws2, 'E11', styleBold('E11D48', LIGHT_RED));
     // Hours section
-    ws2['A13'].s = styleSubHeader('2D2D2D'); cols5.filter(c => c !== 'A').forEach(c => { if (ws2[`${c}13`]) ws2[`${c}13`].s = styleSubHeader('2D2D2D'); });
+    safeStyle(ws2, 'A13', styleSubHeader('2D2D2D')); cols5.filter(c => c !== 'A').forEach(c => { safeStyle(ws2, `${c}13`, styleSubHeader('2D2D2D')); });
     for (let r = 14; r <= 20; r++) {
       const bg2 = (r - 14) % 2 === 0 ? LIGHT_BG : undefined;
-      ws2[`A${r}`].s = styleData(bg2); ws2[`B${r}`].s = styleBold(DARK, bg2);
+      safeStyle(ws2, `A${r}`, styleData(bg2)); safeStyle(ws2, `B${r}`, styleBold(DARK, bg2));
     }
 
     ws2['!cols'] = [
@@ -782,6 +793,10 @@ export function AttendanceTracker() {
 
     XLSX.writeFile(wb, `Monthly_Attendance_${s.employee.fullName}_${s.monthName}_${s.year}.xlsx`);
     toast.success('Monthly Attendance Excel downloaded successfully!');
+    } catch (err) {
+      console.error('Monthly export error:', err);
+      toast.error('Export failed. Please try again.');
+    }
   };
 
   // ── Convert Excel serial date to YYYY-MM-DD ──
