@@ -45,7 +45,6 @@ export async function POST(request: NextRequest) {
 
         // Total worked hours from attendance — calculate from RAW check-in/check-out times
         let totalWorkMinutes = 0;
-        let totalOTMinutes = 0;
         const shiftMinutes = Math.round(emp.shiftHours * 60);
         for (const a of attendance) {
           if (a.checkIn && a.checkOut && ['present', 'late', 'half-day', 'half_day', 'early-out'].includes(a.status)) {
@@ -53,13 +52,14 @@ export async function POST(request: NextRequest) {
             const [h2, m2] = a.checkOut.split(':').map(Number);
             const workMin = Math.max(0, (h2 * 60 + m2) - (h1 * 60 + m1));
             totalWorkMinutes += workMin;
-            const otMin = Math.max(0, workMin - shiftMinutes);
-            totalOTMinutes += otMin;
           }
         }
         const totalWorkedHrs = Math.floor(totalWorkMinutes / 60) + (totalWorkMinutes % 60) / 100;
-        const otHours = Math.floor(totalOTMinutes / 60) + (totalOTMinutes % 60) / 100;
-        const otHoursDecimal = Math.round(totalOTMinutes / 60 * 100) / 100;
+
+        // ─── OT Hours: Sum stored overtimeHours directly (decimal sum) ───
+        // This ensures the total matches the sum of individual OT values the user sees.
+        const otHoursDecimal = Math.round(attendance.filter(a => ['present', 'late', 'half-day', 'half_day', 'early-out'].includes(a.status)).reduce((sum, a) => sum + (a.overtimeHours || 0), 0) * 100) / 100;
+        const otHours = otHoursDecimal;
 
         // Attendance counts
         const rawPresentDays = attendance.filter(a => ['present', 'late', 'early-out'].includes(a.status)).length;

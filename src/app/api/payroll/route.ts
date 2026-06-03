@@ -90,7 +90,6 @@ export async function POST(request: NextRequest) {
 
     // Total worked hours from attendance — calculate from RAW check-in/check-out times for accuracy
     let totalWorkMinutes = 0;
-    let totalOTMinutes = 0;
     const shiftMinutes = Math.round(employee.shiftHours * 60);
 
     for (const a of attendance) {
@@ -99,8 +98,6 @@ export async function POST(request: NextRequest) {
         const [h2, m2] = a.checkOut.split(':').map(Number);
         const workMin = Math.max(0, (h2 * 60 + m2) - (h1 * 60 + m1));
         totalWorkMinutes += workMin;
-        const otMin = Math.max(0, workMin - shiftMinutes);
-        totalOTMinutes += otMin;
       }
     }
 
@@ -109,10 +106,12 @@ export async function POST(request: NextRequest) {
     // Decimal hours for salary calculation
     const totalWorkedHrsDecimal = Math.round(totalWorkMinutes / 60 * 100) / 100;
 
-    // Overtime hours — calculated from raw times above
-    const otHours = Math.floor(totalOTMinutes / 60) + (totalOTMinutes % 60) / 100;
-    // Decimal OT hours for salary calculation
-    const otHoursDecimal = Math.round(totalOTMinutes / 60 * 100) / 100;
+    // ─── OT Hours: Sum stored overtimeHours directly (decimal sum) ───
+    // This ensures the total matches the sum of individual OT values the user sees.
+    // The stored overtimeHours are already calculated as decimal hours per record.
+    const otHoursDecimal = Math.round(attendance.filter(a => ['present', 'late', 'half-day', 'half_day', 'early-out'].includes(a.status)).reduce((sum, a) => sum + (a.overtimeHours || 0), 0) * 100) / 100;
+    // For display, show as decimal (e.g., 4.45 not 4.27) to match user's manual calculation
+    const otHours = otHoursDecimal;
 
     // Attendance counts
     const rawPresentDays = attendance.filter(a => ['present', 'late', 'early-out'].includes(a.status)).length;

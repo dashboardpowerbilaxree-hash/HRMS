@@ -204,11 +204,9 @@ export async function GET(request: NextRequest) {
     const firmFullName = FIRM_NAMES[effectiveFirm] || employee.firm;
     const monthName = MONTHS[month - 1];
 
-    // Computed totals — calculate from RAW check-in/check-out times for accuracy
-    // Instead of summing stored decimal hours (which have rounding errors),
-    // we calculate from the actual times to get exact totals in HH.MM format.
+    // Computed totals — work hours from raw times, OT from stored values
+    // OT is summed from stored overtimeHours to match the individual OT values users see.
     let totalWorkMinutes = 0;
-    let totalOTMinutes = 0;
     let totalSundayMinutes = 0;
     const shiftMinutes = Math.round(employee.shiftHours * 60);
 
@@ -218,8 +216,6 @@ export async function GET(request: NextRequest) {
         const [h2, m2] = a.checkOut.split(':').map(Number);
         const workMin = Math.max(0, (h2 * 60 + m2) - (h1 * 60 + m1));
         totalWorkMinutes += workMin;
-        const otMin = Math.max(0, workMin - shiftMinutes);
-        totalOTMinutes += otMin;
       }
       if (a.sundayHours > 0) {
         totalSundayMinutes += hhmmToMinutes(a.sundayHours);
@@ -227,7 +223,10 @@ export async function GET(request: NextRequest) {
     }
 
     const totalWorkHours = formatMinutesToHHMM(totalWorkMinutes);
-    const totalOvertimeHours = formatMinutesToHHMM(totalOTMinutes);
+    // ─── OT Hours: Sum stored overtimeHours directly (decimal sum) ───
+    // This ensures the total matches the sum of individual OT values the user sees.
+    const totalOvertimeHoursDecimal = Math.round(attendance.reduce((sum, a) => sum + (a.overtimeHours || 0), 0) * 100) / 100;
+    const totalOvertimeHours = totalOvertimeHoursDecimal.toFixed(2);
     const totalSundayHours = formatMinutesToHHMM(totalSundayMinutes);
     const lateEntries = attendance.filter(a => a.lateEntry).length;
     const earlyOuts = attendance.filter(a => a.earlyOut).length;
@@ -284,7 +283,7 @@ export async function GET(request: NextRequest) {
       });
 
       if (rec) {
-        // Calculate OT and total hours from raw times for accuracy
+        // Use stored totalHours and overtimeHours for per-day values (consistent with dashboard)
         let dayTotalHrs = '0.00';
         let dayOTHrs = '0.00';
         let daySundayHrs = '0.00';
@@ -293,8 +292,8 @@ export async function GET(request: NextRequest) {
           const [h2, m2] = rec.checkOut.split(':').map(Number);
           const workMin = Math.max(0, (h2 * 60 + m2) - (h1 * 60 + m1));
           dayTotalHrs = formatMinutesToHHMM(workMin);
-          const otMin = Math.max(0, workMin - shiftMinutes);
-          dayOTHrs = formatMinutesToHHMM(otMin);
+          // Use stored overtimeHours (decimal) for consistency with total
+          dayOTHrs = rec.overtimeHours > 0 ? rec.overtimeHours.toFixed(2) : '0.00';
         }
         if (rec.sundayHours > 0) {
           daySundayHrs = formatHours(rec.sundayHours);

@@ -912,7 +912,7 @@ export function AttendanceTracker() {
                       <p className="text-[10px] text-muted-foreground font-medium truncate">{card.title}</p>
                       <p className="text-xl font-bold">
                         {card.isHours ? (
-                          <span>{formatHours(card.value)}h</span>
+                          <span>{card.value.toFixed(2)}h</span>
                         ) : (
                           <AnimatedCounter
                             value={card.value}
@@ -1057,7 +1057,7 @@ export function AttendanceTracker() {
                             <TableCell><StatusBadge status={rec.status} /></TableCell>
                             <TableCell className="hidden lg:table-cell text-sm whitespace-nowrap">
                               {rec.overtimeHours > 0 ? (
-                                <span className="text-cyan-600 dark:text-cyan-400 font-medium">{formatHours(rec.overtimeHours)}h</span>
+                                <span className="text-cyan-600 dark:text-cyan-400 font-medium">{rec.overtimeHours.toFixed(2)}h</span>
                               ) : '—'}
                             </TableCell>
                             <TableCell className="sticky right-0 bg-card">
@@ -1282,7 +1282,7 @@ export function AttendanceTracker() {
                                       <span className="text-xs text-muted-foreground italic">No Record</span>
                                     )}
                                   </TableCell>
-                                  <TableCell className="text-xs">{rec && rec.overtimeHours > 0 ? `${formatHours(rec.overtimeHours)}h` : '—'}</TableCell>
+                                  <TableCell className="text-xs">{rec && rec.overtimeHours > 0 ? `${rec.overtimeHours.toFixed(2)}h` : '—'}</TableCell>
                                 </TableRow>
                               );
                             }

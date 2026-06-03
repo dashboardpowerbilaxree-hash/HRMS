@@ -777,7 +777,7 @@ export function PayrollAutomation() {
                       {card.format === 'currency' ? (
                         <AnimatedCounter value={card.value} prefix="₹" decimals={0} />
                       ) : card.isHours ? (
-                        <span>{formatHours(card.value)}h</span>
+                        <span>{card.value.toFixed(2)}h</span>
                       ) : (
                         <AnimatedCounter value={card.value} suffix={'suffix' in card ? (card as any).suffix : ''} decimals={'decimals' in card ? (card as any).decimals : 0} />
                       )}
