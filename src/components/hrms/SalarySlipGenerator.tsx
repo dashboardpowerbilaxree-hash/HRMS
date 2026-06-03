@@ -237,7 +237,7 @@ export function SalarySlipGenerator() {
     // ── Payslip Sheet in the exact format user wants ──
     const data: any[][] = [
       // Row 1: Title
-      ['SALARY SLIP FORMAT'],
+      [firmFullName + ' — PAY SLIP'],
       // Row 2: Company Information Header
       ['Salary Slip', '', '', '', 'COMPANY LOGO'],
       // Row 3: Company Info section header
@@ -249,16 +249,17 @@ export function SalarySlipGenerator() {
       ['Company Email Address :', firmEmail, '', '', ''],
       // Row 8: Employee Information header
       ['Employee Information', '', '', '', ''],
-      // Rows 9-12: Employee details
-      ['Employee Name :', e.fullName, '', '', ''],
+      // Rows 9-16: Employee details
+      ['Employee Name :', e.fullName, '', 'Employee Code :', e.employeeId],
+      ['Designation :', e.designation || 'N/A', '', 'Department :', e.department || firmCode || 'N/A'],
+      ['Pay Period :', `${months[month - 1]} ${year}`, '', 'Location :', e.location || 'N/A'],
       ['Employee Address :', e.address || e.location || 'N/A', '', '', ''],
-      ['Employee Phone no :', e.mobile || 'N/A', '', '', ''],
-      ['Employee Email ID :', e.email || 'N/A', '', '', ''],
-      // Row 13: blank
+      ['Employee Phone no :', e.mobile || 'N/A', '', 'Employee Email ID :', e.email || 'N/A'],
+      // Row 14: blank
       [],
-      // Row 14: Earnings/Deductions header
+      // Row 15: Earnings/Deductions header
       ['Earnings', 'Amount', '', 'Deductions', 'Amount'],
-      // Rows 15-23: Earnings & Deductions rows
+      // Rows 16-24: Earnings & Deductions rows
       ['Basic', baseSalary.toLocaleString('en-IN'), '', 'Provident Fund', '0'],
       ['HRA', '0', '', 'ESI', '0'],
       ['Special Allowance', '0', '', 'Professional Tax', '0'],
@@ -268,17 +269,17 @@ export function SalarySlipGenerator() {
       ['Bonus', (p.bonus || 0).toLocaleString('en-IN'), '', 'Security Deposit', (p.securityDeposit || 0).toLocaleString('en-IN')],
       ['Over Time Pay', (p.otAmount || 0).toLocaleString('en-IN'), '', 'Other Deduction', (p.otherDeductions || 0).toLocaleString('en-IN')],
       ['Total Earnings', totalEarnings.toLocaleString('en-IN'), '', 'Net Pay', p.netSalary.toLocaleString('en-IN')],
-      // Row 24: blank
+      // Row 25: blank
       [],
-      // Row 25: In Words
+      // Row 26: In Words
       ['In Words :', numberToWords(p.netSalary), '', '', ''],
-      // Row 26: blank
+      // Row 27: blank
       [],
-      // Row 27: Signature section
+      // Row 28: Signature section
       ['Prepared By :', '', '', 'Received By :', ''],
-      // Row 28: blank
+      // Row 29: blank
       [],
-      // Row 29: Footer
+      // Row 30: Footer
       [`This is a computer-generated payslip by ${firmFullName}`],
     ];
 
@@ -306,21 +307,23 @@ export function SalarySlipGenerator() {
     // Row 8: Employee Information header
     cols5.forEach(c => { if (ws[`${c}8`]) ws[`${c}8`].s = { font: { bold: true, color: { rgb: BLACK }, sz: 11 }, fill: { fgColor: { rgb: 'E8E8E8' } }, border: fullBorder('999999') }; });
 
-    // Rows 9-12: Employee details (white background)
-    for (const r of [9, 10, 11, 12]) {
+    // Rows 9-13: Employee details (white background)
+    for (const r of [9, 10, 11, 12, 13]) {
       if (ws[`A${r}`]) ws[`A${r}`].s = { font: { bold: true, sz: 10, color: { rgb: BLACK } }, border: fullBorder('CCCCCC') };
       if (ws[`B${r}`]) ws[`B${r}`].s = { font: { sz: 10 }, border: fullBorder('CCCCCC') };
+      if (ws[`D${r}`]) ws[`D${r}`].s = { font: { bold: true, sz: 10, color: { rgb: BLACK } }, border: fullBorder('CCCCCC') };
+      if (ws[`E${r}`]) ws[`E${r}`].s = { font: { sz: 10 }, border: fullBorder('CCCCCC') };
     }
 
-    // Row 14: Earnings/Deductions header
-    if (ws['A14']) ws['A14'].s = { font: { bold: true, color: { rgb: WHITE }, sz: 11 }, fill: { fgColor: { rgb: EMERALD } }, alignment: { horizontal: 'center' as const }, border: fullBorder(EMERALD, 'medium') };
-    if (ws['B14']) ws['B14'].s = { font: { bold: true, color: { rgb: WHITE }, sz: 11 }, fill: { fgColor: { rgb: EMERALD } }, alignment: { horizontal: 'center' as const }, border: fullBorder(EMERALD, 'medium') };
-    if (ws['D14']) ws['D14'].s = { font: { bold: true, color: { rgb: WHITE }, sz: 11 }, fill: { fgColor: { rgb: RED } }, alignment: { horizontal: 'center' as const }, border: fullBorder(RED, 'medium') };
-    if (ws['E14']) ws['E14'].s = { font: { bold: true, color: { rgb: WHITE }, sz: 11 }, fill: { fgColor: { rgb: RED } }, alignment: { horizontal: 'center' as const }, border: fullBorder(RED, 'medium') };
+    // Row 15: Earnings/Deductions header
+    if (ws['A15']) ws['A15'].s = { font: { bold: true, color: { rgb: WHITE }, sz: 11 }, fill: { fgColor: { rgb: EMERALD } }, alignment: { horizontal: 'center' as const }, border: fullBorder(EMERALD, 'medium') };
+    if (ws['B15']) ws['B15'].s = { font: { bold: true, color: { rgb: WHITE }, sz: 11 }, fill: { fgColor: { rgb: EMERALD } }, alignment: { horizontal: 'center' as const }, border: fullBorder(EMERALD, 'medium') };
+    if (ws['D15']) ws['D15'].s = { font: { bold: true, color: { rgb: WHITE }, sz: 11 }, fill: { fgColor: { rgb: RED } }, alignment: { horizontal: 'center' as const }, border: fullBorder(RED, 'medium') };
+    if (ws['E15']) ws['E15'].s = { font: { bold: true, color: { rgb: WHITE }, sz: 11 }, fill: { fgColor: { rgb: RED } }, alignment: { horizontal: 'center' as const }, border: fullBorder(RED, 'medium') };
 
-    // Rows 15-23: Earnings/Deductions data (alternating colors)
+    // Rows 16-24: Earnings/Deductions data (alternating colors)
     for (let i = 0; i < 9; i++) {
-      const r = 15 + i;
+      const r = 16 + i;
       const isEven = i % 2 === 0;
       const earnBg = isEven ? LIGHT_GREEN : LIGHT_GOLD;
       const dedBg = isEven ? LIGHT_RED : 'FFF0F0';
@@ -332,16 +335,16 @@ export function SalarySlipGenerator() {
       if (ws[`E${r}`]) ws[`E${r}`].s = { font: { sz: 10, bold: isTotal, color: { rgb: isTotal ? RED : BLACK } }, fill: { fgColor: { rgb: dedBg } }, alignment: { horizontal: 'right' as const }, border: fullBorder(isTotal ? RED : 'C0C0C0', isTotal ? 'medium' : 'thin') };
     }
 
-    // Row 25: In Words (blue bg)
-    if (ws['A25']) ws['A25'].s = { font: { bold: true, sz: 10, color: { rgb: BLUE } }, fill: { fgColor: { rgb: LIGHT_BLUE } }, border: fullBorder(BLUE) };
-    if (ws['B25']) ws['B25'].s = { font: { italic: true, sz: 10, color: { rgb: BLUE } }, fill: { fgColor: { rgb: LIGHT_BLUE } }, border: fullBorder(BLUE) };
+    // Row 26: In Words (blue bg)
+    if (ws['A26']) ws['A26'].s = { font: { bold: true, sz: 10, color: { rgb: BLUE } }, fill: { fgColor: { rgb: LIGHT_BLUE } }, border: fullBorder(BLUE) };
+    if (ws['B26']) ws['B26'].s = { font: { italic: true, sz: 10, color: { rgb: BLUE } }, fill: { fgColor: { rgb: LIGHT_BLUE } }, border: fullBorder(BLUE) };
 
-    // Row 27: Signature section (blue bg)
-    cols5.forEach(c => { if (ws[`${c}27`]) ws[`${c}27`].s = { font: { bold: true, sz: 10, color: { rgb: WHITE } }, fill: { fgColor: { rgb: BLUE } }, border: fullBorder(BLUE) }; });
+    // Row 28: Signature section (blue bg)
+    cols5.forEach(c => { if (ws[`${c}28`]) ws[`${c}28`].s = { font: { bold: true, sz: 10, color: { rgb: WHITE } }, fill: { fgColor: { rgb: BLUE } }, border: fullBorder(BLUE) }; });
 
-    // Rows 29-30: Footer
-    cols5.forEach(c => { if (ws[`${c}29`]) ws[`${c}29`].s = { font: { italic: true, sz: 8, color: { rgb: '888888' } } }; });
+    // Rows 30-31: Footer
     cols5.forEach(c => { if (ws[`${c}30`]) ws[`${c}30`].s = { font: { italic: true, sz: 8, color: { rgb: '888888' } } }; });
+    cols5.forEach(c => { if (ws[`${c}31`]) ws[`${c}31`].s = { font: { italic: true, sz: 8, color: { rgb: '888888' } } }; });
 
     ws['!cols'] = [
       { wch: 22 }, { wch: 28 }, { wch: 4 }, { wch: 22 }, { wch: 28 },
@@ -356,14 +359,11 @@ export function SalarySlipGenerator() {
       { s: { r: 5, c: 1 }, e: { r: 5, c: 4 } },
       { s: { r: 6, c: 1 }, e: { r: 6, c: 4 } },
       { s: { r: 7, c: 0 }, e: { r: 7, c: 4 } },
-      { s: { r: 8, c: 1 }, e: { r: 8, c: 4 } },
-      { s: { r: 9, c: 1 }, e: { r: 9, c: 4 } },
-      { s: { r: 10, c: 1 }, e: { r: 10, c: 4 } },
       { s: { r: 11, c: 1 }, e: { r: 11, c: 4 } },
-      { s: { r: 13, c: 2 }, e: { r: 13, c: 2 } },
-      { s: { r: 24, c: 1 }, e: { r: 24, c: 4 } },
-      { s: { r: 28, c: 0 }, e: { r: 28, c: 4 } },
+      { s: { r: 14, c: 2 }, e: { r: 14, c: 2 } },
+      { s: { r: 25, c: 1 }, e: { r: 25, c: 4 } },
       { s: { r: 29, c: 0 }, e: { r: 29, c: 4 } },
+      { s: { r: 30, c: 0 }, e: { r: 30, c: 4 } },
     ];
     XLSX.utils.book_append_sheet(wb, ws, 'Salary Slip');
 
@@ -477,11 +477,11 @@ export function SalarySlipGenerator() {
       .footer { padding: 6px 20px; text-align: center; font-size: 8px; color: #999; border-top: 1px solid #eee; }
     </style></head><body>
     <div class="payslip">
-      <div class="title">SALARY SLIP FORMAT</div>
+      <div class="title">PAY SLIP — ${months[month - 1]} ${year}</div>
       <div class="company-header">
         <div class="left">
           <h2>Salary Slip</h2>
-          <p>Company Information</p>
+          <p>${firmFullName}</p>
         </div>
         <div class="logo-box"><img src="${logoAbsUrl}" alt="${firmCode}" /></div>
       </div>
@@ -495,6 +495,11 @@ export function SalarySlipGenerator() {
       <div class="emp-section">
         <div class="info-grid">
           <span class="label">Employee Name :</span><span class="value">${e.fullName}</span>
+          <span class="label">Employee Code :</span><span class="value">${e.employeeId}</span>
+          <span class="label">Designation :</span><span class="value">${e.designation || 'N/A'}</span>
+          <span class="label">Department :</span><span class="value">${e.department || firmCode || 'N/A'}</span>
+          <span class="label">Pay Period :</span><span class="value">${months[month - 1]} ${year}</span>
+          <span class="label">Location :</span><span class="value">${e.location || 'N/A'}</span>
           <span class="label">Employee Address :</span><span class="value">${e.address || e.location || 'N/A'}</span>
           <span class="label">Employee Phone no :</span><span class="value">${e.mobile || 'N/A'}</span>
           <span class="label">Employee Email ID :</span><span class="value">${e.email || 'N/A'}</span>
@@ -584,14 +589,17 @@ export function SalarySlipGenerator() {
             <div className="bg-white dark:bg-card" style={{ fontFamily: "'Merriweather', 'Georgia', 'Liberation Serif', serif" }}>
               {/* Title */}
               <div className="text-center py-2 border-b-2 border-[#1E3A5F] dark:border-blue-500">
-                <h2 className="text-xl font-extrabold text-[#1E3A5F] dark:text-blue-400 tracking-wide">SALARY SLIP FORMAT</h2>
+                <div className="flex items-center justify-between px-4">
+                  <h2 className="text-xl font-extrabold text-[#1E3A5F] dark:text-blue-400 tracking-wide">PAY SLIP</h2>
+                  <span className="text-xs text-muted-foreground">{months[month - 1]} {year}</span>
+                </div>
               </div>
 
               {/* Company Header with Logo */}
               <div className="bg-[#1E3A5F] dark:bg-blue-900 px-5 py-3 flex items-center justify-between">
                 <div>
-                  <h3 className="text-white font-bold text-base">Salary Slip</h3>
-                  <p className="text-blue-200 text-xs">Company Information</p>
+                  <h3 className="text-white font-bold text-base">{firmFullName}</h3>
+                  <p className="text-blue-200 text-xs">{months[month - 1]} {year}</p>
                 </div>
                 <div className="w-16 h-16 bg-white rounded-lg overflow-hidden flex items-center justify-center p-1">
                   <img src={firmLogo} alt={firmCode} className="w-full h-full object-contain" />
@@ -616,9 +624,19 @@ export function SalarySlipGenerator() {
               </div>
 
               {/* Employee Info Grid */}
-              <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 px-5 py-3 bg-gray-50 dark:bg-muted/20 text-sm">
+              <div className="grid grid-cols-[auto_1fr_auto_1fr] gap-x-3 gap-y-1 px-5 py-3 bg-gray-50 dark:bg-muted/20 text-sm">
                 <span className="font-semibold text-[#1E3A5F] dark:text-blue-400">Employee Name :</span>
                 <span>{e.fullName}</span>
+                <span className="font-semibold text-[#1E3A5F] dark:text-blue-400">Employee Code :</span>
+                <span>{e.employeeId}</span>
+                <span className="font-semibold text-[#1E3A5F] dark:text-blue-400">Designation :</span>
+                <span>{e.designation || 'N/A'}</span>
+                <span className="font-semibold text-[#1E3A5F] dark:text-blue-400">Department :</span>
+                <span>{e.department || firmCode || 'N/A'}</span>
+                <span className="font-semibold text-[#1E3A5F] dark:text-blue-400">Pay Period :</span>
+                <span>{months[month - 1]} {year}</span>
+                <span className="font-semibold text-[#1E3A5F] dark:text-blue-400">Location :</span>
+                <span>{e.location || 'N/A'}</span>
                 <span className="font-semibold text-[#1E3A5F] dark:text-blue-400">Employee Address :</span>
                 <span>{e.address || e.location || 'N/A'}</span>
                 <span className="font-semibold text-[#1E3A5F] dark:text-blue-400">Employee Phone no :</span>

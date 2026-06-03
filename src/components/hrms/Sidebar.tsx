@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils';
 import Image from 'next/image';
 import {
   LayoutDashboard, Users, Clock, DollarSign, CalendarDays,
-  Palmtree, Timer, Building2, BarChart3, Bot, FileText,
+  Palmtree, BarChart3, Bot, FileText,
   Settings, ChevronLeft, ChevronRight, Filter, LogOut, Crown
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -18,8 +18,6 @@ const navItems: { key: PageKey; label: string; icon: any }[] = [
   { key: 'payroll', label: 'Payroll', icon: DollarSign },
   { key: 'leaves', label: 'Leaves', icon: CalendarDays },
   { key: 'holidays', label: 'Holidays', icon: Palmtree },
-  { key: 'overtime', label: 'Overtime', icon: Timer },
-  { key: 'departments', label: 'Departments', icon: Building2 },
   { key: 'reports', label: 'Reports', icon: BarChart3 },
   { key: 'salary-slip', label: 'Salary Slip', icon: FileText },
   { key: 'ai-assistant', label: 'AI Assistant', icon: Bot },

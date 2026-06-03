@@ -8,7 +8,7 @@ import {
   Upload, FileSpreadsheet, Pencil, Trash2,
   Download, FileDown, ChevronRight, Users
 } from 'lucide-react';
-import * as XLSXStyle from 'xlsx-js-style';
+
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -470,12 +470,12 @@ export function AttendanceTracker() {
 
 
   // ── Export Daily Attendance as Beautiful Excel ──
-  const handleExportDailyExcel = () => {
+  const handleExportDailyExcel = async () => {
     if (filteredRecords.length === 0) {
       toast.error('No records to export');
       return;
     }
-    const XLSX = XLSXStyle;
+    const XLSX = await import('xlsx-js-style');
     const wb = XLSX.utils.book_new();
 
     // Company Header
@@ -584,9 +584,9 @@ export function AttendanceTracker() {
   };
 
   // ── Export Monthly Attendance Register as Beautiful Excel ──
-  const handleExportExcel = () => {
+  const handleExportExcel = async () => {
     if (!monthlySummary) return;
-    const XLSX = XLSXStyle;
+    const XLSX = await import('xlsx-js-style');
     const s = monthlySummary;
     const wb = XLSX.utils.book_new();
 
