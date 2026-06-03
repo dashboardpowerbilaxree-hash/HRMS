@@ -214,8 +214,8 @@ export function SalarySlipGenerator() {
     if (!slip?.payroll) return;
     const p = slip.payroll;
     const e = slip.employee;
-    const baseSalary = p.baseSalary != null ? p.baseSalary : Math.round((p.monthlySalary - ((p.monthlySalary / (new Date(year, month, 0).getDate())) * p.absentDays)) * 100) / 100;
     const perDayRate = Math.round((p.monthlySalary / (new Date(year, month, 0).getDate())) * 100) / 100;
+    const baseSalary = p.baseSalary != null ? p.baseSalary : Math.round((perDayRate * ((p.presentDays || 0) + (p.paidLeaves || 0) + ((p.halfDays || 0) * 0.5))) * 100) / 100;
     const totalEarnings = p.grossSalary + (p.bonus || 0) + (p.incentive || 0) + (p.arrear || 0);
 
     // Color constants
@@ -436,9 +436,9 @@ export function SalarySlipGenerator() {
     if (!slip?.payroll || !slipRef.current) return;
     const p = slip.payroll;
     const e = slip.employee;
-    const baseSalary = p.baseSalary != null ? p.baseSalary : Math.round((p.monthlySalary - ((p.monthlySalary / (new Date(year, month, 0).getDate())) * p.absentDays)) * 100) / 100;
-    const totalEarnings = p.grossSalary + (p.bonus || 0) + (p.incentive || 0) + (p.arrear || 0);
     const perDayRate = Math.round((p.monthlySalary / (new Date(year, month, 0).getDate())) * 100) / 100;
+    const baseSalary = p.baseSalary != null ? p.baseSalary : Math.round((perDayRate * ((p.presentDays || 0) + (p.paidLeaves || 0) + ((p.halfDays || 0) * 0.5))) * 100) / 100;
+    const totalEarnings = p.grossSalary + (p.bonus || 0) + (p.incentive || 0) + (p.arrear || 0);
 
     const logoAbsUrl = `${window.location.origin}${firmLogo}`;
 
@@ -543,7 +543,8 @@ export function SalarySlipGenerator() {
   const firm = (slip?.employee?.employeeId ? getFirmFromEmployeeId(slip.employee.employeeId) : '') || slip?.employee?.department || slip?.employee?.firm || '';
   const p = slip?.payroll;
   const e = slip?.employee;
-  const baseSalaryCalc = p ? (p.baseSalary != null ? p.baseSalary : Math.round((p.monthlySalary - ((p.monthlySalary / (new Date(year, month, 0).getDate())) * p.absentDays)) * 100) / 100) : 0;
+  const perDayRateCalc = p ? Math.round((p.monthlySalary / (new Date(year, month, 0).getDate())) * 100) / 100 : 0;
+  const baseSalaryCalc = p ? (p.baseSalary != null ? p.baseSalary : Math.round((perDayRateCalc * ((p.presentDays || 0) + (p.paidLeaves || 0) + ((p.halfDays || 0) * 0.5))) * 100) / 100) : 0;
   const totalEarningsCalc = p ? p.grossSalary + (p.bonus || 0) + (p.incentive || 0) + (p.arrear || 0) : 0;
 
   return (

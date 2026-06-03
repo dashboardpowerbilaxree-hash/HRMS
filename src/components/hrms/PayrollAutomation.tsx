@@ -253,17 +253,22 @@ export function PayrollAutomation() {
   }, [employees, form.employeeId]);
 
   // ── Salary preview calculation ──
-  // Uses baseSalary (= monthlySalary − perDaySalary × absentDays) as the starting point
-  // Net = baseSalary + OT + Sunday + PH + bonus + incentive + arrear − totalDeductions
+  // Uses baseSalary (= perDayRate × earnedDays) as the starting point
+  // earnedDays = presentDays + halfDays×0.5 + paidLeaves (Sundays NOT counted)
+  // Net = baseSalary + OT + bonus + incentive + arrear − totalDeductions
   const salaryPreview = useMemo(() => {
     if (!selectedEmp) return null;
     const existing = payrolls.find((p) => p.employeeId === form.employeeId);
     if (!existing) return null;
 
-    // Base Salary from the payroll's computed field (monthlySalary − perDay × absentDays)
+    // Base Salary from the payroll's computed field (perDayRate × earnedDays)
+    // earnedDays = presentDays + paidLeaves (Sundays NOT counted as earned)
+    const daysInMonth = existing.daysInMonth || new Date(parseInt(filterYear), parseInt(filterMonth), 0).getDate();
+    const perDayRate = Math.round((existing.monthlySalary / daysInMonth) * 100) / 100;
+    const earnedDays = (existing.presentDays || 0) + (existing.paidLeaves || 0) + ((existing.halfDays || 0) * 0.5);
     const baseSalary = existing.baseSalary != null
       ? existing.baseSalary
-      : Math.round((existing.monthlySalary - ((existing.monthlySalary / (existing.daysInMonth || new Date(parseInt(filterYear), parseInt(filterMonth), 0).getDate())) * existing.absentDays)) * 100) / 100;
+      : Math.round((perDayRate * earnedDays) * 100) / 100;
 
     // Gross includes OT, Sunday, PH on top of baseSalary
     const grossSalary = existing.grossSalary;
@@ -660,7 +665,7 @@ export function PayrollAutomation() {
             Payroll Automation
           </h2>
           <p className="text-sm text-muted-foreground">
-            Per Day = Monthly Salary ÷ Days in Month (31/30/28) | OT at normal hourly rate (1x)
+            Hourly Rate = Monthly Salary ÷ (Days in Month × 9) | OT at normal hourly rate (1x)
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
@@ -810,11 +815,11 @@ export function PayrollAutomation() {
               </p>
               <p className="flex items-center gap-2">
                 <Badge variant="outline" className="text-[9px] h-4 px-1.5">Hourly</Badge>
-                <span>Hourly Rate = Per Day Rate ÷ Shift Hours</span>
+                <span>Hourly Rate = Monthly Salary ÷ (Days in Month × Shift Hours)</span>
               </p>
               <p className="flex items-center gap-2">
                 <Badge variant="outline" className="text-[9px] h-4 px-1.5">Base</Badge>
-                <span>Base Salary = Monthly Salary − (Per Day Rate × Absent Days)</span>
+                <span>Base Salary = Per Day Rate × Earned Days (Sundays NOT counted)</span>
               </p>
               <p className="flex items-center gap-2">
                 <Badge variant="outline" className="text-[9px] h-4 px-1.5">OT</Badge>
@@ -830,7 +835,7 @@ export function PayrollAutomation() {
               </p>
             </div>
             <p className="text-[10px] text-muted-foreground">
-              Full attendance = Full monthly salary + OT &nbsp;|&nbsp; Sundays are paid automatically
+              Full attendance = Full monthly salary + OT &nbsp;|&nbsp; Sundays are weekly off (not counted as earned)
             </p>
           </div>
         </div>

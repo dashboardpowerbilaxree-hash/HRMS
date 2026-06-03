@@ -350,13 +350,14 @@ ${employeeSpecificContext}
 ## Payroll Rules (Laxree-Specific)
 - **Salary Types**: Hourly workers and Daily wage workers
 - **Salary Per Hour** = Monthly Salary / (Shift Hours × Days in Month)
-- **For Hourly Workers**: Gross = (Salary/Hour × Total Work Hours) + OT Amount + Sunday Amount + PH Amount + Bonus + Incentive
-- **For Daily Workers**: Gross = (Daily Rate × Present Days) + Sunday Amount + PH Amount + Bonus + Incentive
-- **Sunday Amount** = Salary/Hour × Sunday Hours
-- **PH (Public Holiday) Amount** = Salary/Hour × PH Hours
+- **Per Day Rate** = Monthly Salary / Days in Month (28, 29, 30, or 31 as per calendar)
+- **Base Salary** = Per Day Rate × Earned Days (Sundays NOT counted as earned)
+- **Earned Days** = Present Days + Half Days × 0.5 + Paid Leaves (Sundays are weekly off)
+- **For All Workers**: Gross = Base Salary + OT Amount + Bonus + Incentive
+- **Sundays are weekly off** — NOT counted as present or earned days, no Sunday pay
 - **OT Rate** = Same as Salary/Hour (base rate, 1x — NOT 1.5x)
-- **Deductions**: TDS, Loan, Advance, Security Deposit, PF (12% if PF number exists), ESI (0.75% if ESI number exists), Other Deductions
-- **Net Salary** = Gross Salary - Total Deductions
+- **Deductions**: TDS, Loan, Advance, Security Deposit, Other Deductions
+- **Net Salary** = Gross Salary + Arrear - Total Deductions
 
 ## Attendance Rules
 - Sundays are automatically detected

@@ -219,15 +219,14 @@ export async function GET(request: NextRequest) {
     //   30 days × 9 hrs = 270 hrs → ₹20,000 / 270 = ₹74.07
     //   31 days × 9 hrs = 279 hrs → ₹20,000 / 279 = ₹71.68
     //   28 days × 9 hrs = 252 hrs → ₹20,000 / 252 = ₹79.37
-    // Base Salary = monthlySalary - (perDayRate × salaryAbsentDays)
-    //   where salaryAbsentDays = totalWorkingDays - effectivePresentDays - effectivePaidLeaves - effectiveUnpaidLeaves
-    //   effectivePresentDays includes half-days as 0.5
+    // Base Salary = perDayRate × earnedDays (Sundays NOT counted as earned)
+    //   earnedDays = effectivePresentDays + effectivePaidLeaves
+    //   Sundays are weekly off — NOT counted as present or earned days
     // OT Amount = totalOvertimeHours × hourlyRate (1x normal rate, NOT 1.5x)
-    // NOTE: Use attendance.overtimeHours as source of truth (not overtime table which can have stale records)
-    const salaryAbsentDays = Math.max(0, totalWorkingDays - effectivePresentDays - effectivePaidLeaves - effectiveUnpaidLeaves);
+    const earnedDays = effectivePresentDays + effectivePaidLeaves;
     const perDayRate = Math.round((employee.monthlySalary / daysInMonth) * 100) / 100;
     const calculatedHourlyRate = Math.round((employee.monthlySalary / (daysInMonth * employee.shiftHours)) * 100) / 100;
-    const calculatedBaseSalary = Math.round((employee.monthlySalary - (perDayRate * salaryAbsentDays)) * 100) / 100;
+    const calculatedBaseSalary = Math.round((perDayRate * earnedDays) * 100) / 100;
     const calculatedOtAmount = Math.round(totalOvertimeHoursDecimal * calculatedHourlyRate * 100) / 100;
     const calculatedGrossSalary = Math.round((calculatedBaseSalary + calculatedOtAmount) * 100) / 100;
 

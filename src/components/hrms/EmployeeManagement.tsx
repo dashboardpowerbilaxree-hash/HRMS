@@ -136,17 +136,19 @@ function normalizeStatus(status: string | null | undefined): string {
   return status;
 }
 
-/** Calculate hourlyRate matching the API logic: monthlySalary / (shiftHours × totalWorkingDays) */
+/** Calculate hourlyRate matching the API logic: monthlySalary / (shiftHours × daysInMonth)
+ *  daysInMonth = total calendar days (28, 29, 30, or 31) — NOT working days
+ *  31 days × 9 hrs = 279 → ₹20,000/279 = ₹71.68
+ *  30 days × 9 hrs = 270 → ₹20,000/270 = ₹74.07
+ *  29 days × 9 hrs = 261 → ₹20,000/261 = ₹76.82
+ *  28 days × 9 hrs = 252 → ₹20,000/252 = ₹79.37
+ */
 function calcHourlyRate(salaryType: string, monthlySalary: number, shiftHours: number, dailyRate: number): number {
   const sh = shiftHours || 9;
   const now = new Date();
   const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-  let totalWorkingDays = daysInMonth;
-  for (let d = 1; d <= daysInMonth; d++) {
-    if (new Date(now.getFullYear(), now.getMonth(), d).getDay() === 0) totalWorkingDays--;
-  }
-  if (totalWorkingDays < 1) totalWorkingDays = 26;
-  return Math.round((monthlySalary / (sh * totalWorkingDays)) * 100) / 100;
+  if (daysInMonth < 1 || sh <= 0) return 0;
+  return Math.round((monthlySalary / (sh * daysInMonth)) * 100) / 100;
 }
 
 /** Calculate overtimeRate — normal hourly rate (1x), NOT 1.5x */
@@ -198,16 +200,14 @@ export function EmployeeManagement() {
   useEffect(() => { loadEmployees(); }, [loadEmployees]);
 
   // ── Auto-calculate OT Rate (1x normal rate, NOT 1.5x) ──
+  // Hourly Rate = monthlySalary / (daysInMonth × shiftHours)
+  // daysInMonth = total calendar days (28/29/30/31), NOT working days
   const calcOTRate = (basicSalary: number, shiftHours: number) => {
     const sh = shiftHours || 9;
     const now = new Date();
     const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-    let totalWorkingDays = daysInMonth;
-    for (let d = 1; d <= daysInMonth; d++) {
-      if (new Date(now.getFullYear(), now.getMonth(), d).getDay() === 0) totalWorkingDays--;
-    }
-    if (totalWorkingDays < 1 || sh <= 0) return 0;
-    const hourlyRate = basicSalary / (sh * totalWorkingDays);
+    if (daysInMonth < 1 || sh <= 0) return 0;
+    const hourlyRate = basicSalary / (sh * daysInMonth);
     return Math.round(hourlyRate * 100) / 100;
   };
 

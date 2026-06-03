@@ -78,7 +78,9 @@ export async function POST(request: NextRequest) {
     //   30 days × 9 hrs = 270 hrs → ₹20,000 / 270 = ₹74.07
     //   31 days × 9 hrs = 279 hrs → ₹20,000 / 279 = ₹71.68
     //   28 days × 9 hrs = 252 hrs → ₹20,000 / 252 = ₹79.37
-    // Base Salary = monthlySalary - (perDayRate × absentDays)
+    // Base Salary = perDayRate × earnedDays (Sundays NOT counted as earned)
+    //   earnedDays = effectivePresentDays + effectivePaidLeaves
+    //   Sundays are weekly off — NOT counted as present or earned days
     // OT Amount = otHours × hourlyRate (1x normal rate, NOT 1.5x)
     // Gross Salary = baseSalary + otAmount
     // Net Salary = grossSalary + bonus + incentive + arrear - totalDeductions
@@ -172,11 +174,12 @@ export async function POST(request: NextRequest) {
     // Half-days are tracked separately, NOT counted as absent
     const absentDays = Math.max(0, totalWorkingDays - presentDays - halfDays - effectivePaidLeaves - effectiveUnpaidLeaves);
 
-    // ─── BASE SALARY = monthlySalary - (perDayRate × salaryAbsentDays) ───
-    // salaryAbsentDays uses effectivePresentDays (includes half-days as 0.5)
-    // Sundays and paid holidays are automatically paid (included in monthlySalary)
-    const salaryAbsentDays = Math.max(0, totalWorkingDays - effectivePresentDays - effectivePaidLeaves - effectiveUnpaidLeaves);
-    const baseSalary = Math.round((employee.monthlySalary - (perDayRate * salaryAbsentDays)) * 100) / 100;
+    // ─── BASE SALARY = perDayRate × earnedDays ───
+    // earnedDays = effectivePresentDays + effectivePaidLeaves
+    // Sundays are weekly off — NOT counted as earned days
+    // Unpaid leaves are NOT counted as earned days
+    const earnedDays = effectivePresentDays + effectivePaidLeaves;
+    const baseSalary = Math.round((perDayRate * earnedDays) * 100) / 100;
 
     // ─── ACTUAL Sunday/PH worked hours (for display/records only) ───
     let sundayWorkMinutes = 0;
@@ -250,7 +253,7 @@ export async function POST(request: NextRequest) {
         where: { id: existing.id },
         data: payrollData,
       });
-      return NextResponse.json({ ...updated, baseSalary, perDayRate, totalWorkingDays, daysInMonth });
+      return NextResponse.json({ ...updated, baseSalary, perDayRate, earnedDays, totalWorkingDays, daysInMonth });
     }
 
     const payroll = await db.payroll.create({
@@ -274,7 +277,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    return NextResponse.json({ ...payroll, baseSalary, perDayRate, totalWorkingDays, daysInMonth }, { status: 201 });
+    return NextResponse.json({ ...payroll, baseSalary, perDayRate, earnedDays, totalWorkingDays, daysInMonth }, { status: 201 });
   } catch (error: any) {
     console.error('Payroll error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });

@@ -51,3 +51,25 @@ Stage Summary:
   - 28 days × 9 hrs = 252 hrs → ₹20,000/252 = ₹79.37
 - Sunday Earned completely removed from all components and APIs
 - Sundays are treated as weekly off, not earned
+---
+Task ID: 1
+Agent: Main Agent
+Task: Fix hourly rate calculation and remove Sunday earnings across all payroll routes and components
+
+Work Log:
+- Analyzed all files with hourly rate calculations: EmployeeManagement.tsx, payroll/route.ts, payroll/generate-all/route.ts, monthly-summary/route.ts, SalarySlipGenerator.tsx, PayrollAutomation.tsx, ai-assistant/route.ts
+- Found the root cause: EmployeeManagement.tsx calcHourlyRate and calcOTRate used totalWorkingDays (excluding Sundays) instead of daysInMonth (total calendar days 28/29/30/31)
+- Fixed EmployeeManagement.tsx calcHourlyRate: Changed from monthlySalary / (sh * totalWorkingDays) to monthlySalary / (sh * daysInMonth)
+- Fixed EmployeeManagement.tsx calcOTRate: Same fix
+- Changed payroll formula from baseSalary = monthlySalary - (perDayRate × absentDays) to baseSalary = perDayRate × earnedDays where earnedDays = effectivePresentDays + effectivePaidLeaves (Sundays NOT counted)
+- Updated payroll/route.ts, payroll/generate-all/route.ts, monthly-summary/route.ts with new formula
+- Updated SalarySlipGenerator.tsx baseSalary calculation in export, print, and display functions
+- Updated PayrollAutomation.tsx salary preview and info card text
+- Updated ai-assistant/route.ts payroll rules documentation
+- Rebuilt and restarted PM2 successfully
+
+Stage Summary:
+- Hourly Rate formula: monthlySalary / (daysInMonth × shiftHours) — uses total calendar days (28/29/30/31), NOT working days
+- Base Salary formula: perDayRate × earnedDays — where earnedDays = effectivePresentDays + effectivePaidLeaves (Sundays NOT counted)
+- Sundays are now weekly off, NOT counted as present or earned days
+- All employee sections now show correct OT rate based on daysInMonth
