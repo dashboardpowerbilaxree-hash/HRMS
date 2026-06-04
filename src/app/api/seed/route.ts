@@ -1,13 +1,21 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 
-export async function POST() {
+export async function POST(request: NextRequest) {
   try {
-    // Skip seeding if admin already exists
-    const existingAdmin = await db.admin.findFirst();
-    if (existingAdmin) {
-      return NextResponse.json({ message: 'Database already seeded, skipping', skipped: true });
+    // Check for force parameter to allow re-seeding
+    const { searchParams } = new URL(request.url);
+    const force = searchParams.get('force') === 'true';
+
+    // Skip seeding if admin already exists (unless force=true)
+    if (!force) {
+      const existingAdmin = await db.admin.findFirst();
+      if (existingAdmin) {
+        return NextResponse.json({ message: 'Database already seeded, skipping. Use ?force=true to re-seed.', skipped: true });
+      }
     }
+
+    // Clear all data (order matters due to foreign keys)
     await db.notification.deleteMany();
     await db.salaryHistory.deleteMany();
     await db.payroll.deleteMany();
@@ -20,6 +28,9 @@ export async function POST() {
     await db.location.deleteMany();
     await db.admin.deleteMany();
     await db.setting.deleteMany();
+    await db.auditLog.deleteMany();
+    await db.department.deleteMany();
+    await db.advance.deleteMany();
 
     // Create Admin User
     await db.admin.create({
@@ -92,7 +103,6 @@ export async function POST() {
       const hourlyRate = emp.salaryType === 'hourly'
         ? Math.round((emp.monthlySalary / (31 * emp.shiftHours)) * 100) / 100
         : Math.round((emp.dailyRate || emp.monthlySalary / 30) / emp.shiftHours * 100) / 100;
-      // OT at normal hourly rate (1x), NOT 1.5x
       const overtimeRate = Math.round(hourlyRate * 100) / 100;
 
       await db.employee.create({
@@ -135,76 +145,106 @@ export async function POST() {
     ];
     for (const h of holidays) await db.holiday.create({ data: h });
 
-    // Generate attendance for May 2026 (past days only)
-    const now = new Date();
-    const may2026 = new Date(2026, 4, 1); // May 1, 2026
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    // ═══════════════════════════════════════════════════════════
+    // Generate FULL May 2026 attendance (all working days)
+    // ═══════════════════════════════════════════════════════════
     const activeEmployees = employees.filter(e => e.status !== 'inactive');
+    const today = new Date();
+    const todayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
 
-    for (let d = 1; d <= Math.min(28, now.getDate() > 28 ? 31 : now.getDate()); d++) {
-      const date = new Date(2026, 4, d); // May 2026
-      if (date > today) break;
-      if (date.getDay() === 0) continue; // Skip Sundays
+    // Helper: generate attendance for a given month
+    async function generateMonthAttendance(year: number, month: number, upToDay?: number) {
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      const maxDay = upToDay || daysInMonth;
+      let attCount = 0;
+      let otCount = 0;
 
-      const holidayCheck = await db.holiday.findFirst({
-        where: { date: { gte: new Date(date.getFullYear(), date.getMonth(), date.getDate()), lt: new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1) } },
-      });
+      for (let d = 1; d <= Math.min(maxDay, daysInMonth); d++) {
+        const date = new Date(year, month, d);
+        // Don't generate future dates
+        if (date > todayDate) break;
+        // Skip Sundays
+        if (date.getDay() === 0) continue;
 
-      for (const emp of activeEmployees) {
-        const isPresent = Math.random() > 0.08;
-        const isLate = Math.random() > 0.8;
-        const hasOT = Math.random() > 0.7;
+        // Check if holiday
+        const holidayCheck = await db.holiday.findFirst({
+          where: { date: { gte: new Date(year, month, d), lt: new Date(year, month, d + 1) } },
+        });
 
-        if (holidayCheck) {
-          const worked = Math.random() > 0.7;
-          if (worked) {
+        for (const emp of activeEmployees) {
+          // Use deterministic seed based on employeeId + date for consistent data
+          const seed = (emp.employeeId.charCodeAt(4) * 31 + d * 7 + month * 13) % 100;
+          const isPresent = seed > 8; // ~92% attendance rate
+          const isLate = (seed % 10) > 7; // ~20% late rate
+          const hasOT = (seed % 10) > 6; // ~30% OT rate
+
+          if (holidayCheck) {
+            // Holiday - some employees may work
+            const worksOnHoliday = seed > 65;
+            if (worksOnHoliday) {
+              const [sh, sm] = emp.shiftStart.split(':').map(Number);
+              const [eh, em] = emp.shiftEnd.split(':').map(Number);
+              const hTotal = ((eh * 60 + em) - (sh * 60 + sm)) / 60;
+              await db.attendance.create({
+                data: {
+                  employeeId: emp.employeeId, date,
+                  checkIn: emp.shiftStart, checkOut: emp.shiftEnd,
+                  totalHours: hTotal, status: 'holiday',
+                  lateEntry: false, halfDay: false,
+                  overtimeHours: 0, isHoliday: true, isWeeklyOff: false, isPH: true, phHours: hTotal,
+                },
+              });
+              attCount++;
+            }
+            continue;
+          }
+
+          if (isPresent) {
+            const [sh, sm] = emp.shiftStart.split(':').map(Number);
+            const [eh, em] = emp.shiftEnd.split(':').map(Number);
+
+            // Late entry
+            const lateMins = isLate ? (seed % 45) + 10 : 0;
+            const checkInH = sh + Math.floor((sm + lateMins) / 60);
+            const checkInM = (sm + lateMins) % 60;
+            const checkIn = `${String(checkInH).padStart(2, '0')}:${String(checkInM).padStart(2, '0')}`;
+
+            // Overtime - work past shift end
+            const otMins = hasOT ? (seed % 120) + 30 : 0; // 30-150 mins OT
+            const otHours = Math.round((otMins / 60) * 100) / 100;
+            const checkOutMins = (eh * 60 + em) + otMins;
+            const checkOutH = Math.floor(checkOutMins / 60);
+            const checkOutM = checkOutMins % 60;
+            const checkOut = `${String(checkOutH).padStart(2, '0')}:${String(checkOutM).padStart(2, '0')}`;
+
+            const totalH = Math.round(((checkOutH * 60 + checkOutM) - (checkInH * 60 + checkInM)) / 60 * 100) / 100;
+            const actualOT = Math.max(0, Math.round((totalH - emp.shiftHours) * 100) / 100);
+
+            // Early out detection
+            const earlyOut = checkOutMins < (eh * 60 + em);
+
+            let status = 'present';
+            if (isLate && earlyOut) status = 'late';
+            else if (isLate) status = 'late';
+            else if (earlyOut) status = 'early-out';
+
             await db.attendance.create({
               data: {
                 employeeId: emp.employeeId, date,
-                checkIn: emp.shiftStart, checkOut: emp.shiftEnd,
-                totalHours: emp.shiftHours + 0.5, status: 'holiday',
-                lateEntry: false, halfDay: false,
-                overtimeHours: 0.5, isHoliday: true, isWeeklyOff: false,
+                checkIn, checkOut,
+                totalHours: Math.max(0, totalH),
+                status,
+                lateEntry: isLate, halfDay: false,
+                earlyOut,
+                overtimeHours: actualOT, isHoliday: false, isWeeklyOff: false,
               },
             });
-          }
-          continue;
-        }
+            attCount++;
 
-        if (isPresent) {
-          const [sh, sm] = emp.shiftStart.split(':').map(Number);
-          const lateMins = isLate ? Math.floor(Math.random() * 60) + 10 : 0;
-          const checkInH = sh + Math.floor((sm + lateMins) / 60);
-          const checkInM = (sm + lateMins) % 60;
-          const checkIn = `${String(checkInH).padStart(2, '0')}:${String(checkInM).padStart(2, '0')}`;
-
-          const otHours = hasOT ? Math.round((Math.random() * 3 + 0.5) * 10) / 10 : 0;
-          const [eh, em] = emp.shiftEnd.split(':').map(Number);
-          const totalMins = (eh * 60 + em) - (sh * 60 + sm) + otHours * 60;
-          const checkOutH = sh + Math.floor(totalMins / 60);
-          const checkOutM = Math.floor(totalMins % 60);
-          const checkOut = `${String(checkOutH).padStart(2, '0')}:${String(checkOutM).padStart(2, '0')}`;
-
-          const totalH = Math.round(((checkOutH * 60 + checkOutM) - (checkInH * 60 + checkInM)) / 60 * 10) / 10;
-          const actualOT = Math.max(0, Math.round((totalH - emp.shiftHours) * 10) / 10);
-
-          await db.attendance.create({
-            data: {
-              employeeId: emp.employeeId, date,
-              checkIn, checkOut,
-              totalHours: Math.max(0, totalH),
-              status: isLate ? 'late' : 'present',
-              lateEntry: isLate, halfDay: false,
-              overtimeHours: actualOT, isHoliday: false, isWeeklyOff: false,
-            },
-          });
-
-          // Create OT record (1x normal rate)
-          if (actualOT > 0) {
-            const employee = await db.employee.findUnique({ where: { employeeId: emp.employeeId } });
-            if (employee) {
-              const daysInMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
-              const normalHourlyRate = Math.round((employee.monthlySalary / (daysInMonth * employee.shiftHours)) * 100) / 100;
+            // Create OT record (1x normal rate)
+            if (actualOT > 0) {
+              const daysInMonth = new Date(year, month + 1, 0).getDate();
+              const normalHourlyRate = Math.round((emp.monthlySalary / (daysInMonth * emp.shiftHours)) * 100) / 100;
               await db.overtime.create({
                 data: {
                   employeeId: emp.employeeId, date,
@@ -213,29 +253,40 @@ export async function POST() {
                   isHoliday: false, status: 'approved',
                 },
               });
+              otCount++;
             }
           }
         }
       }
+      return { attCount, otCount };
     }
 
-    // Sample leaves
+    // Generate May 2026 — FULL MONTH (all 31 days)
+    const mayResult = await generateMonthAttendance(2026, 4); // May = month index 4
+
+    // Generate June 2026 — up to today
+    const juneResult = await generateMonthAttendance(2026, 5, today.getDate()); // June = month index 5
+
+    // Sample leaves for May
     await db.leave.createMany({
       data: [
         { employeeId: 'EMP-007', type: 'Casual Leave', startDate: new Date(2026, 4, 10), endDate: new Date(2026, 4, 11), days: 2, reason: 'Personal work', status: 'approved' },
         { employeeId: 'EMP-041', type: 'Sick Leave', startDate: new Date(2026, 4, 15), endDate: new Date(2026, 4, 16), days: 2, reason: 'Health issues', status: 'approved' },
         { employeeId: 'EMP-012', type: 'Earned Leave', startDate: new Date(2026, 4, 20), endDate: new Date(2026, 4, 22), days: 3, reason: 'Family vacation', status: 'pending' },
         { employeeId: 'EMP-014', type: 'Casual Leave', startDate: new Date(2026, 4, 25), endDate: new Date(2026, 4, 25), days: 1, reason: 'Personal work', status: 'pending' },
+        { employeeId: 'EMP-021', type: 'Sick Leave', startDate: new Date(2026, 5, 2), endDate: new Date(2026, 5, 3), days: 2, reason: 'Fever', status: 'approved' },
+        { employeeId: 'EMP-423', type: 'Casual Leave', startDate: new Date(2026, 5, 4), endDate: new Date(2026, 5, 4), days: 1, reason: 'Personal work', status: 'pending' },
       ],
     });
 
     // Notifications
     const notifications = [
       { title: 'Welcome to Laxree HRMS', message: 'Your futuristic HR management system is ready!', type: 'system' },
-      { title: 'Attendance Alert', message: 'May 2026 attendance data has been synced', type: 'attendance' },
+      { title: 'Attendance Synced', message: 'May 2026 full month attendance data has been synced', type: 'attendance' },
       { title: 'Leave Request', message: 'New leave request from Raju pending approval', type: 'leave' },
       { title: 'Holiday Alert', message: 'Labour Day holiday on May 1', type: 'holiday' },
       { title: 'Payroll Ready', message: 'Monthly payroll is ready for generation', type: 'payroll' },
+      { title: 'June Attendance', message: 'June 2026 attendance data is being tracked', type: 'attendance' },
     ];
     for (const n of notifications) await db.notification.create({ data: n });
 
@@ -262,10 +313,14 @@ export async function POST() {
       firms: firms.length,
       locations: locations.length,
       holidays: holidays.length,
+      mayAttendance: mayResult.attCount,
+      mayOvertime: mayResult.otCount,
+      juneAttendance: juneResult.attCount,
+      juneOvertime: juneResult.otCount,
       admin: { username: 'admin', password: 'laxree@2026' },
     });
   } catch (error: any) {
     console.error('Seed error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: error.message, stack: error.stack }, { status: 500 });
   }
 }
