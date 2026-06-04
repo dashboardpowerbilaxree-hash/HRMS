@@ -76,14 +76,28 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       }
 
       halfDay = totalHours < employee.shiftHours / 2;
-      overtimeHours = Math.max(0, Math.round((totalHours - employee.shiftHours) * 100) / 100);
+
+      // OT calculation: OT = time worked AFTER shift end (same logic as main attendance route)
+      // e.g., checkIn=10:25, checkOut=19:36, shiftEnd=19:00 → OT = 36 min = 0.6 hrs
+      if (employee.shiftEnd) {
+        const [sEndH, sEndM] = employee.shiftEnd.split(':').map(Number);
+        const [checkOutH, checkOutM] = finalCheckOut!.split(':').map(Number);
+        const shiftEndTotalMin = sEndH * 60 + sEndM;
+        const checkOutTotalMin = checkOutH * 60 + checkOutM;
+        const otMinutes = Math.max(0, checkOutTotalMin - shiftEndTotalMin);
+        overtimeHours = Math.round((otMinutes / 60) * 100) / 100;
+      } else {
+        overtimeHours = Math.max(0, Math.round((totalHours - employee.shiftHours) * 100) / 100);
+      }
 
       if (isSunday) sundayHours = totalHours;
       if (isPH) phHours = totalHours;
 
+      // Determine status — late+earlyOut gets 'late' but earlyOut flag is set
       if (isSunday) status = 'weekly-off';
       else if (isHoliday) status = 'holiday';
       else if (halfDay) status = 'half-day';
+      else if (lateEntry && earlyOut) status = 'late';
       else if (lateEntry) status = 'late';
       else if (earlyOut) status = 'early-out';
       else status = 'present';
