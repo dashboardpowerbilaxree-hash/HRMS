@@ -28,3 +28,29 @@ Stage Summary:
 - Added Salary Calculation sheet to monthly attendance Excel export
 - Server is running on port 3000
 - Database is intact with all employee and attendance data
+---
+Task ID: 1
+Agent: Main Agent
+Task: Migrate Laxree HRMS from SQLite to Neon PostgreSQL and deploy to Vercel
+
+Work Log:
+- Analyzed user screenshots: Vercel login shows "Server error", Neon PostgreSQL dashboard already set up
+- Root cause: SQLite database doesn't work on Vercel's serverless environment
+- Migrated Prisma schema from SQLite to PostgreSQL provider
+- Updated src/lib/db.ts to use @prisma/adapter-neon with Neon serverless pool
+- Removed output: "standalone" from next.config.ts for Vercel compatibility
+- Fixed OT calculation bug in attendance [id] route (uses checkOutMinutes - shiftEndMinutes)
+- Fixed late+earlyOut status priority (was missing late+earlyOut combo case)
+- Updated SettingsPanel database label from "SQLite" to "PostgreSQL (Neon)"
+- Updated package.json: removed SQLite backup from build script, added postinstall for Prisma
+- Installed @neondatabase/serverless and @prisma/adapter-neon packages
+- Pushed 16 files to GitHub repo (dashboardpowerbilaxree-hash/HRMS) via Contents API
+- Generated PostgreSQL schema SQL for Neon setup
+- Found existing Vercel deployment at hrms-laxree.vercel.app (behind Vercel Auth)
+- Build tested successfully locally
+
+Stage Summary:
+- All code changes are on GitHub: https://github.com/dashboardpowerbilaxree-hash/HRMS
+- Neon setup SQL generated at /tmp/neon-setup.sql (313 lines)
+- Cannot complete Vercel deployment without: Neon connection string + Vercel API token
+- Working hour deduction logic is already correct: baseHrs = totalHours - overtimeHours correctly accounts for late/early-out
