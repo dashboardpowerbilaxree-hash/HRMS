@@ -54,3 +54,27 @@ Stage Summary:
 - Neon setup SQL generated at /tmp/neon-setup.sql (313 lines)
 - Cannot complete Vercel deployment without: Neon connection string + Vercel API token
 - Working hour deduction logic is already correct: baseHrs = totalHours - overtimeHours correctly accounts for late/early-out
+
+---
+Task ID: 3
+Agent: Main Agent
+Task: Fix Neon DB connection, seed database, and push to GitHub for Vercel deployment
+
+Work Log:
+- Identified root cause: @prisma/adapter-neon was causing "No database host" error even with DATABASE_URL set
+- The adapter pattern in Prisma v6 has issues with env var resolution
+- Solution: Use standard PrismaClient (without adapter) with Neon pooler URL directly
+- Fixed prisma/schema.prisma: removed driverAdapters preview feature, kept url/directUrl with env vars
+- Fixed src/lib/db.ts: removed @prisma/adapter-neon, using plain PrismaClient
+- Fixed src/app/api/admin/login/route.ts: better error handling for DB connection issues
+- Pushed Prisma schema to Neon database (all 15 tables created)
+- Seeded Neon database with: 40 employees, 4 firms, 5 locations, 11 holidays, admin user
+- Verified login works: admin/laxree@2026 returns success
+- All code pushed to GitHub: https://github.com/dashboardpowerbilaxree-hash/HRMS
+
+Stage Summary:
+- Neon database is fully set up with tables and seeded data
+- Login API verified working locally with Neon PostgreSQL
+- Cannot deploy to Vercel without Vercel API token (GitHub PAT doesn't work for Vercel auth)
+- DATABASE_URL for Vercel env: postgresql://neondb_owner:npg_pGbVon2mrZ3q@ep-empty-haze-aq8y1r98-pooler.c-8.us-east-1.aws.neon.tech/neondb?sslmode=require
+- DIRECT_URL for Vercel env: postgresql://neondb_owner:npg_pGbVon2mrZ3q@ep-empty-haze-aq8y1r98.c-8.us-east-1.aws.neon.tech/neondb?sslmode=require

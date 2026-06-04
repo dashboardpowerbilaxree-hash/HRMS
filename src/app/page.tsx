@@ -227,6 +227,7 @@ export default function Home() {
   const [seeded, setSeeded] = useState(false);
 
   const seedDB = useCallback(async () => {
+    if (seeded) return;
     try {
       await fetch('/api/seed', { method: 'POST' });
     } catch {}
@@ -234,9 +235,11 @@ export default function Home() {
       await fetch('/api/firms/seed', { method: 'POST' });
     } catch {}
     setSeeded(true);
-  }, []);
+  }, [seeded]);
 
-  useEffect(() => { seedDB(); }, [seedDB]);
+  useEffect(() => {
+    seedDB();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const renderPage = () => {
     switch (currentPage) {
