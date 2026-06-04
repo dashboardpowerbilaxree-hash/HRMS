@@ -166,31 +166,18 @@ export async function GET(request: NextRequest) {
     const presentDays = rawPresentDays;
     // Shift minutes needed for Late/Early-Out deduction
     const shiftMinutes = Math.round(employee.shiftHours * 60);
-    // ─── effectivePresentDays with Late/Early-Out hour-based deduction ───
+    // ─── HOUR-BASED calculation matching payroll API ───
+    let totalBaseHours = 0;
     let effectivePresentDays = 0;
     for (const a of attendance) {
-      if (a.status === 'present') {
-        effectivePresentDays += 1.0;
-      } else if (a.status === 'late') {
-        if (a.checkIn && a.checkOut) {
-          const [h1, m1] = a.checkIn.split(':').map(Number);
-          const [h2, m2] = a.checkOut.split(':').map(Number);
-          const workedMin = Math.max(0, (h2 * 60 + m2) - (h1 * 60 + m1));
-          effectivePresentDays += Math.min(1, workedMin / shiftMinutes);
+      if (['present', 'late', 'early-out', 'half-day', 'half_day'].includes(a.status)) {
+        const baseHrs = Math.max(0, (a.totalHours || 0) - (a.overtimeHours || 0));
+        totalBaseHours += baseHrs;
+        if (a.status === 'half-day' || a.status === 'half_day') {
+          effectivePresentDays += 0.5;
         } else {
-          effectivePresentDays += 1.0;
+          effectivePresentDays += Math.min(1, baseHrs / employee.shiftHours);
         }
-      } else if (a.status === 'early-out') {
-        if (a.checkIn && a.checkOut) {
-          const [h1, m1] = a.checkIn.split(':').map(Number);
-          const [h2, m2] = a.checkOut.split(':').map(Number);
-          const workedMin = Math.max(0, (h2 * 60 + m2) - (h1 * 60 + m1));
-          effectivePresentDays += Math.min(1, workedMin / shiftMinutes);
-        } else {
-          effectivePresentDays += 1.0;
-        }
-      } else if (a.status === 'half-day' || a.status === 'half_day') {
-        effectivePresentDays += 0.5;
       }
     }
     effectivePresentDays = Math.round(effectivePresentDays * 100) / 100;
@@ -262,6 +249,18 @@ export async function GET(request: NextRequest) {
     const annualLeaves = effectivePaidLeaves;
     const unpaidLeaves = effectiveUnpaidLeaves;
     const totalHrsInclSunday = formatMinutesToHHMM(totalWorkMinutes + totalSundayMinutes);
+
+    // ─── Salary Calculation (matching Excel Payroll Master) ───
+    // Full precision hourly rate — no intermediate rounding
+    const salaryHourlyRate = employee.monthlySalary / (daysInMonth * employee.shiftHours);
+    const salaryPerDayRate = employee.monthlySalary / daysInMonth;
+    const salarySundayHrs = sundays * employee.shiftHours;
+    const salaryPaidLeaveHrs = effectivePaidLeaves * employee.shiftHours;
+    const salaryTotalHrs = totalBaseHours + salarySundayHrs + totalOvertimeHoursDecimal + salaryPaidLeaveHrs;
+    const salaryBaseSalary = salaryHourlyRate * totalBaseHours;
+    const salarySundayEarnings = salaryHourlyRate * salarySundayHrs;
+    const salaryOtAmount = totalOvertimeHoursDecimal * salaryHourlyRate;
+    const salaryGrossSalary = salaryHourlyRate * salaryTotalHrs;
 
     const wb = XLSXStyle.utils.book_new();
 
@@ -485,6 +484,72 @@ export async function GET(request: NextRequest) {
     ];
 
     XLSXStyle.utils.book_append_sheet(wb, ws2, 'Summary');
+
+    // ═══════════════════════════════════════════════════
+    // SHEET 3: Salary Calculation (matching Excel Payroll Master)
+    // ═══════════════════════════════════════════════════
+    const round2 = (n: number) => Math.round(n * 100) / 100;
+    const salaryData: any[][] = [
+      [firmFullName],
+      ['SALARY CALCULATION SHEET'],
+      [`Employee: ${employee.fullName} (${employee.employeeId})`, '', '', `Month: ${monthName} ${year}`],
+      [`Monthly Salary: ₹${employee.monthlySalary.toLocaleString('en-IN')}`, '', '', `Days in Month: ${daysInMonth}`, '', '', `Shift Hrs: ${employee.shiftHours}`],
+      [],
+      ['Component', 'Hours / Days', 'Rate (₹)', 'Amount (₹)'],
+      ['Total Worked Hrs (Base)', round2(totalBaseHours), round2(salaryHourlyRate), round2(salaryBaseSalary)],
+      ['OT Hours', totalOvertimeHoursDecimal, round2(salaryHourlyRate), round2(salaryOtAmount)],
+      ['Sunday Hours (Paid Off)', salarySundayHrs, round2(salaryHourlyRate), round2(salarySundayEarnings)],
+      ['Paid Leave Hours', salaryPaidLeaveHrs, round2(salaryHourlyRate), round2(salaryHourlyRate * salaryPaidLeaveHrs)],
+      ['Total Hours', round2(salaryTotalHrs), round2(salaryHourlyRate), round2(salaryGrossSalary)],
+      [],
+      ['Summary', '', '', ''],
+      ['Hourly Rate', '', '', `₹${salaryHourlyRate.toFixed(8)}`],
+      ['Per Day Rate', '', '', `₹${round2(salaryPerDayRate)}`],
+      ['Gross Salary', '', '', `₹${round2(salaryGrossSalary).toLocaleString('en-IN')}`],
+      ['Sundays Earned', `${sundays} × ${employee.shiftHours} = ${salarySundayHrs}h`, '', `₹${round2(salarySundayEarnings).toLocaleString('en-IN')}`],
+      ['Effective Present Days', effectivePresentDays, '', ''],
+    ];
+
+    const ws3 = XLSXStyle.utils.aoa_to_sheet(salaryData);
+    const cols4 = ['A','B','C','D','E','F','G'];
+    cols4.forEach(c => { safeStyle(ws3, `${c}1`, styleHeader()); });
+    cols4.forEach(c => { safeStyle(ws3, `${c}2`, styleSubHeader('2D2D2D')); });
+    ['A','D'].forEach(c => {
+      safeStyle(ws3, `${c}3`, { font: { sz: 10, color: { rgb: 'CCCCCC' } }, fill: { fgColor: { rgb: '2D2D2D' } } });
+      safeStyle(ws3, `${c}4`, { font: { sz: 10, color: { rgb: 'CCCCCC' } }, fill: { fgColor: { rgb: '2D2D2D' } } });
+    });
+    cols4.forEach(c => { safeStyle(ws3, `${c}6`, styleColHeader(EMERALD)); });
+    for (let r = 7; r <= 11; r++) {
+      const isTotal = r === 11;
+      const bg = isTotal ? 'F0FDF4' : (r % 2 === 0 ? LIGHT_BG : undefined);
+      cols4.forEach(c => {
+        safeStyle(ws3, `${c}${r}`, {
+          font: { sz: 10, bold: isTotal, color: { rgb: isTotal ? EMERALD : '333333' } },
+          fill: bg ? { fgColor: { rgb: bg } } : undefined,
+          alignment: { horizontal: 'center' as const, vertical: 'center' as const },
+          border: fullBorder(isTotal ? EMERALD : 'D0D0D0', isTotal ? 'medium' : 'thin'),
+        });
+      });
+    }
+    cols4.forEach(c => { safeStyle(ws3, `${c}13`, styleColHeader('2D2D2D')); });
+    for (let r = 14; r <= 18; r++) {
+      const bg = r % 2 === 0 ? LIGHT_BG : undefined;
+      cols4.forEach(c => {
+        safeStyle(ws3, `${c}${r}`, {
+          font: { sz: 10, color: { rgb: '666666' } },
+          fill: bg ? { fgColor: { rgb: bg } } : undefined,
+          alignment: { horizontal: 'center' as const, vertical: 'center' as const },
+          border: fullBorder('D0D0D0'),
+        });
+      });
+    }
+    ws3['!cols'] = [{ wch: 24 }, { wch: 20 }, { wch: 16 }, { wch: 20 }, { wch: 12 }, { wch: 12 }, { wch: 12 }];
+    ws3['!merges'] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 6 } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: 6 } },
+    ];
+
+    XLSXStyle.utils.book_append_sheet(wb, ws3, 'Salary Calculation');
 
     // Generate buffer
     const buf = XLSXStyle.write(wb, { type: 'buffer', bookType: 'xlsx' });

@@ -265,7 +265,7 @@ export function PayrollAutomation() {
     if (!existing) return null;
 
     const daysInMonth = existing.daysInMonth || new Date(parseInt(filterYear), parseInt(filterMonth), 0).getDate();
-    const perDayRate = existing.perDayRate || Math.round((existing.monthlySalary / daysInMonth) * 100) / 100;
+    const perDayRate = existing.perDayRate || (existing.monthlySalary / daysInMonth);
     const earnedDays = (existing.presentDays || 0) + (existing.paidLeaves || 0);
     const baseSalary = existing.baseSalary != null
       ? existing.baseSalary

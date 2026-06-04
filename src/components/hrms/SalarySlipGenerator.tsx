@@ -214,7 +214,7 @@ export function SalarySlipGenerator() {
     if (!slip?.payroll) return;
     const p = slip.payroll;
     const e = slip.employee;
-    const perDayRate = Math.round((p.monthlySalary / (new Date(year, month, 0).getDate())) * 100) / 100;
+    const perDayRate = p.perDayRate || (p.monthlySalary / (new Date(year, month, 0).getDate()));
     const baseSalary = p.baseSalary != null ? p.baseSalary : Math.round((perDayRate * ((p.presentDays || 0) + (p.paidLeaves || 0)))) * 100 / 100;
     const sundayEarn = p.sundayEarnings || 0;
     const totalEarnings = p.grossSalary + (p.bonus || 0) + (p.incentive || 0) + (p.arrear || 0);
@@ -438,7 +438,7 @@ export function SalarySlipGenerator() {
     if (!slip?.payroll || !slipRef.current) return;
     const p = slip.payroll;
     const e = slip.employee;
-    const perDayRate = Math.round((p.monthlySalary / (new Date(year, month, 0).getDate())) * 100) / 100;
+    const perDayRate = p.perDayRate || (p.monthlySalary / (new Date(year, month, 0).getDate()));
     const baseSalary = p.baseSalary != null ? p.baseSalary : Math.round((perDayRate * ((p.presentDays || 0) + (p.paidLeaves || 0)))) * 100 / 100;
     const sundayEarn = p.sundayEarnings || 0;
     const totalEarnings = p.grossSalary + (p.bonus || 0) + (p.incentive || 0) + (p.arrear || 0);
@@ -546,7 +546,7 @@ export function SalarySlipGenerator() {
   const firm = (slip?.employee?.employeeId ? getFirmFromEmployeeId(slip.employee.employeeId) : '') || slip?.employee?.department || slip?.employee?.firm || '';
   const p = slip?.payroll;
   const e = slip?.employee;
-  const perDayRateCalc = p ? Math.round((p.monthlySalary / (new Date(year, month, 0).getDate())) * 100) / 100 : 0;
+  const perDayRateCalc = p ? (p.perDayRate || (p.monthlySalary / (new Date(year, month, 0).getDate()))) : 0;
   const baseSalaryCalc = p ? (p.baseSalary != null ? p.baseSalary : Math.round((perDayRateCalc * ((p.presentDays || 0) + (p.paidLeaves || 0)))) * 100 / 100) : 0;
   const sundayEarningsCalc = p ? (p.sundayEarnings || 0) : 0;
   const sundayCountCalc = p ? (p.sundayCount || 0) : 0;

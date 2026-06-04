@@ -90,18 +90,19 @@ export async function GET(request: NextRequest) {
     const weeklyOffWorked = attendance.filter(a => a.isWeeklyOff && a.totalHours > 0).length;
 
     // Present days for DISPLAY = full present days only (half-days tracked separately)
-    // Sunday/holiday work is tracked separately — it should NOT inflate present count
-    // because working on a Sunday does NOT compensate for being absent on a working day
     const presentDays = rawPresentDays;
 
     // Shift minutes needed for Late/Early-Out deduction
     const shiftMinutes = Math.round(employee.shiftHours * 60);
 
     // ─── HOUR-BASED salary calculation (matching Excel Payroll Master) ───
-    // Base hours per day = totalHours - overtimeHours (excludes OT)
-    // For late employees: base hours reflect actual time during shift (late arrival deducted)
-    // For early-out: base hours reflect actual time (early departure deducted)
-    // For present: base hours = shift hours (even if they worked extra = OT)
+    // Excel formula:
+    //   Sl/Hr = Monthly Salary / (DaysInMonth × ShiftHrs) — FULL PRECISION, NO rounding
+    //   Total Worked Hrs = sum of (totalHours - overtimeHours) for each working day
+    //   OT Hours = sum of overtimeHours
+    //   Sunday Hrs = sundayCount × shiftHours
+    //   Total Hrs = Total Worked Hrs + OT + Sunday + PH
+    //   Gross = Sl/Hr × Total Hrs — round only final amount
     let totalBaseHours = 0;
     let effectivePresentDays = 0;
     let totalWorkMinutes = 0;
@@ -131,6 +132,8 @@ export async function GET(request: NextRequest) {
       // Calculate base hours and effective present days
       if (['present', 'late', 'early-out', 'half-day', 'half_day'].includes(a.status)) {
         // Base hours = totalHours - overtimeHours (excludes OT)
+        // This correctly deducts late arrivals and early departures
+        // because totalHours already reflects actual work time
         const baseHrs = Math.max(0, (a.totalHours || 0) - (a.overtimeHours || 0));
         totalBaseHours += baseHrs;
 
@@ -215,25 +218,30 @@ export async function GET(request: NextRequest) {
     const annualLeaves = leaves.filter(l => l.type === 'annual' || l.type === 'AL' || l.type === 'Casual' || l.type === 'CL').reduce((sum, l) => sum + l.days, 0);
     const unpaidLeaves = leaves.filter(l => l.type === 'unpaid' || l.type === 'UL' || l.type === 'LOP').reduce((sum, l) => sum + l.days, 0);
 
-    // ─── LAXREE SALARY CALCULATION — HOUR-BASED (matching Excel Payroll Master) ───
-    // Hourly Rate = monthlySalary / (daysInMonth × shiftHours)
-    // Total Base Hours = sum of (totalHours - overtimeHours) for each working day
+    // ─── LAXREE SALARY CALCULATION — matching Excel Payroll Master ───
+    // Hourly Rate = monthlySalary / (daysInMonth × shiftHours) — FULL PRECISION, NO rounding
+    // Total Worked Hrs = sum of (totalHours - overtimeHours) for each working day
     //   This correctly deducts late arrivals and early departures
     // Sunday Hours = sundayCount × shiftHours (paid weekly off)
     // OT Hours = sum of overtimeHours (time AFTER shift end)
-    // Total Hours = baseHrs + sundayHrs + otHrs + paidLeaveHrs
-    // Gross Salary = hourlyRate × totalHrs
-    const perDayRate = Math.round((employee.monthlySalary / daysInMonth) * 100) / 100;
-    const calculatedHourlyRate = Math.round((employee.monthlySalary / (daysInMonth * employee.shiftHours)) * 100) / 100;
+    // Paid Leave Hrs = effectivePaidLeaves × shiftHours
+    // Total Hrs = Total Worked Hrs + OT + Sunday + Paid Leave + PH
+    // Gross Salary = hourlyRate × Total Hrs — round only the final amount
+
+    // FULL PRECISION hourly rate — NO intermediate rounding (matching Excel)
+    const perDayRate = employee.monthlySalary / daysInMonth;
+    const calculatedHourlyRate = employee.monthlySalary / (daysInMonth * employee.shiftHours);
     const sundayCount = sundays;
     const sundayHrs = sundayCount * employee.shiftHours;
     const paidLeaveHrs = effectivePaidLeaves * employee.shiftHours;
-    const totalHrs = Math.round((totalBaseHours + sundayHrs + totalOvertimeHoursDecimal + paidLeaveHrs) * 100) / 100;
-    const calculatedBaseSalary = Math.round(calculatedHourlyRate * totalBaseHours * 100) / 100;
-    const calculatedSundayEarnings = Math.round(calculatedHourlyRate * sundayHrs * 100) / 100;
+    const totalHrs = totalBaseHours + sundayHrs + totalOvertimeHoursDecimal + paidLeaveHrs;
+
+    // Calculate salary components — only round FINAL amounts
+    const calculatedBaseSalary = calculatedHourlyRate * totalBaseHours;
+    const calculatedSundayEarnings = calculatedHourlyRate * sundayHrs;
     const calculatedEarnedSundayHrs = sundayHrs;
-    const calculatedOtAmount = Math.round(totalOvertimeHoursDecimal * calculatedHourlyRate * 100) / 100;
-    const calculatedGrossSalary = Math.round(calculatedHourlyRate * totalHrs * 100) / 100;
+    const calculatedOtAmount = totalOvertimeHoursDecimal * calculatedHourlyRate;
+    const calculatedGrossSalary = calculatedHourlyRate * totalHrs;
     const earnedDays = effectivePresentDays + effectivePaidLeaves;
 
     return NextResponse.json({
@@ -241,7 +249,7 @@ export async function GET(request: NextRequest) {
         ...employee,
         firm: effectiveFirm,
         firmFullName,
-        hourlyRate: calculatedHourlyRate,
+        hourlyRate: calculatedHourlyRate, // Full precision — frontend will format
       },
       month,
       year,
@@ -269,16 +277,19 @@ export async function GET(request: NextRequest) {
       earlyOuts,
       records: attendance,
       leaves,
-      // Salary calculation fields
+      // Salary calculation fields — full precision, frontend rounds for display
       perDayRate,
       calculatedHourlyRate,
-      calculatedBaseSalary,
-      calculatedOtAmount,
-      calculatedGrossSalary,
+      calculatedBaseSalary: Math.round(calculatedBaseSalary * 100) / 100,
+      calculatedOtAmount: Math.round(calculatedOtAmount * 100) / 100,
+      calculatedGrossSalary: Math.round(calculatedGrossSalary * 100) / 100,
       // Sunday Earnings fields
       sundayCount,
-      calculatedSundayEarnings,
+      calculatedSundayEarnings: Math.round(calculatedSundayEarnings * 100) / 100,
       calculatedEarnedSundayHrs,
+      // Full precision values for salary slip
+      totalBaseHours: Math.round(totalBaseHours * 100) / 100,
+      totalHrs: Math.round(totalHrs * 100) / 100,
     });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

@@ -28,26 +28,16 @@ export async function POST(request: NextRequest) {
         }
         const totalWorkingDays = daysInMonth - sundays - holidayDays;
 
-        // ─── LAXREE PAYROLL FORMULA ───
-        // Per Day Rate = monthlySalary / daysInMonth (31, 30, 28 as per calendar)
-        // Hourly Rate = monthlySalary / (daysInMonth × 9) — NO intermediate rounding
-        // Base Salary = perDayRate × earnedDays (Sundays NOT counted as earned)
-        //   earnedDays = effectivePresentDays + effectivePaidLeaves
-        // Sunday Earnings = perDayRate × sundayCount (Sundays are paid weekly off)
-        //   Earned Sunday Hours = sundayCount × 9 (e.g., 5 Sundays = 45 hrs)
-        // OT Amount = otHours × hourlyRate (1x normal rate, NOT 1.5x)
-        // Gross Salary = baseSalary + sundayEarnings + otAmount
-        // Net Salary = grossSalary + bonus + incentive + arrear - totalDeductions
-
-        const perDayRate = Math.round((emp.monthlySalary / daysInMonth) * 100) / 100;
-        const hourlyRate = Math.round((emp.monthlySalary / (daysInMonth * emp.shiftHours)) * 100) / 100;
+        // ─── LAXREE PAYROLL FORMULA (matching Excel Payroll Master) ───
+        // FULL PRECISION hourly rate — no intermediate rounding
+        const perDayRate = emp.monthlySalary / daysInMonth;
+        const hourlyRate = emp.monthlySalary / (daysInMonth * emp.shiftHours);
 
         const attendance = await db.attendance.findMany({
           where: { employeeId: emp.employeeId, date: { gte: startDate, lt: endDate } },
         });
 
-        // ─── HOUR-BASED salary calculation (matching Excel Payroll Master) ───
-        // Base hours = totalHours - overtimeHours (excludes OT, correctly deducts late/early-out)
+        // ─── HOUR-BASED salary calculation ───
         let totalBaseHours = 0;
         let totalWorkMinutes = 0;
         let effectivePresentDays = 0;
@@ -124,18 +114,17 @@ export async function POST(request: NextRequest) {
         // Absent days = totalWorkingDays - fullPresentDays - halfDays - effectivePaidLeaves - effectiveUnpaidLeaves
         const absentDays = Math.max(0, totalWorkingDays - presentDays - halfDays - effectivePaidLeaves - effectiveUnpaidLeaves);
 
-        // ─── HOUR-BASED SALARY CALCULATION ───
-        // Gross = hourlyRate × (baseHrs + sundayHrs + otHrs + paidLeaveHrs)
+        // ─── HOUR-BASED SALARY CALCULATION (matching Excel) ───
         const earnedDays = effectivePresentDays + effectivePaidLeaves;
         const sundayCount = sundays;
         const sundayHrs = sundayCount * emp.shiftHours;
         const paidLeaveHrs = effectivePaidLeaves * emp.shiftHours;
-        const totalHrs = Math.round((totalBaseHours + sundayHrs + otHoursDecimal + paidLeaveHrs) * 100) / 100;
-        const baseSalary = Math.round(hourlyRate * totalBaseHours * 100) / 100;
-        const sundayEarnings = Math.round(hourlyRate * sundayHrs * 100) / 100;
+        const totalHrs = totalBaseHours + sundayHrs + otHoursDecimal + paidLeaveHrs;
+        const baseSalary = hourlyRate * totalBaseHours;
+        const sundayEarnings = hourlyRate * sundayHrs;
         const earnedSundayHrs = sundayHrs;
-        const otAmount = Math.round(otHoursDecimal * hourlyRate * 100) / 100;
-        const grossSalary = Math.round(hourlyRate * totalHrs * 100) / 100;
+        const otAmount = otHoursDecimal * hourlyRate;
+        const grossSalary = hourlyRate * totalHrs;
 
         // ─── ACTUAL Sunday/PH worked hours (for display/records only) ───
         let sundayWorkMinutes = 0;
@@ -156,25 +145,25 @@ export async function POST(request: NextRequest) {
         const phWorkedHrs = Math.floor(phWorkMinutes / 60) + (phWorkMinutes % 60) / 100;
 
         const totalDeductions = 0;
-        const netSalary = grossSalary;
+        const netSalary = Math.round(grossSalary * 100) / 100;
 
         const payrollData = {
           monthlySalary: emp.monthlySalary,
-          hourlyRate,
+          hourlyRate: Math.round(hourlyRate * 100) / 100, // Store rounded for DB
           totalWorkedHrs,
           otHours,
-          otRate: hourlyRate,
-          otAmount,
+          otRate: Math.round(hourlyRate * 100) / 100, // Store rounded for DB
+          otAmount: Math.round(otAmount * 100) / 100,
           sundayHrs: sundayWorkedHrs,
           sundayCount,
-          sundayEarnings,
+          sundayEarnings: Math.round(sundayEarnings * 100) / 100,
           phHours: phWorkedHrs,
-          totalHrs,
+          totalHrs: Math.round(totalHrs * 100) / 100,
           presentDays: presentDays,
           absentDays,
           holidayDays,
           paidLeaves: effectivePaidLeaves,
-          grossSalary,
+          grossSalary: Math.round(grossSalary * 100) / 100,
           tdsDeduction: 0,
           loanDeduction: 0,
           advanceDeduction: 0,
