@@ -218,6 +218,19 @@ export function EmployeeManagement() {
   // ── Handle form field change ──
   const handleFormChange = (field: string, value: any) => {
     const updated = { ...form, [field]: value };
+    // Auto-calculate shiftHours when shiftStart or shiftEnd changes
+    if (field === 'shiftStart' || field === 'shiftEnd') {
+      const start = field === 'shiftStart' ? value : updated.shiftStart;
+      const end = field === 'shiftEnd' ? value : updated.shiftEnd;
+      if (start && end) {
+        const [sH, sM] = start.split(':').map(Number);
+        const [eH, eM] = end.split(':').map(Number);
+        const calculated = ((eH * 60 + eM) - (sH * 60 + sM)) / 60;
+        if (calculated > 0) {
+          (updated as any).shiftHours = calculated;
+        }
+      }
+    }
     if (field === 'basicSalary' || field === 'shiftHours') {
       (updated as any).overtimeRate = calcOTRate(
         field === 'basicSalary' ? Number(value) : updated.basicSalary,

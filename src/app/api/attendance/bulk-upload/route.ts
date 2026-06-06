@@ -70,6 +70,16 @@ export async function POST(request: NextRequest) {
         if (checkIn && checkOut) {
           totalHours = calcHours(checkIn, checkOut);
 
+          // Calculate actual shift duration from shiftStart/shiftEnd (not stored shiftHours)
+          // This ensures employees with shorter shifts (e.g., 10:00-14:00 = 4h) are correctly evaluated
+          let actualShiftHours = employee.shiftHours;
+          if (employee.shiftStart && employee.shiftEnd) {
+            const [sH, sM] = employee.shiftStart.split(':').map(Number);
+            const [eH, eM] = employee.shiftEnd.split(':').map(Number);
+            const calculatedShift = ((eH * 60 + eM) - (sH * 60 + sM)) / 60;
+            if (calculatedShift > 0) actualShiftHours = calculatedShift;
+          }
+
           // Late entry detection
           const gracePeriod = 15;
           if (employee.shiftStart) {
@@ -89,15 +99,15 @@ export async function POST(request: NextRequest) {
             earlyOut = checkOutMinutes < shiftEndMinutes;
           }
 
-          // Half day detection
-          halfDay = totalHours < employee.shiftHours / 2;
+          // Half day detection: only when worked LESS than half of actual shift duration
+          // e.g., shift=4h, worked=4h → NOT half day; shift=9h, worked=3h → half day
+          halfDay = totalHours < actualShiftHours / 2;
 
-          // OT calculation: OT = total hours worked MINUS shift hours
+          // OT calculation: OT = total hours worked MINUS actual shift hours
           // OT is ONLY given when an employee works MORE than their shift hours
-          // e.g., shift=9h, worked=9.5h → OT=0.5h; shift=9h, worked=8.55h → OT=0 (short, no OT)
-          // Even if someone leaves after shift end but came late, if total hours < shift hours → NO OT
-          overtimeHours = totalHours > employee.shiftHours
-            ? Math.round((totalHours - employee.shiftHours) * 100) / 100
+          // e.g., shift=4h, worked=4.5h → OT=0.5h; shift=9h, worked=8.55h → OT=0 (short, no OT)
+          overtimeHours = totalHours > actualShiftHours
+            ? Math.round((totalHours - actualShiftHours) * 100) / 100
             : 0;
 
           if (isSunday) sundayHours = totalHours;
