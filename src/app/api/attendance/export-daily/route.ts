@@ -151,7 +151,7 @@ export async function GET(request: NextRequest) {
       'Out Time': rec.checkOut || '-',
       'Hours': rec.totalHours > 0 ? formatHours(rec.totalHours) : '0.00',
       'Status': rec.status.charAt(0).toUpperCase() + rec.status.slice(1).replace('-', ' '),
-      'OT Hours': rec.overtimeHours > 0 ? rec.overtimeHours.toFixed(2) : '0.00',
+      'OT Hours': rec.overtimeHours > 0 ? formatHours(rec.overtimeHours) : '0.00',
     }));
     XLSXStyle.utils.sheet_add_json(ws, dataRows, { origin: 'A5' });
 
@@ -200,8 +200,8 @@ export async function GET(request: NextRequest) {
     const late = records.filter(a => a.lateEntry).length;
     const earlyOut = records.filter(a => a.earlyOut).length;
     const ot = Math.round(records.reduce((s, a) => s + a.overtimeHours, 0) * 100) / 100;
-    // Display OT as decimal sum (matching dashboard display)
-    const otDisplay = ot.toFixed(2);
+    // Display OT in HH.MM format (consistent with dashboard display)
+    const otDisplay = formatHours(ot);
 
     const summaryRows: any[][] = [
       ['Attendance Summary'],

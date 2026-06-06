@@ -246,7 +246,7 @@ export async function GET(request: NextRequest) {
 
     const totalWorkHours = formatMinutesToHHMM(totalWorkMinutes);
     const totalOvertimeHoursDecimal = Math.round(attendance.reduce((sum, a) => sum + (a.overtimeHours || 0), 0) * 100) / 100;
-    const totalOvertimeHours = totalOvertimeHoursDecimal.toFixed(2);
+    const totalOvertimeHours = formatHours(totalOvertimeHoursDecimal);
     const totalSundayHours = formatMinutesToHHMM(totalSundayMinutes);
 
     const lateEntries = attendance.filter(a => a.lateEntry).length;
@@ -402,7 +402,7 @@ export async function GET(request: NextRequest) {
           const [h2, m2] = rec.checkOut.split(':').map(Number);
           const workMin = Math.max(0, (h2 * 60 + m2) - (h1 * 60 + m1));
           dayTotalHrs = formatMinutesToHHMM(workMin);
-          dayOTHrs = rec.overtimeHours > 0 ? rec.overtimeHours.toFixed(2) : '0.00';
+          dayOTHrs = rec.overtimeHours > 0 ? formatHours(rec.overtimeHours) : '0.00';
         }
         if (rec.sundayHours > 0) {
           daySundayHrs = formatHours(rec.sundayHours);

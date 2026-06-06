@@ -56,10 +56,10 @@ function formatHours(decimal: number): string {
 }
 
 // ── Display a value that's already in HH.MM format (e.g., 5.25 = 5h 25min) ──
-// Just format with 2 decimal places
+// Use formatHours for consistent display
 function displayHHMM(value: number | undefined | null): string {
   if (!value && value !== 0) return '0.00';
-  return value.toFixed(2);
+  return formatHours(value);
 }
 
 // ── Get firm code from employee ID prefix ──
@@ -962,7 +962,7 @@ export function AttendanceTracker() {
                       <p className="text-[10px] text-muted-foreground font-medium truncate">{card.title}</p>
                       <p className="text-xl font-bold">
                         {card.isHours ? (
-                          <span>{card.value.toFixed(2)}h</span>
+                          <span>{formatHours(card.value)}h</span>
                         ) : (
                           <AnimatedCounter
                             value={card.value}
@@ -1107,7 +1107,7 @@ export function AttendanceTracker() {
                             <TableCell><StatusBadge status={rec.status} /></TableCell>
                             <TableCell className="hidden lg:table-cell text-sm whitespace-nowrap">
                               {rec.overtimeHours > 0 ? (
-                                <span className="text-cyan-600 dark:text-cyan-400 font-medium">{rec.overtimeHours.toFixed(2)}h</span>
+                                <span className="text-cyan-600 dark:text-cyan-400 font-medium">{formatHours(rec.overtimeHours)}h</span>
                               ) : '—'}
                             </TableCell>
                             <TableCell className="sticky right-0 bg-card">
@@ -1328,7 +1328,7 @@ export function AttendanceTracker() {
                                       <span className="text-xs text-muted-foreground italic">No Record</span>
                                     )}
                                   </TableCell>
-                                  <TableCell className="text-xs">{rec && rec.overtimeHours > 0 ? `${rec.overtimeHours.toFixed(2)}h` : '—'}</TableCell>
+                                  <TableCell className="text-xs">{rec && rec.overtimeHours > 0 ? `${formatHours(rec.overtimeHours)}h` : '—'}</TableCell>
                                 </TableRow>
                               );
                             }
