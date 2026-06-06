@@ -19,11 +19,22 @@ function getFirmFromEmployeeId(employeeId: string): string {
 }
 
 function formatHours(decimal: number): string {
-  if (!decimal || decimal === 0) return '0.00';
+  if (!decimal || decimal === 0) return '0:00';
   const hours = Math.floor(decimal);
   const minutes = Math.round((decimal - hours) * 60);
-  if (minutes >= 60) return `${hours + 1}.00`;
-  return `${hours}.${String(minutes).padStart(2, '0')}`;
+  if (minutes >= 60) return `${hours + 1}:00`;
+  return `${hours}:${String(minutes).padStart(2, '0')}`;
+}
+
+// Format overtime in clear human-readable format (e.g., "7m", "1h 30m")
+function formatOT(decimal: number): string {
+  if (!decimal || decimal === 0) return '0m';
+  const totalMinutes = Math.round(decimal * 60);
+  if (totalMinutes < 60) return `${totalMinutes}m`;
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (minutes === 0) return `${hours}h`;
+  return `${hours}h ${minutes}m`;
 }
 
 // Format minutes directly to HH.MM string (e.g., 71 → "1.11", 325 → "5.25")
@@ -246,7 +257,7 @@ export async function GET(request: NextRequest) {
 
     const totalWorkHours = formatMinutesToHHMM(totalWorkMinutes);
     const totalOvertimeHoursDecimal = Math.round(attendance.reduce((sum, a) => sum + (a.overtimeHours || 0), 0) * 100) / 100;
-    const totalOvertimeHours = formatHours(totalOvertimeHoursDecimal);
+    const totalOvertimeHours = formatOT(totalOvertimeHoursDecimal);
     const totalSundayHours = formatMinutesToHHMM(totalSundayMinutes);
 
     const lateEntries = attendance.filter(a => a.lateEntry).length;
@@ -402,7 +413,7 @@ export async function GET(request: NextRequest) {
           const [h2, m2] = rec.checkOut.split(':').map(Number);
           const workMin = Math.max(0, (h2 * 60 + m2) - (h1 * 60 + m1));
           dayTotalHrs = formatMinutesToHHMM(workMin);
-          dayOTHrs = rec.overtimeHours > 0 ? formatHours(rec.overtimeHours) : '0.00';
+          dayOTHrs = rec.overtimeHours > 0 ? formatOT(rec.overtimeHours) : '0m';
         }
         if (rec.sundayHours > 0) {
           daySundayHrs = formatHours(rec.sundayHours);

@@ -59,11 +59,22 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 function formatHours(decimal: number): string {
-  if (!decimal || decimal === 0) return '0.00';
+  if (!decimal || decimal === 0) return '0:00';
   const hours = Math.floor(decimal);
   const minutes = Math.round((decimal - hours) * 60);
-  if (minutes >= 60) return `${hours + 1}.00`;
-  return `${hours}.${String(minutes).padStart(2, '0')}`;
+  if (minutes >= 60) return `${hours + 1}:00`;
+  return `${hours}:${String(minutes).padStart(2, '0')}`;
+}
+
+// Format overtime in clear human-readable format (e.g., "7m", "1h 30m")
+function formatOT(decimal: number): string {
+  if (!decimal || decimal === 0) return '0m';
+  const totalMinutes = Math.round(decimal * 60);
+  if (totalMinutes < 60) return `${totalMinutes}m`;
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (minutes === 0) return `${hours}h`;
+  return `${hours}h ${minutes}m`;
 }
 
 const FIRMS = ['LAPL', 'LRSL', 'SI', 'SDF'];
@@ -523,7 +534,7 @@ export function ReportsAnalytics() {
                                 </span>
                               </TableCell>
                               <TableCell className="text-sm whitespace-nowrap">{formatHours(r.totalHours)}h</TableCell>
-                              <TableCell className="text-sm whitespace-nowrap">{r.overtimeHours > 0 ? `${formatHours(r.overtimeHours)}h` : '-'}</TableCell>
+                              <TableCell className="text-sm whitespace-nowrap">{r.overtimeHours > 0 ? formatOT(r.overtimeHours) : '-'}</TableCell>
                             </TableRow>
                           ))
                         )}
@@ -812,12 +823,12 @@ export function ReportsAnalytics() {
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                     <div className="text-center p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
                       <p className="text-xs text-muted-foreground mb-1">Avg Shift Hours</p>
-                      <p className="text-2xl font-bold text-emerald-500">{(analyticsData.attendanceAnalytics?.avgShiftHours || 0).toFixed(2)}h</p>
+                      <p className="text-2xl font-bold text-emerald-500">{formatHours(analyticsData.attendanceAnalytics?.avgShiftHours || 0)}h</p>
                       <p className="text-[10px] text-muted-foreground mt-1">Scheduled</p>
                     </div>
                     <div className="text-center p-3 rounded-xl bg-cyan-500/10 border border-cyan-500/20">
                       <p className="text-xs text-muted-foreground mb-1">Avg Work Hours</p>
-                      <p className="text-2xl font-bold text-cyan-500">{(analyticsData.attendanceAnalytics?.avgWorkHours || 0).toFixed(2)}h</p>
+                      <p className="text-2xl font-bold text-cyan-500">{formatHours(analyticsData.attendanceAnalytics?.avgWorkHours || 0)}h</p>
                       <p className="text-[10px] text-muted-foreground mt-1">Actual</p>
                     </div>
                     <div className="text-center p-3 rounded-xl bg-amber-500/10 border border-amber-500/20">

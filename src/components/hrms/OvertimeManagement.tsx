@@ -17,6 +17,17 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from 'sonner';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
+// ── Format overtime in clear human-readable format ──
+function formatOT(decimal: number): string {
+  if (!decimal || decimal === 0) return '0m';
+  const totalMinutes = Math.round(decimal * 60);
+  if (totalMinutes < 60) return `${totalMinutes}m`;
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (minutes === 0) return `${hours}h`;
+  return `${hours}h ${minutes}m`;
+}
+
 // ── Constants ──
 const FIRM_BADGE_CLASS: Record<string, string> = {
   LAPL: 'firm-badge-lapl',
@@ -482,7 +493,7 @@ export function OvertimeManagement() {
                         <TableCell className="text-sm whitespace-nowrap">
                           {new Date(r.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
                         </TableCell>
-                        <TableCell className="text-sm font-medium whitespace-nowrap">{r.hours}h</TableCell>
+                        <TableCell className="text-sm font-medium whitespace-nowrap">{formatOT(r.hours)}</TableCell>
                         <TableCell className="hidden sm:table-cell text-sm font-mono whitespace-nowrap">₹{r.rate}/hr</TableCell>
                         <TableCell className="text-sm font-bold text-gold whitespace-nowrap">
                           ₹{r.amount.toLocaleString('en-IN', { maximumFractionDigits: 0 })}

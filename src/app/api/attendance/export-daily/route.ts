@@ -8,11 +8,22 @@ const MONTHS = [
 ];
 
 function formatHours(decimal: number): string {
-  if (!decimal || decimal === 0) return '0.00';
+  if (!decimal || decimal === 0) return '0:00';
   const hours = Math.floor(decimal);
   const minutes = Math.round((decimal - hours) * 60);
-  if (minutes >= 60) return `${hours + 1}.00`;
-  return `${hours}.${String(minutes).padStart(2, '0')}`;
+  if (minutes >= 60) return `${hours + 1}:00`;
+  return `${hours}:${String(minutes).padStart(2, '0')}`;
+}
+
+// Format overtime in clear human-readable format (e.g., "7m", "1h 30m")
+function formatOT(decimal: number): string {
+  if (!decimal || decimal === 0) return '0m';
+  const totalMinutes = Math.round(decimal * 60);
+  if (totalMinutes < 60) return `${totalMinutes}m`;
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (minutes === 0) return `${hours}h`;
+  return `${hours}h ${minutes}m`;
 }
 
 // Color constants
@@ -151,7 +162,7 @@ export async function GET(request: NextRequest) {
       'Out Time': rec.checkOut || '-',
       'Hours': rec.totalHours > 0 ? formatHours(rec.totalHours) : '0.00',
       'Status': rec.status.charAt(0).toUpperCase() + rec.status.slice(1).replace('-', ' '),
-      'OT Hours': rec.overtimeHours > 0 ? formatHours(rec.overtimeHours) : '0.00',
+      'OT Hours': rec.overtimeHours > 0 ? formatOT(rec.overtimeHours) : '0m',
     }));
     XLSXStyle.utils.sheet_add_json(ws, dataRows, { origin: 'A5' });
 
@@ -201,7 +212,7 @@ export async function GET(request: NextRequest) {
     const earlyOut = records.filter(a => a.earlyOut).length;
     const ot = Math.round(records.reduce((s, a) => s + a.overtimeHours, 0) * 100) / 100;
     // Display OT in HH.MM format (consistent with dashboard display)
-    const otDisplay = formatHours(ot);
+    const otDisplay = formatOT(ot);
 
     const summaryRows: any[][] = [
       ['Attendance Summary'],

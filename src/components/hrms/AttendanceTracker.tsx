@@ -45,20 +45,36 @@ const FIRM_LOGOS: Record<string, string> = {
   SDF: '/logos/sdf.png',
 };
 
-// ── Convert decimal hours to HH.MM display format ──
-// e.g., 6.25 → "6.15", 9.5 → "9.30", 8.0 → "8.00"
+// ── Convert decimal hours to HH:MM display format ──
+// e.g., 6.25 → "6:15", 9.5 → "9:30", 8.0 → "8:00"
+// Uses colon (:) separator so it's clearly hours:minutes, NOT a decimal fraction
 function formatHours(decimal: number): string {
-  if (!decimal || decimal === 0) return '0.00';
+  if (!decimal || decimal === 0) return '0:00';
   const hours = Math.floor(decimal);
   const minutes = Math.round((decimal - hours) * 60);
-  if (minutes >= 60) return `${hours + 1}.00`;
-  return `${hours}.${String(minutes).padStart(2, '0')}`;
+  if (minutes >= 60) return `${hours + 1}:00`;
+  return `${hours}:${String(minutes).padStart(2, '0')}`;
 }
 
-// ── Display a value that's already in HH.MM format (e.g., 5.25 = 5h 25min) ──
-// Use formatHours for consistent display
+// ── Format overtime hours in clear human-readable format ──
+// Under 1 hour: shows minutes only (e.g., 7m, 20m)
+// 1+ hours: shows hours and minutes (e.g., 1h 30m, 2h 15m)
+// This avoids the confusing decimal display like "0.07h" which looks like 4.2 min but means 7 min
+function formatOT(decimal: number): string {
+  if (!decimal || decimal === 0) return '0m';
+  const totalMinutes = Math.round(decimal * 60);
+  if (totalMinutes < 60) {
+    return `${totalMinutes}m`;
+  }
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (minutes === 0) return `${hours}h`;
+  return `${hours}h ${minutes}m`;
+}
+
+// ── Display a value that's already in HH:MM format ──
 function displayHHMM(value: number | undefined | null): string {
-  if (!value && value !== 0) return '0.00';
+  if (!value && value !== 0) return '0:00';
   return formatHours(value);
 }
 
@@ -962,7 +978,7 @@ export function AttendanceTracker() {
                       <p className="text-[10px] text-muted-foreground font-medium truncate">{card.title}</p>
                       <p className="text-xl font-bold">
                         {card.isHours ? (
-                          <span>{formatHours(card.value)}h</span>
+                          <span>{formatOT(card.value)}</span>
                         ) : (
                           <AnimatedCounter
                             value={card.value}
@@ -1107,7 +1123,7 @@ export function AttendanceTracker() {
                             <TableCell><StatusBadge status={rec.status} /></TableCell>
                             <TableCell className="hidden lg:table-cell text-sm whitespace-nowrap">
                               {rec.overtimeHours > 0 ? (
-                                <span className="text-cyan-600 dark:text-cyan-400 font-medium">{formatHours(rec.overtimeHours)}h</span>
+                                <span className="text-cyan-600 dark:text-cyan-400 font-medium">{formatOT(rec.overtimeHours)}</span>
                               ) : '—'}
                             </TableCell>
                             <TableCell className="sticky right-0 bg-card">
@@ -1239,7 +1255,7 @@ export function AttendanceTracker() {
                           <td className="px-3 py-3 text-blue-500 border-r border-border/30">{monthlySummary.annualLeaves || 0}</td>
                           <td className="px-3 py-3 text-amber-600 dark:text-amber-400 border-r border-border/30">{monthlySummary.unpaidLeaves || 0}</td>
                           <td className="px-3 py-3 font-bold text-cyan-600 dark:text-cyan-400 border-r border-border/30">{displayHHMM(monthlySummary.totalWorkHours)}</td>
-                          <td className="px-3 py-3 font-bold text-yellow-600 dark:text-yellow-400 border-r border-border/30">{displayHHMM(monthlySummary.totalOvertimeHours)}</td>
+                          <td className="px-3 py-3 font-bold text-yellow-600 dark:text-yellow-400 border-r border-border/30">{formatOT(monthlySummary.totalOvertimeHours)}</td>
                           <td className="px-3 py-3 text-blue-600 dark:text-blue-400 border-r border-border/30">{displayHHMM(monthlySummary.totalSundayHours)}</td>
                           <td className="px-3 py-3 font-bold text-gold">{displayHHMM(monthlySummary.totalHrsInclSunday || (monthlySummary.totalWorkHours || 0))}</td>
                         </tr>
@@ -1328,7 +1344,7 @@ export function AttendanceTracker() {
                                       <span className="text-xs text-muted-foreground italic">No Record</span>
                                     )}
                                   </TableCell>
-                                  <TableCell className="text-xs">{rec && rec.overtimeHours > 0 ? `${formatHours(rec.overtimeHours)}h` : '—'}</TableCell>
+                                  <TableCell className="text-xs">{rec && rec.overtimeHours > 0 ? formatOT(rec.overtimeHours) : '—'}</TableCell>
                                 </TableRow>
                               );
                             }

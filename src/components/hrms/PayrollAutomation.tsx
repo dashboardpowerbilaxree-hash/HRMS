@@ -31,17 +31,28 @@ const FIRM_BADGE_CLASS: Record<string, string> = {
 
 // ── Convert decimal hours to HH.MM display format ──
 function formatHours(decimal: number): string {
-  if (!decimal || decimal === 0) return '0.00';
+  if (!decimal || decimal === 0) return '0:00';
   const hours = Math.floor(decimal);
   const minutes = Math.round((decimal - hours) * 60);
-  if (minutes >= 60) return `${hours + 1}.00`;
-  return `${hours}.${String(minutes).padStart(2, '0')}`;
+  if (minutes >= 60) return `${hours + 1}:00`;
+  return `${hours}:${String(minutes).padStart(2, '0')}`;
 }
 
-// ── Display a value that's already in HH.MM format (e.g., 5.25 = 5h 25min) ──
+// ── Format overtime in clear human-readable format ──
+function formatOT(decimal: number): string {
+  if (!decimal || decimal === 0) return '0m';
+  const totalMinutes = Math.round(decimal * 60);
+  if (totalMinutes < 60) return `${totalMinutes}m`;
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (minutes === 0) return `${hours}h`;
+  return `${hours}h ${minutes}m`;
+}
+
+// ── Display a value that's already in HH:MM format ──
 function displayHHMM(value: number | undefined | null): string {
-  if (!value && value !== 0) return '0.00';
-  return value.toFixed(2);
+  if (!value && value !== 0) return '0:00';
+  return formatHours(value);
 }
 
 // ── Get firm code from employee ID prefix ──
@@ -785,7 +796,7 @@ export function PayrollAutomation() {
                       {card.format === 'currency' ? (
                         <AnimatedCounter value={card.value} prefix="₹" decimals={0} />
                       ) : card.isHours ? (
-                        <span>{card.value.toFixed(2)}h</span>
+                        <span>{formatOT(card.value)}</span>
                       ) : (
                         <AnimatedCounter value={card.value} suffix={'suffix' in card ? (card as any).suffix : ''} decimals={'decimals' in card ? (card as any).decimals : 0} />
                       )}
