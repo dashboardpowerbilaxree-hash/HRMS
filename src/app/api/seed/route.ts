@@ -99,7 +99,8 @@ export async function POST(request: NextRequest) {
       { employeeId: 'EMP-037', fullName: 'Reetu Sindal', firm: 'SDF', location: 'Ajmer', salaryType: 'hourly', monthlySalary: 10000, employmentType: 'Full Time', shiftStart: '10:00', shiftEnd: '19:00', shiftHours: 9 },
     ];
 
-    for (const emp of employees) {
+    for (let idx = 0; idx < employees.length; idx++) {
+      const emp = employees[idx];
       const hourlyRate = emp.salaryType === 'hourly'
         ? Math.round((emp.monthlySalary / (31 * emp.shiftHours)) * 100) / 100
         : Math.round((emp.dailyRate || emp.monthlySalary / 30) / emp.shiftHours * 100) / 100;
@@ -124,6 +125,8 @@ export async function POST(request: NextRequest) {
           designation: emp.firm === 'LAPL' ? 'Staff' : emp.firm === 'LRSL' ? 'Worker' : emp.firm === 'SI' ? 'Associate' : 'Helper',
           department: emp.firm,
           joiningDate: new Date(2024, Math.floor(Math.random() * 12), Math.floor(Math.random() * 28) + 1),
+          gender: idx % 3 === 0 ? 'Female' : 'Male',
+          dateOfBirth: new Date(1985 + Math.floor(Math.random() * 17), Math.floor(Math.random() * 12), 1 + Math.floor(Math.random() * 28)),
         },
       });
     }
@@ -191,7 +194,7 @@ export async function POST(request: NextRequest) {
                   checkIn: emp.shiftStart, checkOut: emp.shiftEnd,
                   totalHours: hTotal, status: 'holiday',
                   lateEntry: false, halfDay: false,
-                  overtimeHours: 0, isHoliday: true, isWeeklyOff: false, isPH: true, phHours: hTotal,
+                  overtimeHours: 0, isHoliday: true, isWeeklyOff: false, isPH: true,
                 },
               });
               attCount++;

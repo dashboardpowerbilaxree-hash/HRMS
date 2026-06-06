@@ -68,7 +68,6 @@ export async function GET(request: NextRequest) {
       sundayWorked: records.filter(r => r.isSunday && r.totalHours > 0).length,
       phWorked: records.filter(r => r.isPH && r.totalHours > 0).length,
       totalSundayHours: records.reduce((sum, r) => sum + r.sundayHours, 0),
-      totalPHHours: records.reduce((sum, r) => sum + r.phHours, 0),
       totalOvertimeHours: records.reduce((sum, r) => sum + r.overtimeHours, 0),
       totalWorkHours: records.reduce((sum, r) => sum + r.totalHours, 0),
     };
@@ -114,7 +113,6 @@ export async function POST(request: NextRequest) {
     let halfDay = false;
     let overtimeHours = 0;
     let sundayHours = 0;
-    let phHours = 0;
     let status = 'present';
 
     if (checkIn && checkOut) {
@@ -147,11 +145,6 @@ export async function POST(request: NextRequest) {
       // Sunday hours: if worked on Sunday, all hours are Sunday hours
       if (isSunday) {
         sundayHours = totalHours;
-      }
-
-      // PH hours: if worked on a public holiday, all hours are PH hours
-      if (isPH) {
-        phHours = totalHours;
       }
 
       // Determine status
@@ -207,7 +200,6 @@ export async function POST(request: NextRequest) {
           isSunday,
           isPH,
           sundayHours,
-          phHours,
           remarks: body.remarks,
         },
       });
@@ -229,7 +221,6 @@ export async function POST(request: NextRequest) {
           isSunday,
           isPH,
           sundayHours,
-          phHours,
           remarks: body.remarks,
         },
       });

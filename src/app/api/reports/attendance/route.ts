@@ -51,7 +51,6 @@ export async function GET(request: NextRequest) {
       totalWorkHours: records.reduce((sum, r) => sum + r.totalHours, 0),
       totalOvertimeHours: records.reduce((sum, r) => sum + r.overtimeHours, 0),
       totalSundayHours: records.reduce((sum, r) => sum + r.sundayHours, 0),
-      totalPHHours: records.reduce((sum, r) => sum + r.phHours, 0),
     };
 
     // Firm-wise attendance breakdown

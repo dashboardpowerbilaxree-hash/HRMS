@@ -65,7 +65,6 @@ export async function POST(request: NextRequest) {
         let halfDay = false;
         let overtimeHours = 0;
         let sundayHours = 0;
-        let phHours = 0;
         let status = 'present';
 
         if (checkIn && checkOut) {
@@ -108,7 +107,6 @@ export async function POST(request: NextRequest) {
           overtimeHours = Math.round((otMinutes / 60) * 100) / 100;
 
           if (isSunday) sundayHours = totalHours;
-          if (isPH) phHours = totalHours;
 
           // Determine status
           if (isSunday) status = 'weekly-off';
@@ -142,14 +140,14 @@ export async function POST(request: NextRequest) {
             where: { id: existing.id },
             data: {
               checkIn, checkOut, totalHours, status, lateEntry, earlyOut, halfDay,
-              overtimeHours, isHoliday, isWeeklyOff, isSunday, isPH, sundayHours, phHours,
+              overtimeHours, isHoliday, isWeeklyOff, isSunday, isPH, sundayHours,
             },
           });
         } else {
           await db.attendance.create({
             data: {
               employeeId, date: d, checkIn, checkOut, totalHours, status, lateEntry, earlyOut, halfDay,
-              overtimeHours, isHoliday, isWeeklyOff, isSunday, isPH, sundayHours, phHours,
+              overtimeHours, isHoliday, isWeeklyOff, isSunday, isPH, sundayHours,
             },
           });
         }

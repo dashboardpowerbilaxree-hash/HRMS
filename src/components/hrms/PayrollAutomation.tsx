@@ -76,7 +76,6 @@ interface PayrollRecord {
   sundayCount: number;
   sundayEarnings: number;
   earnedSundayHrs: number;
-  phHours: number;
   totalHrs: number;
   presentDays: number;
   absentDays: number;

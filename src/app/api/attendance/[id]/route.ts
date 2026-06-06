@@ -51,7 +51,6 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     let halfDay = false;
     let overtimeHours = 0;
     let sundayHours = 0;
-    let phHours = 0;
     let status = 'present';
 
     if (finalCheckIn && finalCheckOut) {
@@ -91,7 +90,6 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       }
 
       if (isSunday) sundayHours = totalHours;
-      if (isPH) phHours = totalHours;
 
       // Determine status — late+earlyOut gets 'late' but earlyOut flag is set
       if (isSunday) status = 'weekly-off';
@@ -115,7 +113,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         checkIn: finalCheckIn,
         checkOut: finalCheckOut,
         totalHours, status, lateEntry, earlyOut, halfDay,
-        overtimeHours, isHoliday, isWeeklyOff, isSunday, isPH, sundayHours, phHours,
+        overtimeHours, isHoliday, isWeeklyOff, isSunday, isPH, sundayHours,
       },
     });
 

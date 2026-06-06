@@ -101,13 +101,12 @@ export async function GET(request: NextRequest) {
     //   Total Worked Hrs = sum of (totalHours - overtimeHours) for each working day
     //   OT Hours = sum of overtimeHours
     //   Sunday Hrs = sundayCount × shiftHours
-    //   Total Hrs = Total Worked Hrs + OT + Sunday + PH
+    //   Total Hrs = Total Worked Hrs + OT + Sunday
     //   Gross = Sl/Hr × Total Hrs — round only final amount
     let totalBaseHours = 0;
     let effectivePresentDays = 0;
     let totalWorkMinutes = 0;
     let totalSundayMinutes = 0;
-    let totalPHMinutes = 0;
 
     for (const a of attendance) {
       // Calculate total work minutes from check-in/check-out
@@ -123,11 +122,7 @@ export async function GET(request: NextRequest) {
         const sM = Math.round((a.sundayHours - sH) * 60);
         totalSundayMinutes += sH * 60 + sM;
       }
-      if (a.phHours > 0) {
-        const pH = Math.floor(a.phHours);
-        const pM = Math.round((a.phHours - pH) * 60);
-        totalPHMinutes += pH * 60 + pM;
-      }
+
 
       // Calculate base hours and effective present days
       if (['present', 'late', 'early-out', 'half-day', 'half_day'].includes(a.status)) {
@@ -150,7 +145,7 @@ export async function GET(request: NextRequest) {
     // Convert work hours to HH.MM format for display
     const totalWorkHours = Math.floor(totalWorkMinutes / 60) + (totalWorkMinutes % 60) / 100;
     const totalSundayHours = Math.floor(totalSundayMinutes / 60) + (totalSundayMinutes % 60) / 100;
-    const totalPHHours = Math.floor(totalPHMinutes / 60) + (totalPHMinutes % 60) / 100;
+
 
     // ─── OT Hours: Sum stored overtimeHours directly (decimal sum) ───
     const totalOvertimeHoursDecimal = Math.round(attendance.filter(a => ['present', 'late', 'early-out', 'half-day', 'half_day'].includes(a.status)).reduce((sum, a) => sum + (a.overtimeHours || 0), 0) * 100) / 100;
@@ -212,8 +207,8 @@ export async function GET(request: NextRequest) {
     const effectiveFirm = firmFromId || employee.firm;
     const firmFullName = FIRM_NAMES[effectiveFirm] || employee.firm;
 
-    const totalHrsInclSundayPHMinutes = totalWorkMinutes + totalSundayMinutes + totalPHMinutes;
-    const totalHrsInclSundayPH = Math.floor(totalHrsInclSundayPHMinutes / 60) + (totalHrsInclSundayPHMinutes % 60) / 100;
+    const totalHrsInclSundayMinutes = totalWorkMinutes + totalSundayMinutes;
+    const totalHrsInclSunday = Math.floor(totalHrsInclSundayMinutes / 60) + (totalHrsInclSundayMinutes % 60) / 100;
 
     const annualLeaves = leaves.filter(l => l.type === 'annual' || l.type === 'AL' || l.type === 'Casual' || l.type === 'CL').reduce((sum, l) => sum + l.days, 0);
     const unpaidLeaves = leaves.filter(l => l.type === 'unpaid' || l.type === 'UL' || l.type === 'LOP').reduce((sum, l) => sum + l.days, 0);
@@ -225,7 +220,7 @@ export async function GET(request: NextRequest) {
     // Sunday Hours = sundayCount × shiftHours (paid weekly off)
     // OT Hours = sum of overtimeHours (time AFTER shift end)
     // Paid Leave Hrs = effectivePaidLeaves × shiftHours
-    // Total Hrs = Total Worked Hrs + OT + Sunday + Paid Leave + PH
+    // Total Hrs = Total Worked Hrs + OT + Sunday + Paid Leave
     // Gross Salary = hourlyRate × Total Hrs — round only the final amount
 
     // FULL PRECISION hourly rate — NO intermediate rounding (matching Excel)
@@ -271,8 +266,7 @@ export async function GET(request: NextRequest) {
       totalWorkHours,
       totalOvertimeHours,
       totalSundayHours,
-      totalPHHours,
-      totalHrsInclSundayPH,
+      totalHrsInclSunday,
       lateEntries,
       earlyOuts,
       records: attendance,

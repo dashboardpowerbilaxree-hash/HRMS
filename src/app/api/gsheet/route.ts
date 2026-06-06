@@ -116,13 +116,12 @@ export async function GET(request: NextRequest) {
           const checkOut = String(row[6] || '').trim();
           // Row columns: 0=Code, 1=Name, 2=Firm, 3=Location, 4=Date, 5=InTime, 6=OutTime
           // 7=ShiftStart, 8=ShiftEnd, 9=ShiftHours, 10=WorkDuration, 11=OTHours, 12=TotalHours
-          // 13=Status, 14=LateEntry, 15=HalfDay, 16=SundayHrs, 17=PHHrs, 18=Remarks
+          // 13=Status, 14=LateEntry, 15=HalfDay, 16=SundayHrs, 17=Remarks
           const sheetStatus = String(row[13] || '').trim().toLowerCase();
           const sheetWorkDuration = parseFloat(row[10]) || 0;
           const sheetOTHours = parseFloat(row[11]) || 0;
           const sheetSundayHours = parseFloat(row[16]) || 0;
-          const sheetPHHours = parseFloat(row[17]) || 0;
-          const remarks = String(row[18] || '').trim();
+          const remarks = String(row[17] || '').trim();
 
           if (!employeeId) continue;
 
@@ -146,7 +145,6 @@ export async function GET(request: NextRequest) {
           let lateEntry = false;
           let halfDay = false;
           let sundayHours = sheetSundayHours;
-          let phHours = sheetPHHours;
           let finalStatus = sheetStatus;
 
           // If checkIn and checkOut provided, recalculate to be accurate
@@ -158,7 +156,6 @@ export async function GET(request: NextRequest) {
             halfDay = totalHours < employee.shiftHours / 2;
             overtimeHours = Math.max(0, totalHours - employee.shiftHours);
             if (isSunday) sundayHours = totalHours;
-            if (isPH) phHours = totalHours;
 
             if (!finalStatus || finalStatus === 'present') {
               if (isSunday) finalStatus = 'weekly-off';
@@ -184,7 +181,7 @@ export async function GET(request: NextRequest) {
           const data = {
             checkIn: checkIn || null, checkOut: checkOut || null,
             totalHours, status: finalStatus, lateEntry, halfDay, overtimeHours,
-            isHoliday, isWeeklyOff: isSunday, isSunday, isPH, sundayHours, phHours, remarks,
+            isHoliday, isWeeklyOff: isSunday, isSunday, isPH, sundayHours, remarks,
           };
 
           if (existing) {
@@ -263,7 +260,7 @@ export async function GET(request: NextRequest) {
           const isPH = holidays.length > 0;
           const isHoliday = isPH;
 
-          let totalHours = 0, lateEntry = false, halfDay = false, overtimeHours = 0, sundayHours = 0, phHours = 0;
+          let totalHours = 0, lateEntry = false, halfDay = false, overtimeHours = 0, sundayHours = 0;
           let finalStatus = status;
 
           if (checkIn && checkOut) {
@@ -274,7 +271,6 @@ export async function GET(request: NextRequest) {
             halfDay = totalHours < employee.shiftHours / 2;
             overtimeHours = Math.max(0, totalHours - employee.shiftHours);
             if (isSunday) sundayHours = totalHours;
-            if (isPH) phHours = totalHours;
 
             if (isSunday) finalStatus = 'weekly-off';
             else if (isHoliday) finalStatus = 'holiday';
@@ -289,7 +285,7 @@ export async function GET(request: NextRequest) {
             where: { employeeId, date: { gte: new Date(d.getFullYear(), d.getMonth(), d.getDate()), lt: new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1) } },
           });
 
-          const data = { checkIn: checkIn || null, checkOut: checkOut || null, totalHours, status: finalStatus, lateEntry, halfDay, overtimeHours, isHoliday, isWeeklyOff: isSunday, isSunday, isPH, sundayHours, phHours, remarks };
+          const data = { checkIn: checkIn || null, checkOut: checkOut || null, totalHours, status: finalStatus, lateEntry, halfDay, overtimeHours, isHoliday, isWeeklyOff: isSunday, isSunday, isPH, sundayHours, remarks };
 
           if (existing) {
             await db.attendance.update({ where: { id: existing.id }, data });
@@ -344,7 +340,7 @@ export async function GET(request: NextRequest) {
         'Shift Start', 'Shift End', 'Shift Hours',
         'Work Duration (hrs)', 'OT Hours', 'Total Hours (incl OT)',
         'Status', 'Late Entry', 'Half Day',
-        'Sunday Hours', 'PH Hours', 'Remarks'
+        'Sunday Hours', 'Remarks'
       ];
       const dataRows = records.map(r => [
         r.employeeId,
@@ -364,7 +360,6 @@ export async function GET(request: NextRequest) {
         r.lateEntry ? 'TRUE' : 'FALSE',
         r.halfDay ? 'TRUE' : 'FALSE',
         r.sundayHours.toString(),
-        r.phHours.toString(),
         r.remarks || '',
       ]);
 
@@ -403,13 +398,13 @@ export async function GET(request: NextRequest) {
         'Shift Start', 'Shift End', 'Shift Hours',
         'Work Duration (hrs)', 'OT Hours', 'Total Hours (incl OT)',
         'Status', 'Late Entry', 'Half Day',
-        'Sunday Hours', 'PH Hours', 'Remarks'
+        'Sunday Hours', 'Remarks'
       ];
       const dataRows = employees.map(e => [
         e.employeeId, e.fullName, e.firm || e.department, e.location,
         date, '', '',
         e.shiftStart, e.shiftEnd, e.shiftHours,
-        '', '', '', '', '', '', '', '', '',
+        '', '', '', '', '', '', '', '',
       ]);
 
       // Create "Daily Input" sheet if it doesn't exist
@@ -449,7 +444,7 @@ export async function POST(request: NextRequest) {
 
       for (const record of body.records) {
         try {
-          const { employeeId, date, checkIn, checkOut, status, remarks, workDuration, otHours, totalHours, sundayHours, phHours, lateEntry, halfDay } = record;
+          const { employeeId, date, checkIn, checkOut, status, remarks, workDuration, otHours, totalHours, sundayHours, lateEntry, halfDay } = record;
 
           if (!employeeId || !date) continue;
 
@@ -471,7 +466,6 @@ export async function POST(request: NextRequest) {
           let finalTotalHours = workDuration || 0;
           let finalOvertimeHours = otHours || 0;
           let finalSundayHours = sundayHours || 0;
-          let finalPHHours = phHours || 0;
           let finalLateEntry = lateEntry || false;
           let finalHalfDay = halfDay || false;
           let finalStatus = (status || 'present').toLowerCase();
@@ -485,7 +479,6 @@ export async function POST(request: NextRequest) {
             finalHalfDay = finalTotalHours < employee.shiftHours / 2;
             finalOvertimeHours = Math.max(0, finalTotalHours - employee.shiftHours);
             if (isSunday) finalSundayHours = finalTotalHours;
-            if (isPH) finalPHHours = finalTotalHours;
 
             if (isSunday) finalStatus = 'weekly-off';
             else if (isHoliday) finalStatus = 'holiday';
@@ -504,7 +497,7 @@ export async function POST(request: NextRequest) {
             totalHours: finalTotalHours, status: finalStatus, lateEntry: finalLateEntry,
             halfDay: finalHalfDay, overtimeHours: finalOvertimeHours,
             isHoliday, isWeeklyOff: isSunday, isSunday, isPH,
-            sundayHours: finalSundayHours, phHours: finalPHHours,
+            sundayHours: finalSundayHours,
             remarks: remarks || null,
           };
 

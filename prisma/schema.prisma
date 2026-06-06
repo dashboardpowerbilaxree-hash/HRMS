@@ -55,6 +55,8 @@ model Employee {
   shiftEnd         String      @default("19:00")
   shiftHours       Float       @default(9)
   designation      String?
+  gender           String?
+  dateOfBirth      DateTime?
   department       String?
   joiningDate      DateTime    @default(now())
   address          String?
@@ -98,7 +100,6 @@ model Attendance {
   isSunday       Boolean   @default(false)
   isPH           Boolean   @default(false)
   sundayHours    Float     @default(0)
-  phHours        Float     @default(0)
   remarks        String?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
@@ -159,7 +160,6 @@ model Payroll {
   sundayHrs        Float    @default(0)
   sundayCount      Float    @default(0)
   sundayEarnings   Float    @default(0)
-  phHours          Float    @default(0)
   totalHrs         Float    @default(0)
   presentDays      Float    @default(0)
   absentDays       Float    @default(0)

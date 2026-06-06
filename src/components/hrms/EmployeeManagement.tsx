@@ -46,6 +46,8 @@ interface Employee {
   firm: string;
   location: string;
   designation: string;
+  gender: string | null;
+  dateOfBirth: string | null;
   joiningDate: string;
   salaryType: string;
   basicSalary: number;
@@ -98,6 +100,8 @@ const emptyForm = {
   department: '',
   location: 'Ajmer',
   designation: '',
+  gender: '',
+  dateOfBirth: '',
   joiningDate: '',
   salaryType: 'Hourly',
   basicSalary: 0,
@@ -281,6 +285,8 @@ export function EmployeeManagement() {
       department: emp.department || emp.firm || '',
       location: emp.location || 'Ajmer',
       designation: emp.designation || '',
+      gender: emp.gender || '',
+      dateOfBirth: emp.dateOfBirth?.split('T')[0] || '',
       joiningDate: emp.joiningDate?.split('T')[0] || '',
       salaryType: capitalizeSalaryType(emp.salaryType), // Capitalize for UI Select match
       basicSalary: emp.monthlySalary || emp.basicSalary || 0,
@@ -680,7 +686,9 @@ export function EmployeeManagement() {
                             </div>
                             <div className="min-w-0 overflow-hidden">
                               <p className="font-medium text-sm truncate">{emp.fullName}</p>
-                              <p className="text-[10px] text-muted-foreground truncate">{emp.designation}</p>
+                              <p className="text-[10px] text-muted-foreground truncate">
+                                {emp.designation}{emp.gender ? <span className="ml-1 inline-flex items-center px-1 py-0 rounded text-[9px] font-medium bg-muted/80 text-muted-foreground">{emp.gender}</span> : null}
+                              </p>
                             </div>
                           </div>
                         </TableCell>
@@ -806,6 +814,21 @@ export function EmployeeManagement() {
             <div>
               <Label>Designation</Label>
               <Input value={form.designation} onChange={(e) => handleFormChange('designation', e.target.value)} placeholder="Designation" />
+            </div>
+            <div>
+              <Label className="text-xs font-medium">Gender</Label>
+              <Select value={form.gender || ''} onValueChange={(v) => handleFormChange('gender', v)}>
+                <SelectTrigger className="h-9 mt-1"><SelectValue placeholder="Select Gender" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Male">Male</SelectItem>
+                  <SelectItem value="Female">Female</SelectItem>
+                  <SelectItem value="Other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs font-medium">Date of Birth</Label>
+              <Input type="date" value={form.dateOfBirth} onChange={(e) => handleFormChange('dateOfBirth', e.target.value)} className="mt-1" />
             </div>
             <div>
               <Label>Joining Date</Label>

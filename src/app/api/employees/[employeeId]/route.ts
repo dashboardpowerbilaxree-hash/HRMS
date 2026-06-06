@@ -73,6 +73,8 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         shiftEnd: body.shiftEnd,
         shiftHours: sh,
         designation: body.designation,
+        gender: body.gender,
+        dateOfBirth: body.dateOfBirth ? new Date(body.dateOfBirth) : undefined,
         department: body.firm || body.department,
         address: body.address,
         bankName: body.bankName,

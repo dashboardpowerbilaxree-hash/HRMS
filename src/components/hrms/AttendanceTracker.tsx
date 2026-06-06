@@ -95,7 +95,6 @@ interface AttendanceRecord {
   isSunday: boolean;
   isPH: boolean;
   sundayHours: number;
-  phHours: number;
   employee?: {
     fullName: string;
     employeeId: string;
@@ -140,8 +139,7 @@ interface MonthlySummary {
   totalWorkHours: number;
   totalOvertimeHours: number;
   totalSundayHours: number;
-  totalPHHours: number;
-  totalHrsInclSundayPH?: number;
+  totalHrsInclSunday?: number;
   lateEntries: number;
   earlyOuts?: number;
   records: AttendanceRecord[];
@@ -206,7 +204,7 @@ export function AttendanceTracker() {
   const [summary, setSummary] = useState({
     present: 0, absent: 0, late: 0, earlyOut: 0, halfDay: 0, ot: 0,
   });
-  const [employees, setEmployees] = useState<{ employeeId: string; fullName: string; department: string; location: string; firm: string }[]>([]);
+  const [employees, setEmployees] = useState<{ employeeId: string; fullName: string; department: string; location: string; firm: string; shiftStart: string; shiftEnd: string; shiftHours: number }[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ employeeId: '', date: '', checkIn: '', checkOut: '' });
@@ -242,6 +240,10 @@ export function AttendanceTracker() {
   const [importPreview, setImportPreview] = useState<any[]>([]);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<any>(null);
+  const [importDate, setImportDate] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ── Load data ──
@@ -274,6 +276,9 @@ export function AttendanceTracker() {
         department: e.department,
         location: e.location,
         firm: e.firm,
+        shiftStart: e.shiftStart || '10:00',
+        shiftEnd: e.shiftEnd || '19:00',
+        shiftHours: e.shiftHours || 9,
       })));
 
       const summ = attData.summary || {};
@@ -595,15 +600,18 @@ export function AttendanceTracker() {
         return;
       }
 
-      // Try to map columns - look for common column names
+      // Try to map columns - look for common column names (supports both old and new template formats)
       const mapped = data.map((row: any) => {
         // Get raw values from various possible column names
-        const rawEmpId = row['Employee ID'] || row['employeeId'] || row['Employee_Code'] || row['EMP ID'] || row['Emp ID'] || row['Emp_Code'] || '';
-        const rawEmpName = row['Employee Name'] || row['fullName'] || row['Name'] || row['Employee_Name'] || row['Emp Name'] || '';
+        const rawEmpId = row['E. Code'] || row['ECode'] || row['Emp Code'] || row['Employee Code'] || row['Employee_Code'] ||
+          row['Employee ID'] || row['employeeId'] || row['Employee_Code'] || row['EMP ID'] || row['Emp ID'] || row['Emp_Code'] || '';
+        const rawEmpName = row['Name'] || row['Employee Name'] || row['fullName'] || row['Employee_Name'] || row['Emp Name'] || '';
         const rawDate = row['Date'] || row['date'] || row['Attendance Date'] || row['Att Date'] || '';
-        const rawCheckIn = row['In Time'] || row['Check In'] || row['checkIn'] || row['In_Time'] || row['IN'] || row['Time In'] || '';
-        const rawCheckOut = row['Out Time'] || row['Check Out'] || row['checkOut'] || row['Out_Time'] || row['OUT'] || row['Time Out'] || '';
+        const rawCheckIn = row[' InTime'] || row['InTime'] || row['In Time'] || row['Check In'] || row['checkIn'] || row['In_Time'] || row['IN'] || row['Time In'] || '';
+        const rawCheckOut = row[' OutTime'] || row['OutTime'] || row['Out Time'] || row['Check Out'] || row['checkOut'] || row['Out_Time'] || row['OUT'] || row['Time Out'] || '';
+        const rawShift = row['Shift'] || row['shift'] || '';
         const rawStatus = row['Status'] || row['status'] || '';
+        const rawRemarks = row['Remarks'] || row['remarks'] || row['Remark'] || row['remark'] || '';
 
         // Convert values
         const empId = String(rawEmpId).trim();
@@ -611,9 +619,11 @@ export function AttendanceTracker() {
         const date = parseDateValue(rawDate);
         const checkIn = excelDecimalToTime(rawCheckIn);
         const checkOut = excelDecimalToTime(rawCheckOut);
+        const shift = String(rawShift).trim();
         const status = String(rawStatus).trim();
+        const remarks = String(rawRemarks).trim();
 
-        return { employeeId: empId, employeeName: empName, date, checkIn, checkOut, status };
+        return { employeeId: empId, employeeName: empName, date, checkIn, checkOut, shift, status, remarks };
       }).filter(r => r.employeeId || r.employeeName);
 
       setImportPreview(mapped);
@@ -627,80 +637,96 @@ export function AttendanceTracker() {
     const XLSX = await import('xlsx');
     const wb = XLSX.utils.book_new();
 
-    // Get today's date for the template
-    const today = new Date();
-    const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    // Helper: format shift as "HH-HH" (e.g., "10-19" from shiftStart "10:00" and shiftEnd "19:00")
+    const formatShift = (start: string, end: string): string => {
+      const startH = start?.split(':')[0] || '10';
+      const endH = end?.split(':')[0] || '19';
+      return `${startH}-${endH}`;
+    };
 
-    // Template with actual employee data from the system
-    const templateData: string[][] = [
-      ['Employee ID', 'Employee Name', 'Date', 'In Time', 'Out Time', 'Status'],
+    // ── Sheet 1: DailyAttendance_BasicReport ──
+    // Template format matching the uploaded Laxree template:
+    // Header row + empty rows with just SNo (E. Code/Name/Shift left blank for manual fill)
+    const totalRows = employees.length > 0 ? employees.length : 35;
+    const templateData: (string | number | null)[][] = [
+      ['SNo', 'E. Code', 'Name', 'Shift', 'InTime', 'OutTime', 'Work Dur.', 'OT', 'Tot. Dur.', 'Status', 'Remarks'],
     ];
-
-    // Add sample rows with actual employees (first 5)
-    const sampleEmployees = employees.slice(0, 5);
-    if (sampleEmployees.length > 0) {
-      sampleEmployees.forEach(emp => {
-        templateData.push([emp.employeeId, emp.fullName, dateStr, '09:30', '18:30', '']);
-      });
-    } else {
-      // Fallback sample data
-      templateData.push(['EMP-001', 'John Doe', dateStr, '09:30', '18:30', '']);
-      templateData.push(['EMP-002', 'Jane Smith', dateStr, '10:00', '19:00', 'Late']);
+    for (let i = 1; i <= totalRows; i++) {
+      templateData.push([i, null, null, null, '', '', '', '', '', '', '']);
     }
 
     const ws = XLSX.utils.aoa_to_sheet(templateData);
 
     // Set column widths
     ws['!cols'] = [
-      { wch: 14 },  // Employee ID
-      { wch: 22 },  // Employee Name
-      { wch: 14 },  // Date
-      { wch: 10 },  // In Time
-      { wch: 10 },  // Out Time
+      { wch: 5 },   // SNo
+      { wch: 12 },  // E. Code
+      { wch: 22 },  // Name
+      { wch: 10 },  // Shift
+      { wch: 10 },  // InTime
+      { wch: 10 },  // OutTime
+      { wch: 10 },  // Work Dur.
+      { wch: 8 },   // OT
+      { wch: 10 },  // Tot. Dur.
       { wch: 12 },  // Status
+      { wch: 18 },  // Remarks
     ];
 
-    XLSX.utils.book_append_sheet(wb, ws, 'Attendance Template');
+    XLSX.utils.book_append_sheet(wb, ws, 'DailyAttendance_BasicReport');
 
-    // Add an Instructions sheet
+    // ── Sheet 2: Instructions ──
     const instructionsData = [
-      ['Laxree HRMS - Attendance Upload Template Instructions'],
+      ['Laxree HRMS - Daily Attendance Upload Template Instructions'],
+      [''],
+      ['This template is for importing daily attendance data. Select the Attendance Date in the Import tab before uploading.'],
       [''],
       ['Column Descriptions:'],
       ['Column', 'Format', 'Required', 'Example', 'Notes'],
-      ['Employee ID', 'EMP-XXX', 'Yes (or Name)', 'EMP-041', 'Use the same ID as in the HRMS system (e.g., EMP-041 NOT just 41). If unknown, leave blank and provide Employee Name.'],
-      ['Employee Name', 'Text', 'Yes (or ID)', 'Kulvinder', 'Used to match employee if ID not found. Must match the name in the system.'],
-      ['Date', 'YYYY-MM-DD', 'Yes', dateStr, 'Use YYYY-MM-DD format (e.g., ' + dateStr + '). DD/MM/YYYY also accepted.'],
-      ['In Time', 'HH:MM (24hr)', 'No', '09:30', 'Use 24-hour format: 09:30, 14:00, 19:30. Leave blank if absent.'],
-      ['Out Time', 'HH:MM (24hr)', 'No', '18:30', 'Use 24-hour format. Leave blank if absent or not checked out.'],
-      ['Status', 'Text', 'No', 'Late', 'Leave blank for auto-calculation. Use: Late, Half-Day, Absent if needed.'],
+      ['SNo', 'Number', 'Auto', '1', 'Serial number — auto-filled, no need to change.'],
+      ['E. Code', 'EMP-XXX or numeric', 'Yes (or Name)', 'EMP-041', 'Employee code as in HRMS (e.g., EMP-041). Numeric codes like 7 will be auto-matched to EMP-007. If unknown, leave blank and provide Name.'],
+      ['Name', 'Text', 'Yes (or E. Code)', 'Kulvinder', 'Employee name — used to match if E. Code not found. Must match the name in the system.'],
+      ['Shift', 'HH-HH', 'Auto-filled', '10-19', 'Pre-filled from employee shift data. "NS" = Night Shift. You can override if needed. For reference only — not required for import.'],
+      ['InTime', 'HH:MM (24hr)', 'No', '09:30', 'Check-in time in 24-hour format (e.g., 09:30, 14:00, 19:30). Leave blank if absent.'],
+      ['OutTime', 'HH:MM (24hr)', 'No', '18:30', 'Check-out time in 24-hour format. Leave blank if absent or not checked out.'],
+      ['Work Dur.', 'HH.MM', 'Auto', '9.00', 'Auto-calculated from InTime/OutTime — leave blank for import.'],
+      ['OT', 'HH.MM', 'Auto', '1.30', 'Auto-calculated overtime — leave blank for import.'],
+      ['Tot. Dur.', 'HH.MM', 'Auto', '9.00', 'Auto-calculated total duration — leave blank for import.'],
+      ['Status', 'Text', 'No', 'Late', 'Leave blank for auto-calculation. Use: Present, Late, Half-Day, Absent if needed.'],
+      ['Remarks', 'Text', 'No', 'Came late', 'Any notes or remarks for the record.'],
       [''],
       ['Important Notes:'],
-      ['1. Employee ID format must match the system (e.g., EMP-041, NOT just 41)'],
-      ['2. Date format: Use YYYY-MM-DD (e.g., ' + dateStr + '). Other formats: DD/MM/YYYY also accepted.'],
+      ['1. This is a DAILY template — select the Attendance Date in the Import tab before uploading. No Date column is needed per row.'],
+      ['2. E. Code format: Use the system format (e.g., EMP-041, NOT just 41). Numeric codes will be auto-matched (7 → EMP-007).'],
       ['3. Time format: Use HH:MM in 24-hour format (e.g., 09:30, 18:45). Do NOT use AM/PM.'],
-      ['4. If In Time and Out Time are blank, the system will mark as Absent.'],
-      ['5. The system auto-calculates: Working Hours, Late Entry, Overtime, Half Day, Sunday, Holiday.'],
-      ['6. Delete the sample rows before filling in your actual data.'],
-      ['7. Save as .xlsx or .csv before uploading.'],
-      ['8. The system will auto-match employees by ID first, then by Name.'],
+      ['4. If InTime and OutTime are blank, the system will mark as Absent.'],
+      ['5. Work Dur., OT, and Tot. Dur. are auto-calculated — leave them blank when filling the template.'],
+      ['6. The system auto-calculates: Working Hours, Late Entry, Overtime, Half Day, Sunday, Holiday.'],
+      ['7. Refer to the Employee List sheet for correct E. Code, Name, and Shift of each employee.'],
+      ['8. Save as .xlsx or .csv before uploading.'],
+      ['9. The system will auto-match employees by E. Code first, then by Name.'],
     ];
     const ws2 = XLSX.utils.aoa_to_sheet(instructionsData);
     ws2['!cols'] = [
-      { wch: 16 }, { wch: 16 }, { wch: 14 }, { wch: 16 }, { wch: 70 },
+      { wch: 16 }, { wch: 18 }, { wch: 14 }, { wch: 16 }, { wch: 80 },
     ];
     XLSX.utils.book_append_sheet(wb, ws2, 'Instructions');
 
-    // Add Employee List sheet for reference
+    // ── Sheet 3: Employee List (reference for filling the main sheet) ──
+    const empListData: (string | number)[][] = [
+      ['E. Code', 'Employee Name', 'Company', 'Location', 'Shift'],
+    ];
     if (employees.length > 0) {
-      const empListData = [
-        ['Employee ID', 'Employee Name', 'Company', 'Location'],
-        ...employees.map(e => [e.employeeId, e.fullName, e.firm || e.department, e.location]),
-      ];
-      const ws3 = XLSX.utils.aoa_to_sheet(empListData);
-      ws3['!cols'] = [{ wch: 14 }, { wch: 25 }, { wch: 12 }, { wch: 18 }];
-      XLSX.utils.book_append_sheet(wb, ws3, 'Employee List');
+      employees.forEach(e => {
+        empListData.push([e.employeeId, e.fullName, e.firm || e.department, e.location, formatShift(e.shiftStart, e.shiftEnd)]);
+      });
+    } else {
+      // Fallback sample
+      empListData.push(['EMP-001', 'John Doe', 'LAPL', 'Ajmer', '10-19']);
+      empListData.push(['EMP-002', 'Jane Smith', 'LRSL', 'Gurgaon', '10-19']);
     }
+    const ws3 = XLSX.utils.aoa_to_sheet(empListData);
+    ws3['!cols'] = [{ wch: 14 }, { wch: 25 }, { wch: 12 }, { wch: 18 }, { wch: 10 }];
+    XLSX.utils.book_append_sheet(wb, ws3, 'Employee List');
 
     XLSX.writeFile(wb, 'Laxree_Attendance_Template.xlsx');
     toast.success('Template downloaded! Fill it and upload.');
@@ -715,9 +741,11 @@ export function AttendanceTracker() {
       // Use smart matching for employee IDs
       const recordsToImport = importPreview.map((row) => {
         const empId = smartMatchEmployeeId(row.employeeId, row.employeeName);
+        // Use row date if available, otherwise fall back to the selected importDate
+        const date = row.date || importDate;
         return {
           employeeId: empId,
-          date: row.date,
+          date,
           checkIn: row.checkIn || '',
           checkOut: row.checkOut || '',
         };
@@ -1173,7 +1201,6 @@ export function AttendanceTracker() {
                           <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider border-r border-emerald-600/30">Half Days</th>
                           <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider border-r border-emerald-600/30">AL</th>
                           <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider border-r border-emerald-600/30">UL</th>
-                          <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider border-r border-emerald-600/30">PH</th>
                           <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider border-r border-emerald-600/30">Total Hrs Worked</th>
                           <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider border-r border-emerald-600/30">OT Hrs</th>
                           <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider border-r border-emerald-600/30">Sunday Hrs</th>
@@ -1187,11 +1214,10 @@ export function AttendanceTracker() {
                           <td className="px-3 py-3 font-bold text-orange-500 border-r border-border/30">{monthlySummary.halfDays}</td>
                           <td className="px-3 py-3 text-blue-500 border-r border-border/30">{monthlySummary.annualLeaves || 0}</td>
                           <td className="px-3 py-3 text-amber-600 dark:text-amber-400 border-r border-border/30">{monthlySummary.unpaidLeaves || 0}</td>
-                          <td className="px-3 py-3 text-purple-500 border-r border-border/30">{monthlySummary.holidayDays}</td>
                           <td className="px-3 py-3 font-bold text-cyan-600 dark:text-cyan-400 border-r border-border/30">{displayHHMM(monthlySummary.totalWorkHours)}</td>
                           <td className="px-3 py-3 font-bold text-yellow-600 dark:text-yellow-400 border-r border-border/30">{displayHHMM(monthlySummary.totalOvertimeHours)}</td>
                           <td className="px-3 py-3 text-blue-600 dark:text-blue-400 border-r border-border/30">{displayHHMM(monthlySummary.totalSundayHours)}</td>
-                          <td className="px-3 py-3 font-bold text-gold">{displayHHMM(monthlySummary.totalHrsInclSundayPH || (monthlySummary.totalWorkHours || 0))}</td>
+                          <td className="px-3 py-3 font-bold text-gold">{displayHHMM(monthlySummary.totalHrsInclSunday || (monthlySummary.totalWorkHours || 0))}</td>
                         </tr>
                       </tbody>
                     </table>
@@ -1324,6 +1350,25 @@ export function AttendanceTracker() {
                       <Download className="w-3.5 h-3.5" /> Download Template
                     </Button>
                   </div>
+
+                  {/* Attendance Date Picker */}
+                  <div className="mb-4">
+                    <Label htmlFor="importDate" className="text-xs font-semibold flex items-center gap-1.5 mb-1.5">
+                      <CalendarDays className="w-3.5 h-3.5 text-gold" />
+                      Attendance Date
+                    </Label>
+                    <Input
+                      id="importDate"
+                      type="date"
+                      value={importDate}
+                      onChange={(e) => setImportDate(e.target.value)}
+                      className="w-full sm:w-56 h-9 text-sm font-medium input-premium rounded-lg"
+                    />
+                    <p className="text-[10px] text-muted-foreground mt-1">
+                      This date will be used for all rows in the uploaded file (daily template has no Date column per row).
+                    </p>
+                  </div>
+
                   <div className="border-2 border-dashed border-border rounded-xl p-8 text-center hover:border-gold/50 transition-colors">
                     <input
                       ref={fileInputRef}
@@ -1352,8 +1397,11 @@ export function AttendanceTracker() {
                   <div className="mt-3 p-3 rounded-lg bg-gold/5 border border-gold/10">
                     <Info className="w-4 h-4 text-gold inline mr-1.5 -mt-0.5" />
                     <span className="text-xs text-muted-foreground">
-                      <strong>Required format:</strong> Employee ID (EMP-XXX), Employee Name, Date (YYYY-MM-DD), In Time (HH:MM), Out Time (HH:MM). 
-                      Click <strong>"Download Template"</strong> to get the correct format. The system auto-converts Excel dates/times and matches employees by ID or Name.
+                      <strong>Template format:</strong> SNo, E. Code, Name, Shift, InTime, OutTime, Work Dur., OT, Tot. Dur., Status, Remarks. 
+                      The daily template has no Date column — set the <strong>Attendance Date</strong> above before uploading.
+                      Click <strong>"Download Template"</strong> to get the correct format with all employees pre-filled. 
+                      The system auto-converts Excel dates/times and matches employees by E. Code or Name.
+                      Also supports the old format (Employee ID, Employee Name, Date, In Time, Out Time, Status).
                     </span>
                   </div>
                 </div>
@@ -1364,17 +1412,23 @@ export function AttendanceTracker() {
                     <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
                       <Search className="w-4 h-4 text-gold" />
                       Preview ({importPreview.length} records found)
+                      {!importPreview.some(r => r.date) && importDate && (
+                        <span className="text-[10px] text-muted-foreground font-normal ml-1">
+                          — using date: {importDate}
+                        </span>
+                      )}
                     </h3>
                     <ScrollArea className="max-h-[40vh]">
                       <Table>
                         <TableHeader>
                           <TableRow className="hover:bg-transparent">
-                            <TableHead className="text-xs">Employee ID</TableHead>
-                            <TableHead className="text-xs">Employee Name</TableHead>
-                            <TableHead className="text-xs">Date</TableHead>
-                            <TableHead className="text-xs">In Time</TableHead>
-                            <TableHead className="text-xs">Out Time</TableHead>
+                            <TableHead className="text-xs">E. Code</TableHead>
+                            <TableHead className="text-xs">Name</TableHead>
+                            <TableHead className="text-xs">Shift</TableHead>
+                            <TableHead className="text-xs">InTime</TableHead>
+                            <TableHead className="text-xs">OutTime</TableHead>
                             <TableHead className="text-xs">Status</TableHead>
+                            <TableHead className="text-xs">Remarks</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -1382,10 +1436,11 @@ export function AttendanceTracker() {
                             <TableRow key={i} className="hover:bg-muted/30">
                               <TableCell className="text-xs font-mono">{row.employeeId || '—'}</TableCell>
                               <TableCell className="text-xs">{row.employeeName || '—'}</TableCell>
-                              <TableCell className="text-xs">{row.date || '—'}</TableCell>
+                              <TableCell className="text-xs">{row.shift || '—'}</TableCell>
                               <TableCell className="text-xs font-mono">{row.checkIn || '—'}</TableCell>
                               <TableCell className="text-xs font-mono">{row.checkOut || '—'}</TableCell>
                               <TableCell className="text-xs">{row.status || '—'}</TableCell>
+                              <TableCell className="text-xs">{row.remarks || '—'}</TableCell>
                             </TableRow>
                           ))}
                         </TableBody>

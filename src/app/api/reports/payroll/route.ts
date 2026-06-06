@@ -48,10 +48,8 @@ export async function GET(request: NextRequest) {
       totalAdvance: round2(payrolls.reduce((s, p) => s + p.advanceDeduction, 0)),
       totalSecurityDeposit: round2(payrolls.reduce((s, p) => s + p.securityDeposit, 0)),
       totalSundayAmount: round2(payrolls.reduce((s, p) => s + p.sundayAmount, 0)),
-      totalPHAmount: round2(payrolls.reduce((s, p) => s + p.phAmount, 0)),
       totalWorkHours: round2(payrolls.reduce((s, p) => s + p.totalWorkHours, 0)),
       totalSundayHours: round2(payrolls.reduce((s, p) => s + p.sundayHours, 0)),
-      totalPHHours: round2(payrolls.reduce((s, p) => s + p.phHours, 0)),
     };
 
     // Firm-wise payroll breakdown
@@ -62,14 +60,13 @@ export async function GET(request: NextRequest) {
       totalDeductions: number;
       totalOT: number;
       totalSundayAmount: number;
-      totalPHAmount: number;
     }> = {};
     payrolls.forEach(p => {
       const firm = (p.employee as any)?.department || 'Unknown';
       if (!firmBreakdown[firm]) {
         firmBreakdown[firm] = {
           count: 0, totalGross: 0, totalNet: 0, totalDeductions: 0,
-          totalOT: 0, totalSundayAmount: 0, totalPHAmount: 0,
+          totalOT: 0, totalSundayAmount: 0,
         };
       }
       firmBreakdown[firm].count++;
@@ -78,7 +75,7 @@ export async function GET(request: NextRequest) {
       firmBreakdown[firm].totalDeductions += p.totalDeductions;
       firmBreakdown[firm].totalOT += p.overtimeAmount;
       firmBreakdown[firm].totalSundayAmount += p.sundayAmount;
-      firmBreakdown[firm].totalPHAmount += p.phAmount;
+
     });
 
     // Round firm breakdown values
@@ -89,7 +86,7 @@ export async function GET(request: NextRequest) {
       fb.totalDeductions = round2(fb.totalDeductions);
       fb.totalOT = round2(fb.totalOT);
       fb.totalSundayAmount = round2(fb.totalSundayAmount);
-      fb.totalPHAmount = round2(fb.totalPHAmount);
+
     });
 
     // Location-wise payroll breakdown

@@ -126,23 +126,16 @@ export async function POST(request: NextRequest) {
         const otAmount = otHoursDecimal * hourlyRate;
         const grossSalary = hourlyRate * totalHrs;
 
-        // ─── ACTUAL Sunday/PH worked hours (for display/records only) ───
+        // ─── ACTUAL Sunday worked hours (for display/records only) ───
         let sundayWorkMinutes = 0;
-        let phWorkMinutes = 0;
         for (const a of attendance) {
           if (a.isSunday && a.checkIn && a.checkOut) {
             const [h1, m1] = a.checkIn.split(':').map(Number);
             const [h2, m2] = a.checkOut.split(':').map(Number);
             sundayWorkMinutes += Math.max(0, (h2 * 60 + m2) - (h1 * 60 + m1));
           }
-          if (a.isHoliday && a.checkIn && a.checkOut) {
-            const [h1, m1] = a.checkIn.split(':').map(Number);
-            const [h2, m2] = a.checkOut.split(':').map(Number);
-            phWorkMinutes += Math.max(0, (h2 * 60 + m2) - (h1 * 60 + m1));
-          }
         }
         const sundayWorkedHrs = Math.floor(sundayWorkMinutes / 60) + (sundayWorkMinutes % 60) / 100;
-        const phWorkedHrs = Math.floor(phWorkMinutes / 60) + (phWorkMinutes % 60) / 100;
 
         const totalDeductions = 0;
         const netSalary = Math.round(grossSalary * 100) / 100;
@@ -157,7 +150,6 @@ export async function POST(request: NextRequest) {
           sundayHrs: sundayWorkedHrs,
           sundayCount,
           sundayEarnings: Math.round(sundayEarnings * 100) / 100,
-          phHours: phWorkedHrs,
           totalHrs: Math.round(totalHrs * 100) / 100,
           presentDays: presentDays,
           absentDays,

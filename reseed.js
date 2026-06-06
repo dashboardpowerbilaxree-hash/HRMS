@@ -56,7 +56,8 @@ async function reseed() {
   for (const f of firms) await prisma.firm.create({ data: f });
   for (const l of ['Ajmer','Jaipur','Gurgaon','Palra Warehouse','Roofing Factory']) await prisma.location.create({ data: { name: l } });
   console.log('Creating employees...');
-  for (const emp of employees) {
+  for (let idx = 0; idx < employees.length; idx++) {
+    const emp = employees[idx];
     const hourlyRate = emp.salaryType === 'hourly' ? Math.round((emp.monthlySalary / (31 * emp.shiftHours)) * 100) / 100 : Math.round((emp.dailyRate || emp.monthlySalary / 30) / emp.shiftHours * 100) / 100;
     await prisma.employee.create({
       data: { employeeId: emp.employeeId, fullName: emp.fullName.trim(), firm: emp.firm, location: emp.location,
@@ -66,7 +67,9 @@ async function reseed() {
         shiftStart: emp.shiftStart, shiftEnd: emp.shiftEnd, shiftHours: emp.shiftHours,
         status: emp.status === 'inactive' ? 'No' : 'Yes',
         designation: emp.firm === 'LAPL' ? 'Staff' : emp.firm === 'LRSL' ? 'Worker' : emp.firm === 'SI' ? 'Associate' : 'Helper',
-        department: emp.firm, joiningDate: new Date(2024, Math.floor(Math.random() * 12), Math.floor(Math.random() * 28) + 1) }
+        department: emp.firm, joiningDate: new Date(2024, Math.floor(Math.random() * 12), Math.floor(Math.random() * 28) + 1),
+        gender: idx % 3 === 0 ? 'Female' : 'Male',
+        dateOfBirth: new Date(1985 + Math.floor(Math.random() * 17), Math.floor(Math.random() * 12), 1 + Math.floor(Math.random() * 28)) }
     });
   }
   console.log('Employees:', employees.length);
@@ -102,7 +105,7 @@ async function reseed() {
           const [sh,sm] = emp.shiftStart.split(':').map(Number);
           const [eh,em] = emp.shiftEnd.split(':').map(Number);
           const hT = ((eh*60+em)-(sh*60+sm))/60;
-          await prisma.attendance.create({ data: { employeeId: emp.employeeId, date, checkIn: emp.shiftStart, checkOut: emp.shiftEnd, totalHours: hT, status: 'holiday', isHoliday: true, isPH: true, phHours: hT } });
+          await prisma.attendance.create({ data: { employeeId: emp.employeeId, date, checkIn: emp.shiftStart, checkOut: emp.shiftEnd, totalHours: hT, status: 'holiday', isHoliday: true, isPH: true } });
           totalAtt++;
         }
         continue;
