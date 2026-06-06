@@ -67,6 +67,9 @@ export async function POST(request: NextRequest) {
         let sundayHours = 0;
         let status = 'present';
 
+        // Declare checkout minutes at this scope so it's available for OT calc
+        let checkOutMinutes = 0;
+
         if (checkIn && checkOut) {
           totalHours = calcHours(checkIn, checkOut);
 
@@ -85,7 +88,7 @@ export async function POST(request: NextRequest) {
             const [shiftEndH, shiftEndM] = employee.shiftEnd.split(':').map(Number);
             const [checkOutH, checkOutM] = checkOut.split(':').map(Number);
             const shiftEndMinutes = shiftEndH * 60 + shiftEndM;
-            const checkOutMinutes = checkOutH * 60 + checkOutM;
+            checkOutMinutes = checkOutH * 60 + checkOutM;
             earlyOut = checkOutMinutes < shiftEndMinutes;
           }
 
