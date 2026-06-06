@@ -67,9 +67,6 @@ export async function POST(request: NextRequest) {
         let sundayHours = 0;
         let status = 'present';
 
-        // Declare checkout minutes at this scope so it's available for OT calc
-        let checkOutMinutes = 0;
-
         if (checkIn && checkOut) {
           totalHours = calcHours(checkIn, checkOut);
 
@@ -88,26 +85,20 @@ export async function POST(request: NextRequest) {
             const [shiftEndH, shiftEndM] = employee.shiftEnd.split(':').map(Number);
             const [checkOutH, checkOutM] = checkOut.split(':').map(Number);
             const shiftEndMinutes = shiftEndH * 60 + shiftEndM;
-            checkOutMinutes = checkOutH * 60 + checkOutM;
+            const checkOutMinutes = checkOutH * 60 + checkOutM;
             earlyOut = checkOutMinutes < shiftEndMinutes;
           }
 
           // Half day detection
           halfDay = totalHours < employee.shiftHours / 2;
 
-          // OT calculation: OT = time worked AFTER shift end
-          // For a late employee who works past shift end, OT is only the time after shift end
-          // e.g., checkIn=10:25, checkOut=19:36, shiftEnd=19:00 → OT = 36 min = 0.6 hrs
-          let otMinutes = 0;
-          if (employee.shiftEnd) {
-            const [sEndH, sEndM] = employee.shiftEnd.split(':').map(Number);
-            const shiftEndTotalMin = sEndH * 60 + sEndM;
-            otMinutes = Math.max(0, checkOutMinutes - shiftEndTotalMin);
-          } else {
-            // Fallback: if no shiftEnd, use totalHours - shiftHours
-            otMinutes = Math.max(0, Math.round((totalHours - employee.shiftHours) * 60));
-          }
-          overtimeHours = Math.round((otMinutes / 60) * 100) / 100;
+          // OT calculation: OT = total hours worked MINUS shift hours
+          // OT is ONLY given when an employee works MORE than their shift hours
+          // e.g., shift=9h, worked=9.5h → OT=0.5h; shift=9h, worked=8.55h → OT=0 (short, no OT)
+          // Even if someone leaves after shift end but came late, if total hours < shift hours → NO OT
+          overtimeHours = totalHours > employee.shiftHours
+            ? Math.round((totalHours - employee.shiftHours) * 100) / 100
+            : 0;
 
           if (isSunday) sundayHours = totalHours;
 

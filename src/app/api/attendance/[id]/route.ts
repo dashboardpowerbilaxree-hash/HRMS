@@ -76,18 +76,13 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
       halfDay = totalHours < employee.shiftHours / 2;
 
-      // OT calculation: OT = time worked AFTER shift end (same logic as main attendance route)
-      // e.g., checkIn=10:25, checkOut=19:36, shiftEnd=19:00 → OT = 36 min = 0.6 hrs
-      if (employee.shiftEnd) {
-        const [sEndH, sEndM] = employee.shiftEnd.split(':').map(Number);
-        const [checkOutH, checkOutM] = finalCheckOut!.split(':').map(Number);
-        const shiftEndTotalMin = sEndH * 60 + sEndM;
-        const checkOutTotalMin = checkOutH * 60 + checkOutM;
-        const otMinutes = Math.max(0, checkOutTotalMin - shiftEndTotalMin);
-        overtimeHours = Math.round((otMinutes / 60) * 100) / 100;
-      } else {
-        overtimeHours = Math.max(0, Math.round((totalHours - employee.shiftHours) * 100) / 100);
-      }
+      // OT calculation: OT = total hours worked MINUS shift hours
+      // OT is ONLY given when an employee works MORE than their shift hours
+      // e.g., shift=9h, worked=9.5h → OT=0.5h; shift=9h, worked=8.55h → OT=0 (short, no OT)
+      // Even if someone leaves after shift end but came late, if total hours < shift hours → NO OT
+      overtimeHours = totalHours > employee.shiftHours
+        ? Math.round((totalHours - employee.shiftHours) * 100) / 100
+        : 0;
 
       if (isSunday) sundayHours = totalHours;
 
