@@ -660,56 +660,37 @@ export function AttendanceTracker() {
       return `${startH}-${endH}`;
     };
 
-    // Helper: extract numeric code from employee ID (e.g., "EMP-041" → "41", "EMP-007" → "7")
-    const getNumericCode = (empId: string): string => {
-      const match = empId.match(/EMP-0*(\d+)/i);
-      return match ? match[1] : empId;
-    };
-
     // ── Sheet 1: DailyAttendance_BasicReport ──
-    // Template format matching the user's uploaded attendance template:
-    // 15 columns with spacer columns for merged header groups
-    // Headers: SNo | E. Code | Name | (spacer) | Shift | (spacer) | InTime | OutTime | (spacer) | Work Dur. | OT | Tot. Dur. | Status | (spacer) | Remarks
+    // 11-column template matching user's format:
+    // SNo | E. Code | Name | Shift | InTime | OutTime | Work Dur. | OT | Tot. Dur. | Status | Remarks
     const totalRows = employees.length > 0 ? employees.length : 35;
     const templateData: (string | number | null)[][] = [
-      ['SNo', 'E. Code', 'Name', '', 'Shift', '', ' InTime', ' OutTime', '', 'Work Dur.', 'OT', 'Tot.  Dur.', 'Status', '', 'Remarks'],
+      ['SNo', 'E. Code', 'Name', 'Shift', 'InTime', 'OutTime', 'Work Dur.', 'OT', 'Tot. Dur.', 'Status', 'Remarks'],
     ];
     for (let i = 1; i <= totalRows; i++) {
       const emp = employees[i - 1];
       if (emp) {
-        templateData.push([i, getNumericCode(emp.employeeId), emp.fullName, '', formatShift(emp.shiftStart, emp.shiftEnd), '', '', '', '', '', '', '', '', '', '']);
+        templateData.push([i, emp.employeeId, emp.fullName, formatShift(emp.shiftStart, emp.shiftEnd), '', '', '', '', '', '', '']);
       } else {
-        templateData.push([i, null, null, '', null, '', '', '', '', '', '', '', '', '', '']);
+        templateData.push([i, '', '', '', '', '', '', '', '', '', '']);
       }
     }
 
     const ws = XLSX.utils.aoa_to_sheet(templateData);
 
-    // Set column widths (15 columns matching uploaded template)
+    // Set column widths (11 columns)
     ws['!cols'] = [
       { wch: 5 },   // SNo
-      { wch: 10 },  // E. Code
+      { wch: 12 },  // E. Code
       { wch: 22 },  // Name
-      { wch: 2 },   // (spacer)
       { wch: 10 },  // Shift
-      { wch: 2 },   // (spacer)
       { wch: 10 },  // InTime
       { wch: 10 },  // OutTime
-      { wch: 2 },   // (spacer)
       { wch: 10 },  // Work Dur.
       { wch: 8 },   // OT
       { wch: 10 },  // Tot. Dur.
       { wch: 12 },  // Status
-      { wch: 2 },   // (spacer)
       { wch: 18 },  // Remarks
-    ];
-
-    // Merge header cells for visual grouping (matching uploaded template)
-    ws['!merges'] = [
-      { s: { r: 0, c: 1 }, e: { r: 0, c: 2 } },  // E. Code + Name
-      { s: { r: 0, c: 4 }, e: { r: 0, c: 5 } },  // Shift group
-      { s: { r: 0, c: 6 }, e: { r: 0, c: 8 } },  // InTime + OutTime group
-      { s: { r: 0, c: 9 }, e: { r: 0, c: 12 } }, // Work Dur. + OT + Tot. Dur. + Status
     ];
 
     XLSX.utils.book_append_sheet(wb, ws, 'DailyAttendance_BasicReport');
@@ -723,9 +704,9 @@ export function AttendanceTracker() {
       ['Column Descriptions:'],
       ['Column', 'Format', 'Required', 'Example', 'Notes'],
       ['SNo', 'Number', 'Auto', '1', 'Serial number — auto-filled, no need to change.'],
-      ['E. Code', 'Numeric', 'Yes (or Name)', '7', 'Employee code (numeric, e.g., 7, 11, 41). The system will auto-match to EMP-007, EMP-011, etc. If unknown, leave blank and provide Name.'],
+      ['E. Code', 'EMP-XXX or numeric', 'Yes (or Name)', 'EMP-041', 'Employee code as in HRMS (e.g., EMP-041). Numeric codes like 7 will be auto-matched to EMP-007. If unknown, leave blank and provide Name.'],
       ['Name', 'Text', 'Yes (or E. Code)', 'Kulvinder', 'Employee name — used to match if E. Code not found. Must match the name in the system.'],
-      ['Shift', 'HH-HH', 'Auto-filled', '10-19', 'Pre-filled from employee shift data. "NS" = Night Shift. For reference only — not required for import.'],
+      ['Shift', 'HH-HH', 'Auto-filled', '10-19', 'Pre-filled from employee shift data. "NS" = Night Shift. You can override if needed. For reference only — not required for import.'],
       ['InTime', 'HH:MM (24hr)', 'No', '09:30', 'Check-in time in 24-hour format (e.g., 09:30, 14:00, 19:30). Leave blank if absent.'],
       ['OutTime', 'HH:MM (24hr)', 'No', '18:30', 'Check-out time in 24-hour format. Leave blank if absent or not checked out.'],
       ['Work Dur.', 'HH.MM', 'Auto', '9.00', 'Auto-calculated from InTime/OutTime — leave blank for import.'],
@@ -736,13 +717,13 @@ export function AttendanceTracker() {
       [''],
       ['Important Notes:'],
       ['1. This is a DAILY template — select the Attendance Date in the Import tab before uploading. No Date column is needed per row.'],
-      ['2. E. Code uses numeric format (e.g., 7, 41) which auto-matches to system IDs (EMP-007, EMP-041).'],
+      ['2. E. Code format: Use the system format (e.g., EMP-041, NOT just 41). Numeric codes will be auto-matched (7 → EMP-007).'],
       ['3. Time format: Use HH:MM in 24-hour format (e.g., 09:30, 18:45). Do NOT use AM/PM.'],
       ['4. If InTime and OutTime are blank, the system will mark as Absent.'],
       ['5. Work Dur., OT, and Tot. Dur. are auto-calculated — leave them blank when filling the template.'],
       ['6. The system auto-calculates: Working Hours, Late Entry, Overtime, Half Day, Sunday, Holiday.'],
-      ['7. Refer to the Employee List sheet for correct E. Code, Name, and Shift of each employee.'],
-      ['8. Save as .xlsx or .xls before uploading.'],
+      ['7. All employees are pre-filled — just fill InTime, OutTime, Status, and Remarks columns.'],
+      ['8. Save as .xlsx or .csv before uploading.'],
       ['9. The system will auto-match employees by E. Code first, then by Name.'],
     ];
     const ws2 = XLSX.utils.aoa_to_sheet(instructionsData);
@@ -757,15 +738,15 @@ export function AttendanceTracker() {
     ];
     if (employees.length > 0) {
       employees.forEach(e => {
-        empListData.push([getNumericCode(e.employeeId), e.fullName, e.firm || e.department, e.location, formatShift(e.shiftStart, e.shiftEnd)]);
+        empListData.push([e.employeeId, e.fullName, e.firm || e.department, e.location, formatShift(e.shiftStart, e.shiftEnd)]);
       });
     } else {
       // Fallback sample
-      empListData.push(['1', 'John Doe', 'LAPL', 'Ajmer', '10-19']);
-      empListData.push(['2', 'Jane Smith', 'LRSL', 'Gurgaon', '10-19']);
+      empListData.push(['EMP-001', 'John Doe', 'LAPL', 'Ajmer', '10-19']);
+      empListData.push(['EMP-002', 'Jane Smith', 'LRSL', 'Gurgaon', '10-19']);
     }
     const ws3 = XLSX.utils.aoa_to_sheet(empListData);
-    ws3['!cols'] = [{ wch: 10 }, { wch: 25 }, { wch: 12 }, { wch: 18 }, { wch: 10 }];
+    ws3['!cols'] = [{ wch: 12 }, { wch: 25 }, { wch: 12 }, { wch: 18 }, { wch: 10 }];
     XLSX.utils.book_append_sheet(wb, ws3, 'Employee List');
 
     XLSX.writeFile(wb, 'Laxree_Attendance_Template.xlsx');
