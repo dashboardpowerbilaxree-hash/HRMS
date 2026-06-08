@@ -10,6 +10,7 @@ import { PayrollAutomation } from '@/components/hrms/PayrollAutomation';
 import { LeaveManagement } from '@/components/hrms/LeaveManagement';
 import { HolidayCalendar } from '@/components/hrms/HolidayCalendar';
 import { ReportsAnalytics } from '@/components/hrms/ReportsAnalytics';
+import { AnalyticsDashboard } from '@/components/hrms/AnalyticsDashboard';
 import { AIAssistant } from '@/components/hrms/AIAssistant';
 import { SalarySlipGenerator } from '@/components/hrms/SalarySlipGenerator';
 import { SettingsPanel } from '@/components/hrms/SettingsPanel';
@@ -250,6 +251,7 @@ export default function Home() {
       case 'leaves': return <LeaveManagement />;
       case 'holidays': return <HolidayCalendar />;
       case 'reports': return <ReportsAnalytics />;
+      case 'analytics': return <AnalyticsDashboard />;
       case 'ai-assistant': return <AIAssistant />;
       case 'salary-slip': return <SalarySlipGenerator />;
       case 'settings': return <SettingsPanel />;

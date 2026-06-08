@@ -94,6 +94,7 @@ interface ImportRow {
 }
 
 const emptyForm = {
+  employeeId: '',
   fullName: '',
   mobile: '',
   email: '',
@@ -305,6 +306,7 @@ export function EmployeeManagement() {
   const handleEdit = (emp: Employee) => {
     setEditId(emp.employeeId);
     setForm({
+      employeeId: emp.employeeId,
       fullName: emp.fullName || '',
       mobile: emp.mobile || '',
       email: emp.email || '',
@@ -577,9 +579,14 @@ export function EmployeeManagement() {
             className="gradient-laxree text-white gap-1.5"
             size="sm"
             onClick={() => {
-              setForm(emptyForm);
+              // Compute next code inline for immediate use
+              const codes = employees.map(e => parseInt(e.employeeId.replace('EMP-', ''))).filter(n => !isNaN(n));
+              const maxCode = codes.length > 0 ? Math.max(...codes) : 0;
+              const nextNum = maxCode + 1;
+              const nextCode = nextNum >= 100 ? `EMP-${nextNum}` : `EMP-${String(nextNum).padStart(3, '0')}`;
+              setNextEmpCode(nextCode);
+              setForm({ ...emptyForm, employeeId: nextCode });
               setEditId(null);
-              computeNextCode();
               setOpen(true);
             }}
           >
@@ -793,15 +800,20 @@ export function EmployeeManagement() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-4">
             {/* Employee Code */}
             <div className="sm:col-span-2">
-              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Employee Code</Label>
+              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Employee Code *</Label>
               <div className="mt-1 flex items-center gap-2">
                 <Input
-                  value={editId || nextEmpCode || 'Loading...'}
-                  disabled
-                  className="bg-muted font-mono font-bold text-gold max-w-[200px]"
+                  value={form.employeeId}
+                  onChange={(e) => handleFormChange('employeeId', e.target.value)}
+                  placeholder="e.g. EMP-427"
+                  className="font-mono font-bold text-gold max-w-[200px]"
+                  disabled={!!editId}
                 />
                 {!editId && (
-                  <span className="text-xs text-muted-foreground">Auto-generated — will be assigned on save</span>
+                  <span className="text-xs text-muted-foreground">Auto-suggested — you can change it</span>
+                )}
+                {editId && (
+                  <span className="text-xs text-muted-foreground">Cannot change existing employee code</span>
                 )}
               </div>
             </div>
