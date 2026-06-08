@@ -4,6 +4,19 @@ import { db } from '@/lib/db';
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
+
+    // If requesting next employee code
+    if (searchParams.get('nextCode') === 'true') {
+      const allEmps = await db.employee.findMany({
+        where: { employeeId: { startsWith: 'EMP-' } },
+        select: { employeeId: true },
+      });
+      const codes = allEmps.map(e => parseInt(e.employeeId.replace('EMP-', ''))).filter(n => !isNaN(n));
+      const maxCode = codes.length > 0 ? Math.max(...codes) : 0;
+      const nextNum = maxCode + 1;
+      const nextCode = nextNum >= 100 ? `EMP-${nextNum}` : `EMP-${String(nextNum).padStart(3, '0')}`;
+      return NextResponse.json({ nextCode, nextNum });
+    }
     const search = searchParams.get('search') || '';
     const firm = searchParams.get('firm') || searchParams.get('department') || '';
     const location = searchParams.get('location') || '';
@@ -53,12 +66,15 @@ export async function POST(request: NextRequest) {
     // Use provided employeeId (for imports) or auto-generate
     let employeeId = body.employeeId;
     if (!employeeId) {
-      const lastEmp = await db.employee.findFirst({
+      // Find the actual max numeric code across all employees
+      const allEmps = await db.employee.findMany({
         where: { employeeId: { startsWith: 'EMP-' } },
-        orderBy: { employeeId: 'desc' },
+        select: { employeeId: true },
       });
-      const nextNum = lastEmp ? parseInt(lastEmp.employeeId.replace('EMP-', '')) + 1 : 1;
-      employeeId = `EMP-${String(nextNum).padStart(3, '0')}`;
+      const codes = allEmps.map(e => parseInt(e.employeeId.replace('EMP-', ''))).filter(n => !isNaN(n));
+      const maxCode = codes.length > 0 ? Math.max(...codes) : 0;
+      const nextNum = maxCode + 1;
+      employeeId = nextNum >= 100 ? `EMP-${nextNum}` : `EMP-${String(nextNum).padStart(3, '0')}`;
     }
 
     // Hourly rate = monthlySalary / (daysInMonth × shiftHours)

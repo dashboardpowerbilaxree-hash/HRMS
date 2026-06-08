@@ -172,6 +172,7 @@ export function EmployeeManagement() {
   const [form, setForm] = useState(emptyForm);
   const [editId, setEditId] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
+  const [nextEmpCode, setNextEmpCode] = useState<string>('');
   const { setSelectedEmployeeId, selectedFirm } = useHRMSStore();
 
   // ── Import state ──
@@ -214,6 +215,17 @@ export function EmployeeManagement() {
     const hourlyRate = basicSalary / (sh * daysInMonth);
     return Math.round(hourlyRate * 100) / 100;
   };
+
+  // ── Fetch next employee code ──
+  const fetchNextCode = useCallback(async () => {
+    try {
+      const res = await fetch('/api/employees?nextCode=true');
+      if (res.ok) {
+        const data = await res.json();
+        setNextEmpCode(data.nextCode || '');
+      }
+    } catch { /* ignore */ }
+  }, []);
 
   // ── Handle form field change ──
   const handleFormChange = (field: string, value: any) => {
@@ -567,6 +579,7 @@ export function EmployeeManagement() {
               setForm(emptyForm);
               setEditId(null);
               setOpen(true);
+              fetchNextCode();
             }}
           >
             <Plus className="w-4 h-4" /> Add Employee
@@ -767,7 +780,7 @@ export function EmployeeManagement() {
       </motion.div>
 
       {/* ── Add/Edit Dialog ── */}
-      <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setForm(emptyForm); setEditId(null); } }}>
+      <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setForm(emptyForm); setEditId(null); } else if (!editId) { fetchNextCode(); } }}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -777,6 +790,21 @@ export function EmployeeManagement() {
           </DialogHeader>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-4">
+            {/* Employee Code */}
+            <div className="sm:col-span-2">
+              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Employee Code</Label>
+              <div className="mt-1 flex items-center gap-2">
+                <Input
+                  value={editId || nextEmpCode || 'Loading...'}
+                  disabled
+                  className="bg-muted font-mono font-bold text-gold max-w-[200px]"
+                />
+                {!editId && (
+                  <span className="text-xs text-muted-foreground">Auto-generated — will be assigned on save</span>
+                )}
+              </div>
+            </div>
+
             {/* Personal Info */}
             <div className="sm:col-span-2">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Personal Information</p>
