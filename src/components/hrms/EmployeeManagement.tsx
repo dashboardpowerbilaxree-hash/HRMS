@@ -216,16 +216,17 @@ export function EmployeeManagement() {
     return Math.round(hourlyRate * 100) / 100;
   };
 
-  // ── Fetch next employee code ──
-  const fetchNextCode = useCallback(async () => {
-    try {
-      const res = await fetch('/api/employees?nextCode=true');
-      if (res.ok) {
-        const data = await res.json();
-        setNextEmpCode(data.nextCode || '');
-      }
-    } catch { /* ignore */ }
-  }, []);
+  // ── Compute next employee code from loaded employees ──
+  const computeNextCode = useCallback(() => {
+    if (employees.length === 0) {
+      setNextEmpCode('EMP-001');
+      return;
+    }
+    const codes = employees.map(e => parseInt(e.employeeId.replace('EMP-', ''))).filter(n => !isNaN(n));
+    const maxCode = codes.length > 0 ? Math.max(...codes) : 0;
+    const nextNum = maxCode + 1;
+    setNextEmpCode(nextNum >= 100 ? `EMP-${nextNum}` : `EMP-${String(nextNum).padStart(3, '0')}`);
+  }, [employees]);
 
   // ── Handle form field change ──
   const handleFormChange = (field: string, value: any) => {
@@ -578,8 +579,8 @@ export function EmployeeManagement() {
             onClick={() => {
               setForm(emptyForm);
               setEditId(null);
+              computeNextCode();
               setOpen(true);
-              fetchNextCode();
             }}
           >
             <Plus className="w-4 h-4" /> Add Employee
@@ -780,7 +781,7 @@ export function EmployeeManagement() {
       </motion.div>
 
       {/* ── Add/Edit Dialog ── */}
-      <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setForm(emptyForm); setEditId(null); } else if (!editId) { fetchNextCode(); } }}>
+      <Dialog open={open} onOpenChange={(v) => { if (!v) { setOpen(false); setForm(emptyForm); setEditId(null); } }}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
