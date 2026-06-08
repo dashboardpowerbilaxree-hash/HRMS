@@ -649,108 +649,19 @@ export function AttendanceTracker() {
   };
 
   // ── Download Excel Template ──
+  // Downloads the pre-built template file from /public/Laxree_Attendance_Template.xlsx
   const handleDownloadTemplate = async () => {
-    const XLSX = await import('xlsx');
-    const wb = XLSX.utils.book_new();
-
-    // Helper: format shift as "HH-HH" (e.g., "10-19" from shiftStart "10:00" and shiftEnd "19:00")
-    const formatShift = (start: string, end: string): string => {
-      const startH = start?.split(':')[0] || '10';
-      const endH = end?.split(':')[0] || '19';
-      return `${startH}-${endH}`;
-    };
-
-    // ── Sheet 1: DailyAttendance_BasicReport ──
-    // 11-column template matching user's format:
-    // SNo | E. Code | Name | Shift | InTime | OutTime | Work Dur. | OT | Tot. Dur. | Status | Remarks
-    const totalRows = employees.length > 0 ? employees.length : 35;
-    const templateData: (string | number | null)[][] = [
-      ['SNo', 'E. Code', 'Name', 'Shift', 'InTime', 'OutTime', 'Work Dur.', 'OT', 'Tot. Dur.', 'Status', 'Remarks'],
-    ];
-    for (let i = 1; i <= totalRows; i++) {
-      const emp = employees[i - 1];
-      if (emp) {
-        templateData.push([i, emp.employeeId, emp.fullName, formatShift(emp.shiftStart, emp.shiftEnd), '', '', '', '', '', '', '']);
-      } else {
-        templateData.push([i, '', '', '', '', '', '', '', '', '', '']);
-      }
+    try {
+      const link = document.createElement('a');
+      link.href = '/Laxree_Attendance_Template.xlsx';
+      link.download = 'Laxree_Attendance_Template.xlsx';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      toast.success('Template downloaded! Fill it and upload.');
+    } catch {
+      toast.error('Failed to download template.');
     }
-
-    const ws = XLSX.utils.aoa_to_sheet(templateData);
-
-    // Set column widths (11 columns)
-    ws['!cols'] = [
-      { wch: 5 },   // SNo
-      { wch: 12 },  // E. Code
-      { wch: 22 },  // Name
-      { wch: 10 },  // Shift
-      { wch: 10 },  // InTime
-      { wch: 10 },  // OutTime
-      { wch: 10 },  // Work Dur.
-      { wch: 8 },   // OT
-      { wch: 10 },  // Tot. Dur.
-      { wch: 12 },  // Status
-      { wch: 18 },  // Remarks
-    ];
-
-    XLSX.utils.book_append_sheet(wb, ws, 'DailyAttendance_BasicReport');
-
-    // ── Sheet 2: Instructions ──
-    const instructionsData = [
-      ['Laxree HRMS - Daily Attendance Upload Template Instructions'],
-      [''],
-      ['This template is for importing daily attendance data. Select the Attendance Date in the Import tab before uploading.'],
-      [''],
-      ['Column Descriptions:'],
-      ['Column', 'Format', 'Required', 'Example', 'Notes'],
-      ['SNo', 'Number', 'Auto', '1', 'Serial number — auto-filled, no need to change.'],
-      ['E. Code', 'EMP-XXX or numeric', 'Yes (or Name)', 'EMP-041', 'Employee code as in HRMS (e.g., EMP-041). Numeric codes like 7 will be auto-matched to EMP-007. If unknown, leave blank and provide Name.'],
-      ['Name', 'Text', 'Yes (or E. Code)', 'Kulvinder', 'Employee name — used to match if E. Code not found. Must match the name in the system.'],
-      ['Shift', 'HH-HH', 'Auto-filled', '10-19', 'Pre-filled from employee shift data. "NS" = Night Shift. You can override if needed. For reference only — not required for import.'],
-      ['InTime', 'HH:MM (24hr)', 'No', '09:30', 'Check-in time in 24-hour format (e.g., 09:30, 14:00, 19:30). Leave blank if absent.'],
-      ['OutTime', 'HH:MM (24hr)', 'No', '18:30', 'Check-out time in 24-hour format. Leave blank if absent or not checked out.'],
-      ['Work Dur.', 'HH.MM', 'Auto', '9.00', 'Auto-calculated from InTime/OutTime — leave blank for import.'],
-      ['OT', 'HH.MM', 'Auto', '1.30', 'Auto-calculated overtime — leave blank for import.'],
-      ['Tot. Dur.', 'HH.MM', 'Auto', '9.00', 'Auto-calculated total duration — leave blank for import.'],
-      ['Status', 'Text', 'No', 'Late', 'Leave blank for auto-calculation. Use: Present, Late, Half-Day, Absent if needed.'],
-      ['Remarks', 'Text', 'No', 'Came late', 'Any notes or remarks for the record.'],
-      [''],
-      ['Important Notes:'],
-      ['1. This is a DAILY template — select the Attendance Date in the Import tab before uploading. No Date column is needed per row.'],
-      ['2. E. Code format: Use the system format (e.g., EMP-041, NOT just 41). Numeric codes will be auto-matched (7 → EMP-007).'],
-      ['3. Time format: Use HH:MM in 24-hour format (e.g., 09:30, 18:45). Do NOT use AM/PM.'],
-      ['4. If InTime and OutTime are blank, the system will mark as Absent.'],
-      ['5. Work Dur., OT, and Tot. Dur. are auto-calculated — leave them blank when filling the template.'],
-      ['6. The system auto-calculates: Working Hours, Late Entry, Overtime, Half Day, Sunday, Holiday.'],
-      ['7. All employees are pre-filled — just fill InTime, OutTime, Status, and Remarks columns.'],
-      ['8. Save as .xlsx or .csv before uploading.'],
-      ['9. The system will auto-match employees by E. Code first, then by Name.'],
-    ];
-    const ws2 = XLSX.utils.aoa_to_sheet(instructionsData);
-    ws2['!cols'] = [
-      { wch: 16 }, { wch: 18 }, { wch: 14 }, { wch: 16 }, { wch: 80 },
-    ];
-    XLSX.utils.book_append_sheet(wb, ws2, 'Instructions');
-
-    // ── Sheet 3: Employee List (reference for filling the main sheet) ──
-    const empListData: (string | number)[][] = [
-      ['E. Code', 'Employee Name', 'Company', 'Location', 'Shift'],
-    ];
-    if (employees.length > 0) {
-      employees.forEach(e => {
-        empListData.push([e.employeeId, e.fullName, e.firm || e.department, e.location, formatShift(e.shiftStart, e.shiftEnd)]);
-      });
-    } else {
-      // Fallback sample
-      empListData.push(['EMP-001', 'John Doe', 'LAPL', 'Ajmer', '10-19']);
-      empListData.push(['EMP-002', 'Jane Smith', 'LRSL', 'Gurgaon', '10-19']);
-    }
-    const ws3 = XLSX.utils.aoa_to_sheet(empListData);
-    ws3['!cols'] = [{ wch: 12 }, { wch: 25 }, { wch: 12 }, { wch: 18 }, { wch: 10 }];
-    XLSX.utils.book_append_sheet(wb, ws3, 'Employee List');
-
-    XLSX.writeFile(wb, 'Laxree_Attendance_Template.xlsx');
-    toast.success('Template downloaded! Fill it and upload.');
   };
 
   // ── Process import ──
