@@ -117,10 +117,12 @@ def get_commit_tree(commit_sha):
         return resp.json()['tree']['sha']
     return None
 
-def create_tree(tree_items):
-    """Create a new tree with the given items."""
+def create_tree(tree_items, base_tree_sha=None):
+    """Create a new tree with the given items, preserving existing files via base_tree."""
     url = f"{BASE_URL}/git/trees"
-    data = {"base_tree": None, "tree": tree_items}
+    data = {"tree": tree_items}
+    if base_tree_sha:
+        data["base_tree"] = base_tree_sha
     resp = requests.post(url, headers=HEADERS, json=data)
     if resp.status_code in (200, 201):
         return resp.json()['sha']
@@ -207,8 +209,15 @@ def main():
     # Step 4: Create tree and commit
     print("\n[4/5] Creating tree and commit...")
     
+    # Get the base tree from current HEAD to preserve binary/existing files
+    base_tree_sha = get_commit_tree(head_sha)
+    if base_tree_sha:
+        print(f"  Base tree: {base_tree_sha[:7]} (preserves existing files like logos)")
+    else:
+        print("  WARNING: Could not get base tree, binary files may be lost!")
+    
     # Process in batches if needed (GitHub tree API has limits)
-    tree_sha = create_tree(tree_items)
+    tree_sha = create_tree(tree_items, base_tree_sha)
     if not tree_sha:
         print("  ERROR: Could not create tree")
         return
