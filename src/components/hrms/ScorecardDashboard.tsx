@@ -5,7 +5,7 @@ import { motion } from 'framer-motion';
 import {
   CreditCard, Trophy, AlertTriangle, CheckCircle, Shield, Star,
   Clock, Users, TrendingUp, ChevronDown, ChevronUp, Award,
-  ShieldCheck, ShieldAlert, ShieldX, Info
+  ShieldCheck, ShieldAlert, ShieldX, Info, ArrowLeft
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -100,9 +100,9 @@ export function ScorecardDashboard() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
+      // Always fetch ALL employees — selectedEmpId is used only locally for UI display
       const params = new URLSearchParams({ month: String(month), year: String(year), grace });
       if (selectedFirm && selectedFirm !== '__all__') params.set('firm', selectedFirm);
-      if (selectedEmpId) params.set('employeeId', selectedEmpId);
       const res = await fetch(`/api/scorecard?${params}`);
       if (res.ok) {
         const json = await res.json();
@@ -115,7 +115,7 @@ export function ScorecardDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [month, year, selectedFirm, selectedEmpId, grace]);
+  }, [month, year, selectedFirm, grace]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -220,7 +220,7 @@ export function ScorecardDashboard() {
                   <div
                     key={sc.employeeId}
                     onClick={() => { setSelectedEmpId(sc.employeeId); setExpandedEmp(sc.employeeId); }}
-                    className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors ${selectedEmpId === sc.employeeId ? 'bg-gold/10 border border-gold/30' : 'hover:bg-white/5'}`}
+                    className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-all duration-150 ${selectedEmpId === sc.employeeId ? 'bg-gold/10 border border-gold/30 ring-1 ring-gold/20' : 'hover:bg-white/5 border border-transparent'}`}
                   >
                     <div className="flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold" style={{ backgroundColor: `${RATING_COLORS[sc.overallRating]}20`, color: RATING_COLORS[sc.overallRating] }}>
                       {sc.overallRating}
@@ -267,6 +267,14 @@ export function ScorecardDashboard() {
         <div className="lg:col-span-2 space-y-4">
           {selectedEmp ? (
             <>
+              {/* Back to All button */}
+              <button
+                onClick={() => setSelectedEmpId('')}
+                className="flex items-center gap-2 text-sm text-gold hover:text-gold/80 transition-colors mb-1"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                Back to All Employees
+              </button>
               {/* Employee Scorecard Header */}
               <Card className="glass-card border-0 overflow-hidden">
                 <div className="p-5">
