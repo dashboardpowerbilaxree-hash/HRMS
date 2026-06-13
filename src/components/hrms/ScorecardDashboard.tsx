@@ -150,55 +150,67 @@ export function ScorecardDashboard() {
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <CreditCard className="w-6 h-6 text-gold" />
-            Attendance Scorecard
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Official Time: <span className="text-gold font-bold">{officialTime} AM</span> · Grace: <span className="text-gold font-bold">{graceMinutes} min</span> · Late After: <span className="text-rose-400 font-bold">{(() => { const [h,m] = officialTime.split(':').map(Number); const totalMin = h*60+m+graceMinutes; const rh = Math.floor(totalMin/60); const rm = totalMin%60; return `${String(rh).padStart(2,'0')}:${String(rm).padStart(2,'0')} AM`; })()}</span> · {MONTHS[month - 1]} {year}
-            {isLiveMonth ? (
-              <span className="ml-2">· <span className="text-emerald-400 font-bold">LIVE</span> Scorecard based on <span className="text-gold font-bold">{workingDays} working days</span> (data upto {dataUptoDay}th · month total: {totalWorkingDays} days)</span>
-            ) : (
-              <span className="ml-2">· {workingDays} working days</span>
-            )}
-          </p>
+      <div className="space-y-3">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-bold flex items-center gap-2">
+              <CreditCard className="w-6 h-6 text-gold" />
+              Attendance Scorecard
+            </h1>
+            <div className="text-xs text-muted-foreground mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+              <span>Official: <span className="text-gold font-bold">{officialTime} AM</span></span>
+              <span className="text-white/20">|</span>
+              <span>Grace: <span className="text-gold font-bold">{graceMinutes} min</span></span>
+              <span className="text-white/20">|</span>
+              <span>Late After: <span className="text-rose-400 font-bold">{(() => { const [h,m] = officialTime.split(':').map(Number); const totalMin = h*60+m+graceMinutes; const rh = Math.floor(totalMin/60); const rm = totalMin%60; return `${String(rh).padStart(2,'0')}:${String(rm).padStart(2,'0')} AM`; })()}</span></span>
+              <span className="text-white/20">|</span>
+              <span>{MONTHS[month - 1]} {year}</span>
+              {isLiveMonth && (
+                <>
+                  <span className="text-white/20">|</span>
+                  <span className="text-emerald-400 font-bold">LIVE</span>
+                  <span>{workingDays}/{totalWorkingDays} working days</span>
+                  <span className="text-muted-foreground">(data upto {dataUptoDay}th)</span>
+                </>
+              )}
+            </div>
+          </div>
         </div>
-        <div className="flex gap-2 flex-wrap">
+        {/* Filter Row */}
+        <div className="flex gap-2 flex-wrap items-center">
           <Select value={String(month)} onValueChange={(v) => setMonth(Number(v))}>
-            <SelectTrigger className="w-[130px]"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-[120px] h-8 text-xs"><SelectValue /></SelectTrigger>
             <SelectContent>
               {MONTHS.map((m, i) => <SelectItem key={i} value={String(i + 1)}>{m}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={String(year)} onValueChange={(v) => setYear(Number(v))}>
-            <SelectTrigger className="w-[90px]"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-[80px] h-8 text-xs"><SelectValue /></SelectTrigger>
             <SelectContent>
               {[2025, 2026, 2027].map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={firmFilter} onValueChange={setFirmFilter}>
-            <SelectTrigger className="w-[140px]"><SelectValue placeholder="All Firms" /></SelectTrigger>
+            <SelectTrigger className="w-[130px] h-8 text-xs"><SelectValue placeholder="All Firms" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="__all__">All Firms</SelectItem>
               {uniqueFirms.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={locationFilter} onValueChange={setLocationFilter}>
-            <SelectTrigger className="w-[140px]"><SelectValue placeholder="All Locations" /></SelectTrigger>
+            <SelectTrigger className="w-[140px] h-8 text-xs"><SelectValue placeholder="All Locations" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="__all__">All Locations</SelectItem>
               {uniqueLocations.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={grace} onValueChange={setGrace}>
-            <SelectTrigger className="w-[110px]"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-[120px] h-8 text-xs"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="0">No grace</SelectItem>
               <SelectItem value="5">5 min grace</SelectItem>
               <SelectItem value="10">10 min grace</SelectItem>
-              <SelectItem value="15">15 min grace (Default)</SelectItem>
+              <SelectItem value="15">15 min (Default)</SelectItem>
               <SelectItem value="30">30 min grace</SelectItem>
             </SelectContent>
           </Select>
@@ -275,13 +287,13 @@ export function ScorecardDashboard() {
               {(() => {
                 const dist = [5, 4, 3, 2, 1].map(r => ({ rating: r, count: filteredScorecards.filter(s => s.overallRating === r).length, color: RATING_COLORS[r] })).filter(d => d.count > 0);
                 return dist.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={200}>
+                  <ResponsiveContainer width="100%" height={220}>
                     <PieChart>
-                      <Pie data={dist} cx="50%" cy="50%" innerRadius={45} outerRadius={80} dataKey="count" nameKey="rating" label={({ rating, count }) => `${rating}/5: ${count}`}>
+                      <Pie data={dist} cx="50%" cy="50%" innerRadius={50} outerRadius={85} dataKey="count" nameKey="rating">
                         {dist.map((entry, i) => <Cell key={i} fill={entry.color} />)}
                       </Pie>
-                      <Tooltip contentStyle={{ backgroundColor: '#1a1a2e', border: '1px solid rgba(212,168,73,0.3)', borderRadius: 8 }} />
-                      <Legend formatter={(v) => `Rating ${v}/5`} />
+                      <Tooltip contentStyle={{ backgroundColor: '#1a1a2e', border: '1px solid rgba(212,168,73,0.3)', borderRadius: 8, fontSize: 12 }} />
+                      <Legend formatter={(v) => `Rating ${v}/5 (${dist.find(d => String(d.rating) === String(v))?.count || 0})`} />
                     </PieChart>
                   </ResponsiveContainer>
                 ) : <div className="text-center text-sm text-muted-foreground py-8">No data</div>;
