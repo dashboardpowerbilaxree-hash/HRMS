@@ -6,7 +6,7 @@ import Image from 'next/image';
 import {
   LayoutDashboard, Users, Clock, DollarSign, CalendarDays,
   Palmtree, BarChart3, Bot, FileText,
-  Settings, ChevronLeft, ChevronRight, Filter, LogOut, Crown, TrendingUp
+  Settings, ChevronLeft, ChevronRight, Filter, LogOut, Crown, TrendingUp, CreditCard
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -20,6 +20,7 @@ const navItems: { key: PageKey; label: string; icon: any }[] = [
   { key: 'holidays', label: 'Holidays', icon: Palmtree },
   { key: 'reports', label: 'Reports', icon: BarChart3 },
   { key: 'analytics', label: 'Analytics', icon: TrendingUp },
+  { key: 'scorecard', label: 'Scorecard', icon: CreditCard },
   { key: 'salary-slip', label: 'Salary Slip', icon: FileText },
   { key: 'ai-assistant', label: 'AI Assistant', icon: Bot },
   { key: 'settings', label: 'Settings', icon: Settings },
