@@ -5,8 +5,9 @@ import { db } from '@/lib/db';
 
 // Official Reporting Time = 10:00 AM
 const OFFICIAL_TIME = '10:00';
-// Grace period in minutes (configurable via query param, default 0)
-const DEFAULT_GRACE_MINUTES = 0;
+// Grace period in minutes (configurable via query param, default 15)
+// With 15 min grace, reporting up to 10:15 AM is considered on-time
+const DEFAULT_GRACE_MINUTES = 15;
 
 function calculateRating(lateCount: number, hasLateBeyondGrace: boolean): number {
   // If any late coming beyond grace period, max rating is 4
@@ -190,7 +191,8 @@ export async function GET(request: NextRequest) {
       const alerts: { type: 'danger' | 'warning' | 'success' | 'info'; message: string }[] = [];
 
       if (lateDays > 0) {
-        alerts.push({ type: 'danger', message: `Reported after ${OFFICIAL_TIME} AM on ${lateDays} occasion${lateDays > 1 ? 's' : ''} this month.` });
+        const cutoffTime = graceMinutes > 0 ? `${OFFICIAL_TIME} (+${graceMinutes} min grace)` : OFFICIAL_TIME;
+        alerts.push({ type: 'danger', message: `Reported after ${cutoffTime} AM on ${lateDays} occasion${lateDays > 1 ? 's' : ''} this month.` });
       }
       if (lateDays >= 3) {
         alerts.push({ type: 'danger', message: `Crossed monthly late-coming threshold (${lateDays} late marks).` });

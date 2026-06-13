@@ -94,7 +94,7 @@ export function ScorecardDashboard() {
   const [year, setYear] = useState(new Date().getFullYear());
   const [selectedEmpId, setSelectedEmpId] = useState('');
   const [searchName, setSearchName] = useState('');
-  const [grace, setGrace] = useState('0');
+  const [grace, setGrace] = useState('15');
   const [expandedEmp, setExpandedEmp] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
@@ -149,7 +149,7 @@ export function ScorecardDashboard() {
             Attendance Scorecard
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Official Reporting Time: <span className="text-gold font-bold">{officialTime} AM</span> · Grace: <span className="text-gold font-bold">{graceMinutes} min</span> · {MONTHS[month - 1]} {year} ({workingDays} working days)
+            Official Time: <span className="text-gold font-bold">{officialTime} AM</span> · Grace: <span className="text-gold font-bold">{graceMinutes} min</span> · Late After: <span className="text-rose-400 font-bold">{(() => { const [h,m] = officialTime.split(':').map(Number); const totalMin = h*60+m+graceMinutes; const rh = Math.floor(totalMin/60); const rm = totalMin%60; return `${String(rh).padStart(2,'0')}:${String(rm).padStart(2,'0')} AM`; })()}</span> · {MONTHS[month - 1]} {year} ({workingDays} working days)
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
@@ -168,10 +168,10 @@ export function ScorecardDashboard() {
           <Select value={grace} onValueChange={setGrace}>
             <SelectTrigger className="w-[110px]"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="0">0 min grace</SelectItem>
+              <SelectItem value="0">No grace</SelectItem>
               <SelectItem value="5">5 min grace</SelectItem>
               <SelectItem value="10">10 min grace</SelectItem>
-              <SelectItem value="15">15 min grace</SelectItem>
+              <SelectItem value="15">15 min grace (Default)</SelectItem>
               <SelectItem value="30">30 min grace</SelectItem>
             </SelectContent>
           </Select>
@@ -331,7 +331,7 @@ export function ScorecardDashboard() {
 
                   {/* Discipline Rating Breakdown */}
                   <div className="p-4 rounded-xl bg-white/[0.03] border border-white/5">
-                    <h3 className="text-xs font-semibold text-gold mb-3 uppercase tracking-wider">Strict Attendance Discipline Score</h3>
+                    <h3 className="text-xs font-semibold text-gold mb-3 uppercase tracking-wider">Strict Attendance Discipline Score <span className="text-rose-400">(Late = after {(() => { const [h,m] = data.officialTime.split(':').map(Number); const totalMin = h*60+m+data.graceMinutes; const rh = Math.floor(totalMin/60); const rm = totalMin%60; return `${String(rh).padStart(2,'0')}:${String(rm).padStart(2,'0')}`; })()} AM)</span></h3>
                     <div className="grid grid-cols-5 gap-2">
                       {[
                         { condition: '100% On-Time', rating: 5, current: selectedEmp.lateDays === 0 },
