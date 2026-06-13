@@ -135,10 +135,12 @@ export async function GET(request: NextRequest) {
           presentDays++;
           if (rec.halfDay) halfDays++;
 
-          // Check late using the official reporting time + grace
+          // Check late using ONLY the scorecard's official reporting time + grace period.
+          // Do NOT use rec.lateEntry here — that flag comes from the attendance system
+          // which may use a different grace period. The scorecard has its own grace logic.
           const checkInTime = rec.checkIn || '';
           const late = isLate(checkInTime, OFFICIAL_TIME, graceMinutes);
-          if (late || rec.lateEntry) {
+          if (late) {
             lateDays++;
             const minutesLate = Math.max(0, timeToMinutes(checkInTime) - timeToMinutes(OFFICIAL_TIME) - graceMinutes);
             lateInstances.push({
