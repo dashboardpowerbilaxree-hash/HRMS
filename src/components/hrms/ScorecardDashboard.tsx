@@ -95,6 +95,8 @@ export function ScorecardDashboard() {
   const [selectedEmpId, setSelectedEmpId] = useState('');
   const [searchName, setSearchName] = useState('');
   const [grace, setGrace] = useState('15');
+  const [firmFilter, setFirmFilter] = useState('__all__');
+  const [locationFilter, setLocationFilter] = useState('__all__');
   const [expandedEmp, setExpandedEmp] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
@@ -102,7 +104,9 @@ export function ScorecardDashboard() {
     try {
       // Always fetch ALL employees — selectedEmpId is used only locally for UI display
       const params = new URLSearchParams({ month: String(month), year: String(year), grace });
-      if (selectedFirm && selectedFirm !== '__all__') params.set('firm', selectedFirm);
+      if (firmFilter && firmFilter !== '__all__') params.set('firm', firmFilter);
+      else if (selectedFirm && selectedFirm !== '__all__') params.set('firm', selectedFirm);
+      if (locationFilter && locationFilter !== '__all__') params.set('location', locationFilter);
       const res = await fetch(`/api/scorecard?${params}`);
       if (res.ok) {
         const json = await res.json();
@@ -115,9 +119,13 @@ export function ScorecardDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [month, year, selectedFirm, grace]);
+  }, [month, year, selectedFirm, firmFilter, locationFilter, grace]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  // Extract unique firms and locations from scorecard data for dropdowns
+  const uniqueFirms = [...new Set(data?.scorecards.map(sc => sc.firm).filter(Boolean))].sort();
+  const uniqueLocations = [...new Set(data?.scorecards.map(sc => sc.location).filter(Boolean))].sort();
 
   // Filter by search name
   const filteredScorecards = data?.scorecards.filter(sc =>
@@ -168,6 +176,20 @@ export function ScorecardDashboard() {
             <SelectTrigger className="w-[90px]"><SelectValue /></SelectTrigger>
             <SelectContent>
               {[2025, 2026, 2027].map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={firmFilter} onValueChange={setFirmFilter}>
+            <SelectTrigger className="w-[140px]"><SelectValue placeholder="All Firms" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">All Firms</SelectItem>
+              {uniqueFirms.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={locationFilter} onValueChange={setLocationFilter}>
+            <SelectTrigger className="w-[140px]"><SelectValue placeholder="All Locations" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">All Locations</SelectItem>
+              {uniqueLocations.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={grace} onValueChange={setGrace}>
