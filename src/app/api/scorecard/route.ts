@@ -81,14 +81,56 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    // Working days
+    // Working days — LIVE scorecard calculation:
+    // For the current month, only count working days up to the latest date that has
+    // attendance data. Employees should NOT be penalized for days where attendance
+    // hasn't been uploaded yet or days that haven't happened.
+    // For past months, use the full month's working days.
+    const today = new Date();
+    const isCurrentMonth = (today.getFullYear() === year && today.getMonth() + 1 === month);
+
     const daysInMonth = new Date(year, month, 0).getDate();
-    let workingDays = 0;
+
+    // Find the latest date in actual attendance data
+    const latestAttendanceDate = attendance.length > 0
+      ? new Date(Math.max(...attendance.map(a => new Date(a.date).getTime())))
+      : null;
+    const latestAttendanceDay = latestAttendanceDate
+      ? Math.min(latestAttendanceDate.getDate(), daysInMonth)
+      : 0;
+
+    // Cutoff day for scorecard calculation:
+    // - Current month: use the latest attendance date (data-driven, not today)
+    //   If no attendance yet, use today
+    // - Past months: use full month
+    let scorecardCutoffDay: number;
+    if (isCurrentMonth) {
+      scorecardCutoffDay = latestAttendanceDay > 0 ? latestAttendanceDay : Math.min(today.getDate(), daysInMonth);
+    } else {
+      scorecardCutoffDay = daysInMonth;
+    }
+
+    let totalWorkingDays = 0;
+    let elapsedWorkingDays = 0;
     for (let d = 1; d <= daysInMonth; d++) {
-      if (new Date(year, month - 1, d).getDay() !== 0) workingDays++;
+      const dayOfWeek = new Date(year, month - 1, d).getDay();
+      if (dayOfWeek !== 0) totalWorkingDays++;
+      if (d <= scorecardCutoffDay && dayOfWeek !== 0) elapsedWorkingDays++;
     }
     const holidays = await db.holiday.findMany({ where: { date: { gte: startDate, lt: endDate } } });
-    workingDays = Math.max(workingDays - holidays.length, 1);
+
+    // Count only holidays that fall within the elapsed period
+    const elapsedHolidays = holidays.filter(h => {
+      const hd = new Date(h.date);
+      return hd.getDate() <= scorecardCutoffDay;
+    }).length;
+    const totalHolidaysCount = holidays.length;
+
+    totalWorkingDays = Math.max(totalWorkingDays - totalHolidaysCount, 1);
+    elapsedWorkingDays = Math.max(elapsedWorkingDays - elapsedHolidays, 1);
+
+    // For live scorecard: use elapsed working days as the effective working days
+    const workingDays = isCurrentMonth ? elapsedWorkingDays : totalWorkingDays;
 
     // Group attendance by employee
     const empAttendance = new Map<string, typeof attendance>();
@@ -299,6 +341,9 @@ export async function GET(request: NextRequest) {
       month,
       year,
       workingDays,
+      totalWorkingDays,
+      isLiveMonth: isCurrentMonth,
+      dataUptoDay: isCurrentMonth ? scorecardCutoffDay : daysInMonth,
       officialTime: OFFICIAL_TIME,
       graceMinutes,
       summary: { totalEmployees, avgRating, perfectAttendance, atRisk, excellenceEligible },

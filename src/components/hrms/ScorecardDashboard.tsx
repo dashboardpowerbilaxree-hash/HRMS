@@ -44,7 +44,7 @@ interface Scorecard {
 }
 
 interface ScorecardData {
-  month: number; year: number; workingDays: number; officialTime: string; graceMinutes: number;
+  month: number; year: number; workingDays: number; totalWorkingDays: number; isLiveMonth: boolean; dataUptoDay: number; officialTime: string; graceMinutes: number;
   summary: { totalEmployees: number; avgRating: number; perfectAttendance: number; atRisk: number; excellenceEligible: number };
   deptCompliance: { firm: string; employees: number; punctualityCompliance: number; attendanceCompliance: number; avgRating: number }[];
   scorecards: Scorecard[];
@@ -137,7 +137,7 @@ export function ScorecardDashboard() {
     );
   }
 
-  const { summary, workingDays, officialTime, graceMinutes } = data;
+  const { summary, workingDays, totalWorkingDays, isLiveMonth, dataUptoDay, officialTime, graceMinutes } = data;
 
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
@@ -149,7 +149,12 @@ export function ScorecardDashboard() {
             Attendance Scorecard
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Official Time: <span className="text-gold font-bold">{officialTime} AM</span> · Grace: <span className="text-gold font-bold">{graceMinutes} min</span> · Late After: <span className="text-rose-400 font-bold">{(() => { const [h,m] = officialTime.split(':').map(Number); const totalMin = h*60+m+graceMinutes; const rh = Math.floor(totalMin/60); const rm = totalMin%60; return `${String(rh).padStart(2,'0')}:${String(rm).padStart(2,'0')} AM`; })()}</span> · {MONTHS[month - 1]} {year} ({workingDays} working days)
+            Official Time: <span className="text-gold font-bold">{officialTime} AM</span> · Grace: <span className="text-gold font-bold">{graceMinutes} min</span> · Late After: <span className="text-rose-400 font-bold">{(() => { const [h,m] = officialTime.split(':').map(Number); const totalMin = h*60+m+graceMinutes; const rh = Math.floor(totalMin/60); const rm = totalMin%60; return `${String(rh).padStart(2,'0')}:${String(rm).padStart(2,'0')} AM`; })()}</span> · {MONTHS[month - 1]} {year}
+            {isLiveMonth ? (
+              <span className="ml-2">· <span className="text-emerald-400 font-bold">LIVE</span> Scorecard based on <span className="text-gold font-bold">{workingDays} working days</span> (data upto {dataUptoDay}th · month total: {totalWorkingDays} days)</span>
+            ) : (
+              <span className="ml-2">· {workingDays} working days</span>
+            )}
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
