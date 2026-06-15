@@ -2,13 +2,16 @@
 /**
  * Prisma Build Script
  * 
- * Automatically selects the correct Prisma schema based on DATABASE_URL:
- *   - If DATABASE_URL starts with "file:"  → uses schema.sqlite.prisma (local SQLite)
- *   - If DATABASE_URL starts with "postgres" → uses schema.neon.prisma (Neon PostgreSQL)
- *   - If DATABASE_URL is not set            → defaults to SQLite for local dev
+ * The default schema.prisma uses PostgreSQL (for Vercel production).
+ * This script switches to SQLite only for local development.
  * 
- * This prevents the "URL must start with the protocol file:" error that occurs
- * when a PostgreSQL URL is used with the SQLite provider in schema.prisma.
+ * Logic:
+ *   - If DATABASE_URL starts with "file:"  → switch to SQLite schema (local dev)
+ *   - If DATABASE_URL starts with "postgres" → keep PostgreSQL schema (Vercel)
+ *   - If DATABASE_URL is not set            → switch to SQLite schema (local dev fallback)
+ * 
+ * IMPORTANT: schema.prisma defaults to PostgreSQL so Vercel works
+ * even if this script doesn't run during the build.
  */
 
 const { execSync } = require('child_process');
@@ -23,9 +26,11 @@ let schemaSource;
 let dbType;
 
 if (dbUrl.startsWith('postgresql://') || dbUrl.startsWith('postgres://')) {
+  // PostgreSQL URL detected — keep the default PostgreSQL schema
   schemaSource = path.join(prismaDir, 'schema.neon.prisma');
   dbType = 'PostgreSQL (Neon)';
 } else {
+  // file: URL or no URL — switch to SQLite for local development
   schemaSource = path.join(prismaDir, 'schema.sqlite.prisma');
   dbType = 'SQLite (local)';
   

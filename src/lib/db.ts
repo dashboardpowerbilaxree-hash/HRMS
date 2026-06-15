@@ -10,11 +10,9 @@ import { PrismaClient } from '@prisma/client'
  * The correct schema.prisma is selected at build time by prisma-build.js,
  * so by the time this code runs, the Prisma client is already generated
  * for the correct provider.
- * 
- * We just need to ensure DATABASE_URL is set for SQLite if missing.
  */
 
-// For local SQLite: set DATABASE_URL if not provided (e.g. in dev mode)
+// For local SQLite: set DATABASE_URL if not provided
 const dbUrl = process.env.DATABASE_URL || ''
 if (!dbUrl) {
   process.env.DATABASE_URL = 'file:/home/z/my-project/db/custom.db'
@@ -27,8 +25,30 @@ const globalForPrisma = globalThis as unknown as {
 function createPrismaClient() {
   const url = process.env.DATABASE_URL || ''
   
-  // Create PrismaClient with the appropriate datasource URL
-  // The provider (sqlite vs postgresql) is already baked into the generated client
+  // For PostgreSQL on Vercel, use the Neon HTTP adapter for serverless
+  if (url.startsWith('postgresql://') || url.startsWith('postgres://')) {
+    try {
+      // Dynamically import Neon adapter for serverless environments
+      const { Pool } = require('@neondatabase/serverless')
+      const { PrismaNeonHTTP } = require('@prisma/adapter-neon')
+      
+      const pool = new Pool({ connectionString: url })
+      const adapter = new PrismaNeonHTTP(pool)
+      
+      return new PrismaClient({
+        adapter,
+        log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
+      })
+    } catch (e) {
+      // Fallback to standard PrismaClient if adapter fails
+      console.warn('Neon adapter not available, using standard PrismaClient:', e)
+      return new PrismaClient({
+        log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
+      })
+    }
+  }
+  
+  // For SQLite (local dev)
   return new PrismaClient({
     datasourceUrl: url,
     log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
