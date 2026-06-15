@@ -154,3 +154,25 @@ Stage Summary:
 - Vercel GitHub integration handles app deployment automatically
 - GitHub Actions only handles database sync and seeding
 - Duplicate projects cleaned up
+
+---
+Task ID: fix-404-deployment-not-found
+Agent: Main Agent
+Task: Fix 404 DEPLOYMENT_NOT_FOUND error on Vercel
+
+Work Log:
+- Diagnosed that the 404 was caused by Vercel deployments going to LAXREE team projects
+- The LAXREE team has SSO/deployment protection, making all deployments require authentication
+- The user's original hrms-jet-nine.vercel.app was under a different Vercel account
+- Created a new clean project "laxree-hrms" under LAXREE team
+- Set DATABASE_URL environment variable on the new project
+- Deployed successfully with the latest code (including binaryTargets fix)
+- Tested: Main page returns HTTP 200, API routes work, Prisma queries work, database seeded
+- Updated GitHub Actions workflow to seed the correct URL
+
+Stage Summary:
+- New production URL: https://laxree-hrms.vercel.app
+- App is publicly accessible (HTTP 200)
+- API routes working (Prisma queries successful)
+- Database seeded successfully
+- GitHub Actions workflow updated to seed laxree-hrms.vercel.app
