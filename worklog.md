@@ -59,3 +59,34 @@ Stage Summary:
 - The fix is now at the Prisma engine level - URL is baked into the generated client
 - No environment variable dependency for database connection
 - Error "the URL must start with the protocol file:" will never occur again
+
+---
+Task ID: fix-prisma-url-v3-comprehensive
+Agent: main
+Task: Comprehensively fix "the URL must start with the protocol file:" Prisma error
+
+Root Cause Analysis:
+- The app runs in TWO environments: local (SQLite) and Vercel (PostgreSQL/Neon)
+- On Vercel, DATABASE_URL is set to postgresql://... (Neon connection string)
+- But schema.prisma had provider = "sqlite" → Prisma validation fails because PostgreSQL URL doesn't start with "file:"
+- Previous fixes only handled the local SQLite case, breaking Vercel deployments
+
+Solution: Dual-database architecture with auto-detection:
+1. Created prisma/schema.sqlite.prisma (provider = "sqlite", url = env("DATABASE_URL"))
+2. Created prisma/schema.neon.prisma (provider = "postgresql", url = env("DATABASE_URL"))
+3. Created prisma-build.js that auto-selects the correct schema based on DATABASE_URL:
+   - "file:" → copies schema.sqlite.prisma to schema.prisma
+   - "postgresql:" → copies schema.neon.prisma to schema.prisma
+   - (not set) → defaults to SQLite with fallback URL
+4. Updated db.ts to handle both databases:
+   - SQLite: standard PrismaClient with datasourceUrl
+   - PostgreSQL/Neon: PrismaClient with Neon HTTP adapter for serverless
+5. Updated package.json build/postinstall to use prisma-build.js
+6. Updated vercel.json buildCommand to use prisma-build.js
+7. Updated SettingsPanel to show "SQLite / PostgreSQL (Auto)"
+8. Updated deploy-to-vercel.sh with proper instructions
+
+All three scenarios tested and working:
+- DATABASE_URL=file:... → SQLite ✓
+- DATABASE_URL=postgresql://... → PostgreSQL/Neon ✓  
+- DATABASE_URL=(not set) → defaults to SQLite ✓

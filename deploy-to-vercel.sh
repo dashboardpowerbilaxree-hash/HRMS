@@ -6,7 +6,6 @@ echo "  Laxree HRMS - Vercel Deployment Script"
 echo "=============================================="
 echo ""
 
-# Step 1: Get the Neon connection string
 echo "Step 1: Setting up Neon Database"
 echo "---------------------------------"
 echo "1. Go to https://console.neon.tech"
@@ -26,6 +25,9 @@ fi
 echo ""
 echo "Step 2: Pushing Prisma schema to Neon..."
 export DATABASE_URL="$DATABASE_URL"
+
+# Switch to Neon schema
+cp prisma/schema.neon.prisma prisma/schema.prisma
 npx prisma db push --skip-generate
 
 # Step 3: Seed the database
@@ -38,6 +40,12 @@ echo "  curl -X POST https://YOUR_VERCEL_URL/api/seed"
 echo ""
 echo "Step 4: Pushing to GitHub..."
 echo "Make sure your GitHub PAT has 'Contents: Read and Write' permission."
+
+# Reset schema to env-based for the repo (build script handles selection)
+cp prisma/schema.sqlite.prisma prisma/schema.prisma
+
+git add -A
+git commit -m "Deploy: update for Neon PostgreSQL" || true
 git push -u origin main --force
 
 # Step 5: Deploy to Vercel
@@ -51,6 +59,7 @@ echo "     DATABASE_URL = $DATABASE_URL"
 echo "  4. Click 'Deploy'"
 echo ""
 echo "Option B: Deploy via Vercel CLI"
+echo "  Make sure DATABASE_URL is set in Vercel project settings"
 vercel --prod
 
 echo ""
@@ -61,3 +70,7 @@ echo ""
 echo "IMPORTANT: After deployment, seed the database:"
 echo "  curl -X POST https://YOUR_VERCEL_URL/api/seed"
 echo ""
+echo "NOTE: The prisma-build.js script automatically detects DATABASE_URL"
+echo "  - file: URLs → SQLite schema"
+echo "  - postgresql: URLs → PostgreSQL/Neon schema"
+echo "  No manual schema switching needed!"

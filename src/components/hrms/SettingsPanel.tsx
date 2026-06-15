@@ -238,7 +238,7 @@ export function SettingsPanel() {
               <div><span className="text-muted-foreground">System:</span> Laxree HRMS</div>
               <div><span className="text-muted-foreground">Version:</span> 2.0.0</div>
               <div><span className="text-muted-foreground">License:</span> Enterprise</div>
-              <div><span className="text-muted-foreground">Database:</span> PostgreSQL (Neon)</div>
+              <div><span className="text-muted-foreground">Database:</span> SQLite / PostgreSQL (Auto)</div>
               <div><span className="text-muted-foreground">AI Engine:</span> Active</div>
               <div><span className="text-muted-foreground">Firms:</span> LAPL, LRSL, SI, SDF</div>
             </div>
