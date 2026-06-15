@@ -90,3 +90,25 @@ All three scenarios tested and working:
 - DATABASE_URL=file:... → SQLite ✓
 - DATABASE_URL=postgresql://... → PostgreSQL/Neon ✓  
 - DATABASE_URL=(not set) → defaults to SQLite ✓
+
+---
+Task ID: fix-prisma-deploy-vercel
+Agent: main
+Task: Fix Prisma DATABASE_URL error and deploy to Vercel
+
+Work Log:
+- Analyzed screenshots: error appears on Vercel deployment with Neon PostgreSQL URL
+- Root cause: schema.prisma has provider="sqlite" but Vercel DATABASE_URL is postgresql://
+- Created dual-schema system: schema.sqlite.prisma + schema.neon.prisma
+- Created prisma-build.js that auto-selects correct schema based on DATABASE_URL
+- Updated db.ts with fallback for missing DATABASE_URL
+- Updated next.config.ts to skip standalone output on Vercel
+- Updated vercel.json and package.json build commands
+- Tested: SQLite build ✓, PostgreSQL build ✓, no DATABASE_URL ✓
+- GitHub PAT expired (401) - cannot push or deploy automatically
+- Created deploy-vercel-fix.sh script for manual deployment
+
+Stage Summary:
+- All code fixes are complete and tested locally
+- User needs to provide valid GitHub PAT or Vercel token to deploy
+- deploy-vercel-fix.sh script handles full deployment flow
