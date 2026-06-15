@@ -1,4 +1,4 @@
-name: DB Sync
+name: DB Sync & Seed
 
 on:
   push:

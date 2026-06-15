@@ -133,3 +133,24 @@ Stage Summary:
 - Prisma binaryTargets fix deployed successfully
 - App is now live and running on Vercel without Prisma runtime errors
 - Production URL: https://hrms-f3w7itfmq-laxree.vercel.app
+
+---
+Task ID: fix-duplicate-deployments
+Agent: Main Agent
+Task: Fix confusing deployment URLs - all deploys should go to hrms-jet-nine.vercel.app
+
+Work Log:
+- Discovered user's original Vercel project is hrms-jet-nine.vercel.app (different account)
+- GitHub Actions workflow was deploying to a DIFFERENT Vercel project (hrms-xxxx-laxree.vercel.app)
+- Root cause: vercel pull/push in CI created duplicate projects under LAXREE team
+- Rewrote deploy.yml to remove all Vercel CLI steps (Vercel GitHub integration handles deployment)
+- Renamed workflow to "DB Sync & Seed" - only handles prisma generate, db push, and seed
+- Seed step now calls https://hrms-jet-nine.vercel.app/api/seed after waiting for Vercel auto-deploy
+- Deleted 2 duplicate Vercel projects: "hrms" and "my-project" under LAXREE team
+- Verified hrms-jet-nine.vercel.app returns HTTP 200 with "Laxree HRMS" title and no Prisma errors
+
+Stage Summary:
+- All future deployments go to ONE URL: https://hrms-jet-nine.vercel.app
+- Vercel GitHub integration handles app deployment automatically
+- GitHub Actions only handles database sync and seeding
+- Duplicate projects cleaned up
