@@ -39,3 +39,23 @@ Stage Summary:
 - Fix: Set process.env.DATABASE_URL = 'file:/home/z/my-project/db/custom.db' as fallback before PrismaClient creation
 - Also added datasourceUrl parameter for double protection
 - Admin login returns 200 with correct response
+
+---
+Task ID: fix-prisma-url-v2
+Agent: main
+Task: Fix "the URL must start with the protocol file:" Prisma error (permanent fix)
+
+Work Log:
+- Root cause identified: `url = env("DATABASE_URL")` in schema.prisma means Prisma's native Rust engine reads the env var directly, BEFORE any JavaScript code can intercept it. The db.ts env guard was useless.
+- Changed schema.prisma: `url = env("DATABASE_URL")` → `url = "file:/home/z/my-project/db/custom.db"` (hardcoded)
+- Simplified db.ts: Removed all env guard hacks, back to clean PrismaClient creation
+- Regenerated Prisma client with hardcoded URL
+- Rebuilt Next.js with standalone output
+- Tested: Works WITHOUT DATABASE_URL env var ✓
+- Tested: Works even with WRONG DATABASE_URL (postgresql://) env var ✓
+- Updated restart-server.sh, robust-daemon.sh to not depend on DATABASE_URL
+
+Stage Summary:
+- The fix is now at the Prisma engine level - URL is baked into the generated client
+- No environment variable dependency for database connection
+- Error "the URL must start with the protocol file:" will never occur again
