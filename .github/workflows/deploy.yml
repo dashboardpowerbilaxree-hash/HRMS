@@ -38,6 +38,6 @@ jobs:
 
       - name: Seed Database
         run: |
-          curl -X POST "https://hrms-jet-nine.vercel.app/api/seed" || true
+          curl -X POST "https://laxree-hrms.vercel.app/api/seed" || true
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
