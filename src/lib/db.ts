@@ -25,10 +25,9 @@ const globalForPrisma = globalThis as unknown as {
 function createPrismaClient() {
   const url = process.env.DATABASE_URL || ''
   
-  // For PostgreSQL on Vercel, use the Neon HTTP adapter for serverless
+  // For PostgreSQL on Vercel, try using the Neon serverless adapter
   if (url.startsWith('postgresql://') || url.startsWith('postgres://')) {
     try {
-      // Dynamically import Neon adapter for serverless environments
       const { Pool } = require('@neondatabase/serverless')
       const { PrismaNeonHTTP } = require('@prisma/adapter-neon')
       
@@ -39,9 +38,9 @@ function createPrismaClient() {
         adapter,
         log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
       })
-    } catch (e) {
-      // Fallback to standard PrismaClient if adapter fails
-      console.warn('Neon adapter not available, using standard PrismaClient:', e)
+    } catch {
+      // Fallback to standard PrismaClient if adapter is not available
+      // (adapter may not work in all environments)
       return new PrismaClient({
         log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
       })
