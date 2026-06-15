@@ -1,7 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  output: 'standalone',
+  // Don't use 'standalone' output on Vercel - Vercel uses its own serverless runtime
+  // Only use standalone for local/Docker deployments
+  ...(process.env.VERCEL ? {} : { output: 'standalone' }),
   typescript: {
     ignoreBuildErrors: true,
   },
