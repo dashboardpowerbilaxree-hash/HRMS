@@ -2,7 +2,8 @@ name: Deploy to Vercel
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
@@ -20,20 +21,20 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Generate Prisma Client
-        run: npx prisma generate
+      - name: Run Prisma Build Script
+        run: node prisma-build.js
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
       - name: Push Prisma schema to Neon
         run: npx prisma db push --skip-generate
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          DIRECT_URL: ${{ secrets.DIRECT_URL }}
 
       - name: Build
         run: npm run build
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          DIRECT_URL: ${{ secrets.DIRECT_URL }}
 
       - name: Install Vercel CLI
         run: npm i -g vercel@latest
@@ -45,7 +46,6 @@ jobs:
         run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          DIRECT_URL: ${{ secrets.DIRECT_URL }}
 
       - name: Deploy to Vercel
         run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
