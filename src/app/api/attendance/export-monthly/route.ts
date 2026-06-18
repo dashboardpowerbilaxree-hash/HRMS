@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import * as XLSXStyle from 'xlsx-js-style';
+import {
+  getEffectiveCutoffDay,
+  countSundaysUpTo,
+  countHolidaysUpTo,
+  filterAttendanceUpTo,
+} from '@/lib/payroll-calc';
 
 const FIRM_NAMES: Record<string, string> = {
   LAPL: 'LAXREE AMENITIES PVT LTD',
@@ -153,6 +159,7 @@ export async function GET(request: NextRequest) {
         fullName: true, employeeId: true, firm: true, location: true,
         department: true, designation: true, shiftHours: true,
         employmentType: true, hourlyRate: true, monthlySalary: true, overtimeRate: true,
+        relievingDate: true,
       },
     });
 
@@ -174,20 +181,23 @@ export async function GET(request: NextRequest) {
     });
 
     const holidays = await db.holiday.findMany({ where: { date: { gte: startDate, lt: endDate } } });
-    const holidayDays = holidays.length;
 
-    let sundays = 0;
-    for (let d = 1; d <= daysInMonth; d++) {
-      if (new Date(year, month - 1, d).getDay() === 0) sundays++;
-    }
+    // ── Effective cutoff day: caps future days and post-relieving days ──
+    const cutoffDay = getEffectiveCutoffDay(year, month, daysInMonth, employee.relievingDate);
+    const elapsedHolidays = countHolidaysUpTo(holidays, cutoffDay);
+    const holidayDays = elapsedHolidays;
+    // Sundays only up to cutoff day
+    const sundays = countSundaysUpTo(year, month, cutoffDay);
+    // Filter attendance defensively
+    const effectiveAttendance = filterAttendanceUpTo(attendance, year, month, cutoffDay);
 
-    const rawPresentDays = attendance.filter(a => ['present', 'late', 'early-out'].includes(a.status)).length;
-    const halfDays = attendance.filter(a => a.status === 'half-day' || a.halfDay).length;
+    const rawPresentDays = effectiveAttendance.filter(a => ['present', 'late', 'early-out'].includes(a.status)).length;
+    const halfDays = effectiveAttendance.filter(a => a.status === 'half-day' || a.halfDay).length;
     const presentDays = rawPresentDays;
     const shiftMinutes = Math.round(employee.shiftHours * 60);
     let totalBaseHours = 0;
     let effectivePresentDays = 0;
-    for (const a of attendance) {
+    for (const a of effectiveAttendance) {
       if (['present', 'late', 'early-out', 'half-day', 'half_day'].includes(a.status)) {
         const baseHrs = Math.max(0, (a.totalHours || 0) - (a.overtimeHours || 0));
         totalBaseHours += baseHrs;
@@ -199,7 +209,8 @@ export async function GET(request: NextRequest) {
       }
     }
     effectivePresentDays = Math.round(effectivePresentDays * 100) / 100;
-    const totalWorkingDays = daysInMonth - sundays - holidayDays;
+    // Working days = cutoffDay - sundays - elapsedHolidays (caps future days)
+    const totalWorkingDays = Math.max(0, cutoffDay - sundays - elapsedHolidays);
 
     const holidayDateStrs = new Set(
       holidays.map(h => {
@@ -208,7 +219,7 @@ export async function GET(request: NextRequest) {
       })
     );
     const presentDateStrs = new Set();
-    for (const a of attendance) {
+    for (const a of effectiveAttendance) {
       if (['present', 'late', 'early-out', 'half-day'].includes(a.status)) {
         const ad = new Date(a.date);
         presentDateStrs.add(`${ad.getFullYear()}-${String(ad.getMonth() + 1).padStart(2, '0')}-${String(ad.getDate()).padStart(2, '0')}`);
@@ -216,11 +227,14 @@ export async function GET(request: NextRequest) {
     }
     let effectivePaidLeaves = 0;
     let effectiveUnpaidLeaves = 0;
+    const cutoffDate = new Date(year, month - 1, cutoffDay);
     for (const leave of leaves) {
       const isUnpaid = leave.type === 'unpaid' || leave.type === 'UL' || leave.type === 'LOP';
       let d = new Date(leave.startDate);
       const end = new Date(leave.endDate);
-      while (d <= end) {
+      // Cap leave iteration at cutoff day — don't count future leave days
+      const effectiveEnd = end > cutoffDate ? cutoffDate : end;
+      while (d <= effectiveEnd) {
         const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
         const isSunday = d.getDay() === 0;
         const isHoliday = holidayDateStrs.has(dateStr);
@@ -242,7 +256,7 @@ export async function GET(request: NextRequest) {
     let totalWorkMinutes = 0;
     let totalSundayMinutes = 0;
 
-    for (const a of attendance) {
+    for (const a of effectiveAttendance) {
       if (a.checkIn && a.checkOut) {
         const [h1, m1] = a.checkIn.split(':').map(Number);
         const [h2, m2] = a.checkOut.split(':').map(Number);
@@ -256,13 +270,13 @@ export async function GET(request: NextRequest) {
     }
 
     const totalWorkHours = formatMinutesToHHMM(totalWorkMinutes);
-    const totalOvertimeHoursDecimal = Math.round(attendance.reduce((sum, a) => sum + (a.overtimeHours || 0), 0) * 100) / 100;
+    const totalOvertimeHoursDecimal = Math.round(effectiveAttendance.reduce((sum, a) => sum + (a.overtimeHours || 0), 0) * 100) / 100;
     const totalOvertimeHours = formatOT(totalOvertimeHoursDecimal);
     const totalSundayHours = formatMinutesToHHMM(totalSundayMinutes);
 
-    const lateEntries = attendance.filter(a => a.lateEntry).length;
-    const earlyOuts = attendance.filter(a => a.earlyOut).length;
-    const weeklyOffs = attendance.filter(a => a.isWeeklyOff || a.isSunday).length;
+    const lateEntries = effectiveAttendance.filter(a => a.lateEntry).length;
+    const earlyOuts = effectiveAttendance.filter(a => a.earlyOut).length;
+    const weeklyOffs = effectiveAttendance.filter(a => a.isWeeklyOff || a.isSunday).length;
     const annualLeaves = effectivePaidLeaves;
     const unpaidLeaves = effectiveUnpaidLeaves;
     const sundaysEarned = countSundaysEarned(attendance);

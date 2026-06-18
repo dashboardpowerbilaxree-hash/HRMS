@@ -85,6 +85,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         pfNumber: body.pfNumber,
         esiNumber: body.esiNumber,
         status: body.status,
+        relievingDate: body.relievingDate ? new Date(body.relievingDate) : (body.relievingDate === null ? null : undefined),
         reportingManager: body.reportingManager,
         emergencyContact: body.emergencyContact,
       },
@@ -99,11 +100,16 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ employeeId: string }> }) {
   try {
     const { employeeId } = await params;
+    // Mark as inactive AND set relievingDate to today — payroll/attendance will
+    // stop counting from tomorrow onwards.
     await db.employee.update({
       where: { employeeId },
-      data: { status: 'inactive' },
+      data: {
+        status: 'inactive',
+        relievingDate: new Date(),
+      },
     });
-    return NextResponse.json({ message: 'Employee deactivated' });
+    return NextResponse.json({ message: 'Employee deactivated — relieving date set to today' });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import {
+  getEffectiveCutoffDay,
+  countSundaysUpTo,
+  countHolidaysUpTo,
+  filterAttendanceUpTo,
+} from '@/lib/payroll-calc';
 
 const FIRM_NAMES: Record<string, string> = {
   LAPL: 'LAXREE AMENITIES PVT LTD',
@@ -43,6 +49,7 @@ export async function GET(request: NextRequest) {
         hourlyRate: true,
         monthlySalary: true,
         overtimeRate: true,
+        relievingDate: true,
       },
     });
 
@@ -72,22 +79,32 @@ export async function GET(request: NextRequest) {
     });
     const holidayDays = holidays.length;
 
-    // Count Sundays
-    let sundays = 0;
-    for (let d = 1; d <= daysInMonth; d++) {
-      if (new Date(year, month - 1, d).getDay() === 0) sundays++;
-    }
+    // ── Effective cutoff day ──
+    // For the current month, cap at today (so future days are NOT counted as absent).
+    // For past months, use the full month.
+    // If the employee has a relievingDate in/before this month, cap at that day.
+    const cutoffDay = getEffectiveCutoffDay(year, month, daysInMonth, employee.relievingDate);
 
-    // Calculate summary
+    // Count Sundays only up to the cutoff day (NOT the whole month)
+    const sundays = countSundaysUpTo(year, month, cutoffDay);
+
+    // Holidays only count if they fall on or before the cutoff day
+    const elapsedHolidays = countHolidaysUpTo(holidays, cutoffDay);
+
+    // Filter attendance records defensively — drop any rows past the cutoff
+    // (in case future-dated rows were uploaded)
+    const effectiveAttendance = filterAttendanceUpTo(attendance, year, month, cutoffDay);
+
+    // Calculate summary — use cutoff-filtered attendance so future days don't count
     // rawPresentDays = actual days with present/late/early-out status (working days only)
-    const rawPresentDays = attendance.filter(a => ['present', 'late', 'early-out'].includes(a.status)).length;
-    const explicitAbsentDays = attendance.filter(a => a.status === 'absent').length;
-    const halfDays = attendance.filter(a => a.status === 'half-day' || a.halfDay).length;
-    const weeklyOffs = attendance.filter(a => a.isWeeklyOff || a.isSunday).length;
+    const rawPresentDays = effectiveAttendance.filter(a => ['present', 'late', 'early-out'].includes(a.status)).length;
+    const explicitAbsentDays = effectiveAttendance.filter(a => a.status === 'absent').length;
+    const halfDays = effectiveAttendance.filter(a => a.status === 'half-day' || a.halfDay).length;
+    const weeklyOffs = effectiveAttendance.filter(a => a.isWeeklyOff || a.isSunday).length;
     // Only count holidays where the employee actually worked (totalHours > 0)
-    const holidayAttendance = attendance.filter(a => a.isHoliday && a.totalHours > 0).length;
+    const holidayAttendance = effectiveAttendance.filter(a => a.isHoliday && a.totalHours > 0).length;
     // Count Sunday/weekly-off days where employee worked
-    const weeklyOffWorked = attendance.filter(a => a.isWeeklyOff && a.totalHours > 0).length;
+    const weeklyOffWorked = effectiveAttendance.filter(a => a.isWeeklyOff && a.totalHours > 0).length;
 
     // Present days for DISPLAY = full present days only (half-days tracked separately)
     const presentDays = rawPresentDays;
@@ -108,7 +125,7 @@ export async function GET(request: NextRequest) {
     let totalWorkMinutes = 0;
     let totalSundayMinutes = 0;
 
-    for (const a of attendance) {
+    for (const a of effectiveAttendance) {
       // Calculate total work minutes from check-in/check-out
       if (a.checkIn && a.checkOut) {
         const [h1, m1] = a.checkIn.split(':').map(Number);
@@ -148,13 +165,14 @@ export async function GET(request: NextRequest) {
 
 
     // ─── OT Hours: Sum stored overtimeHours directly (decimal sum) ───
-    const totalOvertimeHoursDecimal = Math.round(attendance.filter(a => ['present', 'late', 'early-out', 'half-day', 'half_day'].includes(a.status)).reduce((sum, a) => sum + (a.overtimeHours || 0), 0) * 100) / 100;
+    const totalOvertimeHoursDecimal = Math.round(effectiveAttendance.filter(a => ['present', 'late', 'early-out', 'half-day', 'half_day'].includes(a.status)).reduce((sum, a) => sum + (a.overtimeHours || 0), 0) * 100) / 100;
     const totalOvertimeHours = totalOvertimeHoursDecimal;
-    const lateEntries = attendance.filter(a => a.lateEntry).length;
-    const earlyOuts = attendance.filter(a => a.earlyOut).length;
+    const lateEntries = effectiveAttendance.filter(a => a.lateEntry).length;
+    const earlyOuts = effectiveAttendance.filter(a => a.earlyOut).length;
 
-    // Working days in month = total days - sundays - holidays
-    const totalWorkingDays = daysInMonth - sundays - holidayDays;
+    // Working days in month = cutoffDay - sundays - elapsedHolidays
+    // (uses cutoff so current-month future days and post-relieving days are NOT counted)
+    const totalWorkingDays = Math.max(0, cutoffDay - sundays - elapsedHolidays);
 
     // Total attendance = present days (full present + half as 0.5)
     const totalAttendance = effectivePresentDays;
@@ -169,7 +187,7 @@ export async function GET(request: NextRequest) {
 
     const presentDateStrs = new Set();
     const absentDateStrs = new Set();
-    for (const a of attendance) {
+    for (const a of effectiveAttendance) {
       const ad = new Date(a.date);
       const dateStr = `${ad.getFullYear()}-${String(ad.getMonth() + 1).padStart(2, '0')}-${String(ad.getDate()).padStart(2, '0')}`;
       if (['present', 'late', 'early-out', 'half-day'].includes(a.status)) {
@@ -186,7 +204,10 @@ export async function GET(request: NextRequest) {
       const isUnpaid = leave.type === 'unpaid' || leave.type === 'UL' || leave.type === 'LOP';
       let d = new Date(leave.startDate);
       const end = new Date(leave.endDate);
-      while (d <= end) {
+      // Cap leave iteration at the cutoff day — don't count leave days beyond today/relieving
+      const cutoffDate = new Date(year, month - 1, cutoffDay);
+      const effectiveEnd = end > cutoffDate ? cutoffDate : end;
+      while (d <= effectiveEnd) {
         const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
         const isSunday = d.getDay() === 0;
         const isHoliday = holidayDateStrs.has(dateStr);
@@ -250,6 +271,7 @@ export async function GET(request: NextRequest) {
       year,
       monthName: new Date(year, month - 1, 1).toLocaleString('en-IN', { month: 'long' }),
       daysInMonth,
+      cutoffDay,
       totalWorkingDays,
       presentDays,
       rawPresentDays,

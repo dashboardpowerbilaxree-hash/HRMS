@@ -48,17 +48,25 @@ export async function GET(request: NextRequest) {
 
     // Total working days in month (excluding Sundays)
     const daysInMonth = new Date(year, month, 0).getDate();
+    // ── Cutoff-aware working day count ──
+    // For the current month, only count working days up to today
+    // (so future days don't artificially inflate the "expected" total and
+    // make everyone look absent).
+    const today = new Date();
+    const isCurrentMonth = (today.getFullYear() === year && today.getMonth() + 1 === month);
+    const cutoffDay = isCurrentMonth ? today.getDate() : daysInMonth;
     let workingDays = 0;
-    for (let d = 1; d <= daysInMonth; d++) {
+    for (let d = 1; d <= cutoffDay; d++) {
       const day = new Date(year, month - 1, d).getDay();
       if (day !== 0) workingDays++;
     }
 
-    // Subtract holidays
+    // Subtract holidays (only those on/before cutoff day)
     const holidays = await db.holiday.findMany({
       where: { date: { gte: startDate, lt: endDate } },
     });
-    workingDays = Math.max(workingDays - holidays.length, 1);
+    const elapsedHolidays = holidays.filter(h => new Date(h.date).getDate() <= cutoffDay).length;
+    workingDays = Math.max(workingDays - elapsedHolidays, 1);
 
     // Calculate per-employee metrics
     const empMap = new Map<string, {

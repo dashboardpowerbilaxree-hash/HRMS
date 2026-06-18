@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import {
+  getEffectiveCutoffDay,
+  countSundaysUpTo,
+  countHolidaysUpTo,
+  filterAttendanceUpTo,
+} from '@/lib/payroll-calc';
 
 export async function POST(request: NextRequest) {
   try {
@@ -19,14 +25,16 @@ export async function POST(request: NextRequest) {
         const endDate = new Date(year, month, 1);
         const daysInMonth = new Date(year, month, 0).getDate();
 
-        // ─── Count sundays and holidays ───
-        let sundays = 0;
+        // ── Effective cutoff day ──
+        // Caps all calculations at today (current month) or relievingDate (employee left)
+        const cutoffDay = getEffectiveCutoffDay(year, month, daysInMonth, emp.relievingDate);
+
+        // ─── Count sundays and holidays (only up to cutoff day) ───
         const holidays = await db.holiday.findMany({ where: { date: { gte: startDate, lt: endDate } } });
-        const holidayDays = holidays.length;
-        for (let d = 1; d <= daysInMonth; d++) {
-          if (new Date(year, month - 1, d).getDay() === 0) sundays++;
-        }
-        const totalWorkingDays = daysInMonth - sundays - holidayDays;
+        const elapsedHolidays = countHolidaysUpTo(holidays, cutoffDay);
+        const holidayDays = elapsedHolidays;
+        const sundays = countSundaysUpTo(year, month, cutoffDay);
+        const totalWorkingDays = Math.max(0, cutoffDay - sundays - elapsedHolidays);
 
         // ─── LAXREE PAYROLL FORMULA (matching Excel Payroll Master) ───
         // FULL PRECISION hourly rate — no intermediate rounding
@@ -36,13 +44,15 @@ export async function POST(request: NextRequest) {
         const attendance = await db.attendance.findMany({
           where: { employeeId: emp.employeeId, date: { gte: startDate, lt: endDate } },
         });
+        // Filter attendance to cutoff (drop future-dated rows defensively)
+        const effectiveAttendance = filterAttendanceUpTo(attendance, year, month, cutoffDay);
 
         // ─── HOUR-BASED salary calculation ───
         let totalBaseHours = 0;
         let totalWorkMinutes = 0;
         let effectivePresentDays = 0;
 
-        for (const a of attendance) {
+        for (const a of effectiveAttendance) {
           if (a.checkIn && a.checkOut && ['present', 'late', 'half-day', 'half_day', 'early-out'].includes(a.status)) {
             const [h1, m1] = a.checkIn.split(':').map(Number);
             const [h2, m2] = a.checkOut.split(':').map(Number);
@@ -65,13 +75,13 @@ export async function POST(request: NextRequest) {
 
         const totalWorkedHrs = Math.floor(totalWorkMinutes / 60) + (totalWorkMinutes % 60) / 100;
 
-        // OT Hours: Sum stored overtimeHours directly
-        const otHoursDecimal = Math.round(attendance.filter(a => ['present', 'late', 'half-day', 'half_day', 'early-out'].includes(a.status)).reduce((sum, a) => sum + (a.overtimeHours || 0), 0) * 100) / 100;
+        // OT Hours: Sum stored overtimeHours directly (use cutoff-filtered attendance)
+        const otHoursDecimal = Math.round(effectiveAttendance.filter(a => ['present', 'late', 'half-day', 'half_day', 'early-out'].includes(a.status)).reduce((sum, a) => sum + (a.overtimeHours || 0), 0) * 100) / 100;
         const otHours = otHoursDecimal;
 
         // Attendance counts
-        const rawPresentDays = attendance.filter(a => ['present', 'late', 'early-out'].includes(a.status)).length;
-        const halfDays = attendance.filter(a => a.status === 'half-day' || a.status === 'half_day').length;
+        const rawPresentDays = effectiveAttendance.filter(a => ['present', 'late', 'early-out'].includes(a.status)).length;
+        const halfDays = effectiveAttendance.filter(a => a.status === 'half-day' || a.status === 'half_day').length;
         const presentDays = rawPresentDays;
 
         const leaves = await db.leave.findMany({
@@ -86,7 +96,7 @@ export async function POST(request: NextRequest) {
           })
         );
         const presentDateStrs = new Set();
-        for (const a of attendance) {
+        for (const a of effectiveAttendance) {
           if (['present', 'late', 'early-out', 'half-day', 'half_day'].includes(a.status)) {
             const ad = new Date(a.date);
             presentDateStrs.add(`${ad.getFullYear()}-${String(ad.getMonth() + 1).padStart(2, '0')}-${String(ad.getDate()).padStart(2, '0')}`);
@@ -95,11 +105,14 @@ export async function POST(request: NextRequest) {
 
         let effectivePaidLeaves = 0;
         let effectiveUnpaidLeaves = 0;
+        const cutoffDate = new Date(year, month - 1, cutoffDay);
         for (const leave of leaves) {
           const isUnpaid = leave.type === 'unpaid' || leave.type === 'UL' || leave.type === 'LOP';
           let d = new Date(leave.startDate);
           const end = new Date(leave.endDate);
-          while (d <= end) {
+          // Cap leave iteration at cutoff day — don't count future leave days
+          const effectiveEnd = end > cutoffDate ? cutoffDate : end;
+          while (d <= effectiveEnd) {
             const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
             const isSunday = d.getDay() === 0;
             const isHoliday = holidayDateStrs.has(dateStr);
@@ -128,7 +141,7 @@ export async function POST(request: NextRequest) {
 
         // ─── ACTUAL Sunday worked hours (for display/records only) ───
         let sundayWorkMinutes = 0;
-        for (const a of attendance) {
+        for (const a of effectiveAttendance) {
           if (a.isSunday && a.checkIn && a.checkOut) {
             const [h1, m1] = a.checkIn.split(':').map(Number);
             const [h2, m2] = a.checkOut.split(':').map(Number);
