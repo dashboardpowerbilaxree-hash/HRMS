@@ -66,6 +66,11 @@ export async function POST(request: NextRequest) {
       { employeeId: 'EMP-422', fullName: 'Aakash Sangat', firm: 'LRSL', location: 'Ajmer', salaryType: 'hourly', monthlySalary: 15000, employmentType: 'Full Time', shiftStart: '10:00', shiftEnd: '19:00', shiftHours: 9, status: 'inactive' },
       { employeeId: 'EMP-423', fullName: 'Arjun', firm: 'LRSL', location: 'Ajmer', salaryType: 'hourly', monthlySalary: 23000, employmentType: 'Full Time', shiftStart: '10:00', shiftEnd: '19:00', shiftHours: 9 },
       { employeeId: 'EMP-424', fullName: 'Sujeet', firm: 'LRSL', location: 'Ajmer', salaryType: 'hourly', monthlySalary: 24000, employmentType: 'Full Time', shiftStart: '10:00', shiftEnd: '19:00', shiftHours: 9 },
+      // LRSL Ajmer — restored (were deleted by previous re-seed, restored 2026-06-18)
+      { employeeId: 'EMP-426', fullName: 'Narayan', firm: 'LRSL', location: 'Ajmer', salaryType: 'hourly', monthlySalary: 15000, employmentType: 'Full Time', shiftStart: '10:00', shiftEnd: '19:00', shiftHours: 9 },
+      { employeeId: 'EMP-427', fullName: 'Jitendra', firm: 'LRSL', location: 'Ajmer', salaryType: 'hourly', monthlySalary: 15000, employmentType: 'Full Time', shiftStart: '10:00', shiftEnd: '19:00', shiftHours: 9 },
+      { employeeId: 'EMP-428', fullName: 'Mukul', firm: 'LRSL', location: 'Ajmer', salaryType: 'hourly', monthlySalary: 15000, employmentType: 'Full Time', shiftStart: '10:00', shiftEnd: '19:00', shiftHours: 9 },
+      { employeeId: 'EMP-429', fullName: 'Girish', firm: 'LRSL', location: 'Ajmer', salaryType: 'hourly', monthlySalary: 15000, employmentType: 'Full Time', shiftStart: '10:00', shiftEnd: '19:00', shiftHours: 9 },
       { employeeId: 'EMP-034', fullName: 'Prakash', firm: 'LRSL', location: 'Ajmer', salaryType: 'hourly', monthlySalary: 60000, employmentType: 'Part Time', shiftStart: '10:00', shiftEnd: '19:00', shiftHours: 9 },
       { employeeId: 'EMP-415', fullName: 'Ronak Jain', firm: 'LRSL', location: 'Ajmer', salaryType: 'hourly', monthlySalary: 51000, employmentType: 'Full Time', shiftStart: '10:00', shiftEnd: '19:00', shiftHours: 9, status: 'inactive' },
       // LRSL Roofing Factory
