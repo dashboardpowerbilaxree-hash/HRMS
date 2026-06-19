@@ -22,6 +22,7 @@ export async function GET(request: NextRequest) {
     const location = searchParams.get('location') || '';
     const status = searchParams.get('status') || '';
     const salaryType = searchParams.get('salaryType') || '';
+    const includeInactive = searchParams.get('includeInactive') === 'true';
 
     const where: any = {};
     if (search) {
@@ -35,6 +36,12 @@ export async function GET(request: NextRequest) {
     if (location) where.location = location;
     if (status) where.status = status;
     if (salaryType) where.salaryType = salaryType;
+
+    // By default, hide employees marked as 'inactive' (relieved/terminated employees)
+    // unless explicitly requested via includeInactive=true
+    if (!includeInactive && !status) {
+      where.status = { not: 'inactive' };
+    }
 
     const employees = await db.employee.findMany({
       where,
@@ -133,7 +140,6 @@ export async function POST(request: NextRequest) {
           pfNumber: body.pfNumber ?? existing.pfNumber,
           esiNumber: body.esiNumber ?? existing.esiNumber,
           status: body.status || existing.status,
-          relievingDate: body.relievingDate ? new Date(body.relievingDate) : (body.relievingDate === null ? null : existing.relievingDate),
           reportingManager: body.reportingManager ?? existing.reportingManager,
           emergencyContact: body.emergencyContact ?? existing.emergencyContact,
         },
@@ -172,7 +178,6 @@ export async function POST(request: NextRequest) {
         pfNumber: body.pfNumber || null,
         esiNumber: body.esiNumber || null,
         status: body.status || 'Yes',
-        relievingDate: body.relievingDate ? new Date(body.relievingDate) : null,
         reportingManager: body.reportingManager || null,
         emergencyContact: body.emergencyContact || null,
       },
