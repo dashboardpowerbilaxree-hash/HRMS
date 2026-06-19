@@ -337,14 +337,24 @@ export function EmployeeManagement() {
     setOpen(true);
   };
 
-  // ── Delete (deactivate) ──
-  const handleDelete = async (employeeId: string) => {
+  // ── Delete (hard delete with confirmation) ──
+  const handleDelete = async (employeeId: string, employeeName?: string) => {
+    // Confirm with the user before permanently deleting
+    const confirmMsg = `Are you sure you want to permanently delete ${employeeName || employeeId}?\n\nThis will remove:\n  - The employee record\n  - All attendance records\n  - All payroll records\n  - All overtime records\n  - All leave records\n  - All salary history\n\nThis action CANNOT be undone.`;
+    if (!window.confirm(confirmMsg)) {
+      return;
+    }
     try {
-      await fetch(`/api/employees/${employeeId}`, { method: 'DELETE' });
-      toast.success('Employee deactivated');
+      const resp = await fetch(`/api/employees/${employeeId}?hard=true`, { method: 'DELETE' });
+      if (!resp.ok) {
+        const errData = await resp.json().catch(() => ({}));
+        throw new Error(errData.error || `HTTP ${resp.status}`);
+      }
+      toast.success('Employee permanently deleted');
       loadEmployees();
-    } catch {
-      toast.error('Failed to deactivate employee');
+    } catch (err: any) {
+      console.error('Delete failed:', err);
+      toast.error(err.message || 'Failed to delete employee');
     }
   };
 
@@ -770,8 +780,8 @@ export function EmployeeManagement() {
                               variant="ghost"
                               size="icon"
                               className="h-7 w-7 text-destructive hover:text-destructive"
-                              onClick={() => handleDelete(emp.employeeId)}
-                              title="Deactivate"
+                              onClick={() => handleDelete(emp.employeeId, emp.fullName)}
+                              title="Delete"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </Button>
