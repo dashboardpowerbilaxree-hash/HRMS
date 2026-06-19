@@ -1350,7 +1350,7 @@ export function AttendanceTracker() {
                         </span>
                       )}
                     </h3>
-                    <ScrollArea className="max-h-[40vh]">
+                    <div className="max-h-[40vh] overflow-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
                       <Table>
                         <TableHeader>
                           <TableRow className="hover:bg-transparent">
@@ -1377,7 +1377,7 @@ export function AttendanceTracker() {
                           ))}
                         </TableBody>
                       </Table>
-                    </ScrollArea>
+                    </div>
 
                     {/* Process Button */}
                     <div className="flex items-center gap-3 mt-4 pt-4 border-t relative z-10 bg-background">
