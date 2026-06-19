@@ -668,7 +668,7 @@ export function EmployeeManagement() {
       >
         <Card className="glass-card card-gold-hover border-0">
           <CardContent className="p-0">
-            <ScrollArea className="max-h-[65vh]">
+            <div className="overflow-x-auto overflow-y-visible">
               <Table>
                 <TableHeader>
                   <TableRow className="hover:bg-transparent">
@@ -782,7 +782,7 @@ export function EmployeeManagement() {
                   )}
                 </TableBody>
               </Table>
-            </ScrollArea>
+            </div>
           </CardContent>
         </Card>
       </motion.div>
