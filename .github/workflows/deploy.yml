@@ -1,4 +1,4 @@
-name: DB Sync & Seed
+name: DB Sync
 
 on:
   push:
@@ -26,18 +26,13 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
-      - name: Push Prisma schema to Neon
+      - name: Push Prisma schema to Neon (non-destructive)
         run: npx prisma db push --skip-generate
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
-      - name: Wait for Vercel deployment
-        run: |
-          echo "Waiting 60s for Vercel auto-deployment to complete..."
-          sleep 60
-
-      - name: Seed Database
-        run: |
-          curl -X POST "https://laxree-hrms.vercel.app/api/seed" || true
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      # NOTE: Seed step intentionally REMOVED.
+      # The seed endpoint wipes ALL data (attendance, payroll, etc.) and re-creates from a fixed list.
+      # Running it on every push destroys user data.
+      # To seed a fresh database, manually run: curl -X POST "https://laxree-hrms.vercel.app/api/seed?force=true"
+      # This is a ONE-TIME operation only for a brand-new empty database.
