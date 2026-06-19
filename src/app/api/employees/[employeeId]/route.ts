@@ -85,7 +85,6 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         pfNumber: body.pfNumber,
         esiNumber: body.esiNumber,
         status: body.status,
-        relievingDate: body.relievingDate ? new Date(body.relievingDate) : (body.relievingDate === null ? null : undefined),
         reportingManager: body.reportingManager,
         emergencyContact: body.emergencyContact,
       },
@@ -100,16 +99,37 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ employeeId: string }> }) {
   try {
     const { employeeId } = await params;
-    // Mark as inactive AND set relievingDate to today — payroll/attendance will
-    // stop counting from tomorrow onwards.
+    const { searchParams } = new URL(request.url);
+    const hard = searchParams.get('hard') === 'true';
+
+    if (hard) {
+      // HARD DELETE: permanently remove the employee and all related records
+      // Order matters due to foreign key constraints
+      // 1. Delete overtime records (references attendance via id pattern, also direct employeeId)
+      await db.overtime.deleteMany({ where: { employeeId } });
+      // 2. Delete attendance records
+      await db.attendance.deleteMany({ where: { employeeId } });
+      // 3. Delete salary history
+      await db.salaryHistory.deleteMany({ where: { employeeId } });
+      // 4. Delete leaves
+      await db.leave.deleteMany({ where: { employeeId } });
+      // 5. Delete payrolls
+      await db.payroll.deleteMany({ where: { employeeId } });
+      // 6. Delete advances
+      await db.advance.deleteMany({ where: { employeeId } });
+      // 7. Delete notifications
+      await db.notification.deleteMany({ where: { employeeId } });
+      // 8. Finally, delete the employee
+      await db.employee.delete({ where: { employeeId } });
+      return NextResponse.json({ message: 'Employee permanently deleted' });
+    }
+
+    // SOFT DELETE (default): mark employee as inactive
     await db.employee.update({
       where: { employeeId },
-      data: {
-        status: 'inactive',
-        relievingDate: new Date(),
-      },
+      data: { status: 'inactive' },
     });
-    return NextResponse.json({ message: 'Employee deactivated — relieving date set to today' });
+    return NextResponse.json({ message: 'Employee deactivated' });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
