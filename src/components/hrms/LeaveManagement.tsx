@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { CalendarDays, Check, X, Clock } from 'lucide-react';
+import { CalendarDays, Check, X, Clock, RefreshCw } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -30,6 +30,7 @@ export function LeaveManagement() {
   const [leaves, setLeaves] = useState<LeaveRequest[]>([]);
   const [employees, setEmployees] = useState<{ employeeId: string; fullName: string }[]>([]);
   const [open, setOpen] = useState(false);
+  const [syncingErp, setSyncingErp] = useState(false);
   const [form, setForm] = useState({ employeeId: '', type: 'Casual Leave', startDate: '', endDate: '', days: 1, reason: '' });
 
   const loadData = useCallback(async () => {
@@ -40,6 +41,25 @@ export function LeaveManagement() {
   }, []);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  // ─── ERP Integration: Pull pending leaves from ERP into HRMS ───
+  // SAFE: only inserts new records; existing HRMS leaves are not touched
+  const handleSyncErp = async () => {
+    setSyncingErp(true);
+    try {
+      const res = await fetch('/api/leaves/erp-pull');
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Sync failed');
+      toast.success(
+        `Synced ${data.summary?.synced || 0} new ERP leaves (skipped ${data.summary?.skipped || 0}, errors ${data.summary?.errors || 0})`
+      );
+      loadData();
+    } catch (err: any) {
+      toast.error(`ERP sync failed: ${err.message}`);
+    } finally {
+      setSyncingErp(false);
+    }
+  };
 
   const handleSubmit = async () => {
     if (!form.employeeId || !form.startDate || !form.endDate) { toast.error('Fill required fields'); return; }
@@ -53,13 +73,31 @@ export function LeaveManagement() {
     loadData();
   };
 
+  // ─── ERP Integration: When approving/rejecting, also push status back to ERP ───
+  // SAFE: if the leave is not ERP-originated, erp-push returns success with synced=false
   const handleAction = async (id: string, status: string) => {
+    // 1. Update HRMS Leave status (existing flow — UNCHANGED)
     await fetch('/api/leaves', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id, status }),
     });
     toast.success(`Leave ${status}`);
+
+    // 2. Best-effort push to ERP (non-blocking — won't break HRMS flow if ERP is down)
+    try {
+      const pushRes = await fetch('/api/leaves/erp-push', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ leaveId: id, status, approvedBy: 'HR' }),
+      });
+      const pushData = await pushRes.json();
+      if (pushData.synced) {
+        toast.success(`ERP updated: ${pushData.message || 'synced'}`);
+      }
+    } catch {
+      // Silent fail — ERP sync is best-effort
+    }
     loadData();
   };
 
@@ -74,10 +112,15 @@ export function LeaveManagement() {
           <h2 className="text-xl font-bold">Leave Management</h2>
           <p className="text-sm text-muted-foreground">{pending} pending approvals</p>
         </div>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button className="bg-gold text-white"><CalendarDays className="w-4 h-4 mr-2" /> Apply Leave</Button>
-          </DialogTrigger>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={handleSyncErp} disabled={syncingErp}>
+            <RefreshCw className={`w-4 h-4 mr-2 ${syncingErp ? 'animate-spin' : ''}`} />
+            {syncingErp ? 'Syncing...' : 'Sync ERP Leaves'}
+          </Button>
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+              <Button className="bg-gold text-white"><CalendarDays className="w-4 h-4 mr-2" /> Apply Leave</Button>
+            </DialogTrigger>
           <DialogContent className="max-h-[90vh] overflow-y-auto">
             <DialogHeader><DialogTitle>Apply Leave</DialogTitle></DialogHeader>
             <div className="space-y-4 py-4">
@@ -92,7 +135,8 @@ export function LeaveManagement() {
               <Button className="w-full bg-gold text-white" onClick={handleSubmit}>Submit Leave</Button>
             </div>
           </DialogContent>
-        </Dialog>
+          </Dialog>
+        </div>
       </div>
 
       <div className="grid grid-cols-3 gap-3">
@@ -118,9 +162,11 @@ export function LeaveManagement() {
             <Table>
               <TableHeader><TableRow><TableHead>Employee</TableHead><TableHead>Type</TableHead><TableHead>Duration</TableHead><TableHead>Days</TableHead><TableHead>Status</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
               <TableBody>
-                {leaves.map((l) => (
+                {leaves.map((l) => {
+                  const isErpOriginated = !!(l.reason && l.reason.includes('[ERP:'));
+                  return (
                   <TableRow key={l.id} className="hover:bg-muted/30">
-                    <TableCell><div className="min-w-0 overflow-hidden"><p className="text-sm font-medium truncate">{l.employee?.fullName || l.employeeId}</p><p className="text-xs text-muted-foreground truncate">{l.employee?.department}</p></div></TableCell>
+                    <TableCell><div className="min-w-0 overflow-hidden"><p className="text-sm font-medium truncate flex items-center gap-1.5">{l.employee?.fullName || l.employeeId}{isErpOriginated && <span className="text-[9px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-bold">ERP</span>}</p><p className="text-xs text-muted-foreground truncate">{l.employee?.department}</p></div></TableCell>
                     <TableCell className="text-sm whitespace-nowrap">{l.type}</TableCell>
                     <TableCell className="text-sm whitespace-nowrap">{new Date(l.startDate).toLocaleDateString()} - {new Date(l.endDate).toLocaleDateString()}</TableCell>
                     <TableCell className="text-sm whitespace-nowrap">{l.days}</TableCell>
@@ -136,7 +182,8 @@ export function LeaveManagement() {
                       )}
                     </TableCell>
                   </TableRow>
-                ))}
+                  );
+                })}
               </TableBody>
             </Table>
           </ScrollArea>
