@@ -17,15 +17,21 @@ import { db } from '@/lib/db';
 //
 // AUTH: Requires `x-hrms-api-key` header matching env var HRMS_BRIDGE_API_KEY.
 //
+// v24·0625-fix: FALLBACK — if HRMS_BRIDGE_API_KEY is not set on this HRMS
+// deployment, accept ERP_BRIDGE_API_KEY instead. This makes the bridge work
+// even when only ONE of the two keys is configured on each side (the most
+// common deployment mistake). When both keys are set, HRMS_BRIDGE_API_KEY
+// takes precedence.
+//
 // SAFETY: PURELY READ-ONLY. This endpoint NEVER writes to any database table.
 // It does not modify attendance, employees, leaves, or any other record.
 // ════════════════════════════════════════════════════════════════════════
 
 export async function GET(request: NextRequest) {
   try {
-    // Validate API key
+    // Validate API key (with fallback to the symmetric key — see header comment)
     const apiKey = request.headers.get('x-hrms-api-key');
-    const expectedKey = process.env.HRMS_BRIDGE_API_KEY;
+    const expectedKey = process.env.HRMS_BRIDGE_API_KEY || process.env.ERP_BRIDGE_API_KEY;
     if (!expectedKey || apiKey !== expectedKey) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }

@@ -17,12 +17,15 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function GET(request: NextRequest) {
   try {
-    const erpUrl = process.env.ERP_BRIDGE_URL;
-    const erpKey = process.env.ERP_BRIDGE_API_KEY;
-    if (!erpUrl || !erpKey) {
+    // v24·0625-fix: fall back to HRMS_BRIDGE_API_KEY if ERP_BRIDGE_API_KEY is missing,
+    // and to a hardcoded production ERP URL if ERP_BRIDGE_URL is missing. This makes
+    // the bridge resilient to partial env var configuration on Vercel.
+    const erpUrl = process.env.ERP_BRIDGE_URL || 'https://erp-ea.vercel.app';
+    const erpKey = process.env.ERP_BRIDGE_API_KEY || process.env.HRMS_BRIDGE_API_KEY;
+    if (!erpKey) {
       return NextResponse.json(
         {
-          error: 'ERP bridge not configured. Set ERP_BRIDGE_URL and ERP_BRIDGE_API_KEY env vars on the HRMS server.',
+          error: 'ERP bridge not configured. Set ERP_BRIDGE_API_KEY (or HRMS_BRIDGE_API_KEY as fallback) on the HRMS server.',
           queries: [],
         },
         { status: 503 }
