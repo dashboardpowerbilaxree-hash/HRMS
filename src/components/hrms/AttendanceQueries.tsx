@@ -176,12 +176,37 @@ export function AttendanceQueries() {
         <Card className="border-red-500/40 bg-red-500/5">
           <CardContent className="pt-6 flex items-start gap-3">
             <AlertCircle className="w-5 h-5 text-red-500 mt-0.5 flex-shrink-0" />
-            <div className="text-sm">
+            <div className="text-sm flex-1 min-w-0">
               <div className="font-semibold text-red-500">Cannot reach ERP bridge</div>
               <div className="text-muted-foreground mt-1">{error}</div>
-              <div className="text-muted-foreground mt-2 text-xs">
-                Verify <code className="px-1 py-0.5 rounded bg-muted">ERP_BRIDGE_URL</code> and
-                <code className="ml-1 px-1 py-0.5 rounded bg-muted">ERP_BRIDGE_API_KEY</code> env vars are set on the HRMS server.
+              <div className="text-muted-foreground mt-3 text-xs leading-relaxed">
+                To enable this page, the HRMS admin needs to set <strong>two environment variables</strong> on the HRMS Vercel project:
+              </div>
+              <ul className="text-xs text-muted-foreground mt-2 ml-4 list-disc space-y-1">
+                <li>
+                  <code className="px-1 py-0.5 rounded bg-muted">ERP_BRIDGE_URL</code> — base URL of the ERP deployment
+                  (e.g. <code className="px-1 py-0.5 rounded bg-muted">https://erp-ea.vercel.app</code>)
+                </li>
+                <li>
+                  <code className="px-1 py-0.5 rounded bg-muted">ERP_BRIDGE_API_KEY</code> — shared secret that must
+                  <strong> exactly match</strong> the <code className="px-1 py-0.5 rounded bg-muted">ERP_BRIDGE_API_KEY</code> set on the ERP Vercel project.
+                </li>
+              </ul>
+              <div className="text-xs text-muted-foreground mt-3 pt-3 border-t border-border/60">
+                <strong>Steps:</strong>
+                <ol className="list-decimal ml-4 mt-1 space-y-0.5">
+                  <li>Open Vercel → HRMS project → Settings → Environment Variables</li>
+                  <li>Add the two variables above (Production + Preview environments)</li>
+                  <li>Trigger a redeploy (Redeploy button on the Deployments tab)</li>
+                  <li>Come back to this page — queries from ERP employees will appear here</li>
+                </ol>
+              </div>
+              <div className="text-xs text-muted-foreground mt-3 pt-3 border-t border-border/60">
+                <strong className="text-foreground">Also required on the ERP side:</strong> the ERP Vercel project must set
+                <code className="mx-1 px-1 py-0.5 rounded bg-muted">HRMS_BRIDGE_URL</code> (this HRMS deployment URL) and
+                <code className="mx-1 px-1 py-0.5 rounded bg-muted">HRMS_BRIDGE_API_KEY</code> (same value as
+                <code className="mx-1 px-1 py-0.5 rounded bg-muted">HRMS_BRIDGE_API_KEY</code> on HRMS) — otherwise ERP employees
+                cannot see their attendance or raise queries.
               </div>
             </div>
           </CardContent>
