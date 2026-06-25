@@ -39,18 +39,24 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const email = (searchParams.get('email') || '').toLowerCase().trim();
     const phone = (searchParams.get('phone') || '').trim();
+    const name = (searchParams.get('name') || '').toLowerCase().trim();
     const month = parseInt(searchParams.get('month') || String(new Date().getMonth() + 1));
     const year = parseInt(searchParams.get('year') || String(new Date().getFullYear()));
 
-    if (!email && !phone) {
+    if (!email && !phone && !name) {
       return NextResponse.json(
-        { error: 'Either email or phone is required to identify the employee' },
+        { error: 'Either email, phone, or name is required to identify the employee' },
         { status: 400 }
       );
     }
 
-    // Look up employee by email (primary) or phone (fallback)
+    // Look up employee by email (primary) → phone (fallback) → name (final fallback)
     // We do NOT modify the employee record — purely read.
+    //
+    // v24·0625-fix: added name-based fallback because HRMS employees frequently
+    // have null/empty email AND mobile fields (operator hasn't populated them).
+    // Name matching is case-insensitive and partial (either side contains the other),
+    // which handles cases like ERP "Girish Shahani" ↔ HRMS "Girish".
     let employee: any = null;
     if (email) {
       employee = await db.employee.findFirst({
@@ -65,14 +71,59 @@ export async function GET(request: NextRequest) {
     if (!employee && phone) {
       // Try matching the last 10 digits (handles +91 prefix etc.)
       const phoneLast10 = phone.replace(/\D/g, '').slice(-10);
+      if (phoneLast10.length >= 10) {
+        employee = await db.employee.findFirst({
+          where: { mobile: { contains: phoneLast10 } },
+          select: {
+            employeeId: true, fullName: true, email: true, mobile: true,
+            department: true, designation: true, location: true,
+            firm: true, shiftHours: true, employmentType: true,
+          },
+        });
+      }
+    }
+    if (!employee && name) {
+      // v24·0625-fix: name-based fallback matching.
+      // Strategy: try exact case-insensitive match first, then partial match
+      // (HRMS fullName contains ERP name OR ERP name contains HRMS fullName).
+      // This handles common naming differences between ERP and HRMS:
+      //   ERP "Girish Shahani" ↔ HRMS "Girish"
+      //   ERP "Saurabh"        ↔ HRMS "Saurabh"
+      //   ERP "Arti Sharma"    ↔ HRMS "Arti"
+      //
+      // Step 1: exact case-insensitive match
       employee = await db.employee.findFirst({
-        where: { mobile: { contains: phoneLast10 } },
+        where: { fullName: { equals: name, mode: 'insensitive' } },
         select: {
           employeeId: true, fullName: true, email: true, mobile: true,
           department: true, designation: true, location: true,
           firm: true, shiftHours: true, employmentType: true,
         },
       });
+
+      // Step 2: partial match — fetch all employees and find best match in JS.
+      // Prisma `contains` with `mode: 'insensitive'` would work for one direction
+      // but not both, so we fetch all and filter in code (employee list is small,
+      // typically <100 records).
+      if (!employee) {
+        const allEmployees = await db.employee.findMany({
+          select: {
+            employeeId: true, fullName: true, email: true, mobile: true,
+            department: true, designation: true, location: true,
+            firm: true, shiftHours: true, employmentType: true,
+          },
+        });
+        // Normalize: lowercase + trim + collapse multiple spaces
+        const normalize = (s: string) => s.toLowerCase().trim().replace(/\s+/g, ' ');
+        const normName = normalize(name);
+        // Try both directions of partial match
+        const partialMatch = allEmployees.find(e => {
+          const empName = normalize(e.fullName || '');
+          if (!empName || !normName) return false;
+          return empName.includes(normName) || normName.includes(empName);
+        });
+        if (partialMatch) employee = partialMatch;
+      }
     }
 
     if (!employee) {
