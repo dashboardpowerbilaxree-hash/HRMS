@@ -1,0 +1,125 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { db } from '@/lib/db';
+
+// ════════════════════════════════════════════════════════════════════════
+// v24·0625 — EXTERNAL ATTENDANCE ENDPOINT (HRMS → ERP, READ-ONLY)
+// ════════════════════════════════════════════════════════════════════════
+// ERP's /api/attendance/bridge calls this endpoint to fetch an employee's
+// monthly attendance (read-only) so ERP users can see their HRMS attendance
+// without leaving ERP.
+//
+// FLOW:
+//   1. ERP backend calls GET {HRMS_URL}/api/external/attendance
+//        with header `x-hrms-api-key: <HRMS_BRIDGE_API_KEY>`
+//        and query `?email=X&phone=Y&month=M&year=Y`
+//   2. HRMS looks up the employee by email (primary) or phone (fallback).
+//   3. HRMS returns attendance records + summary + employee identity.
+//
+// AUTH: Requires `x-hrms-api-key` header matching env var HRMS_BRIDGE_API_KEY.
+//
+// SAFETY: PURELY READ-ONLY. This endpoint NEVER writes to any database table.
+// It does not modify attendance, employees, leaves, or any other record.
+// ════════════════════════════════════════════════════════════════════════
+
+export async function GET(request: NextRequest) {
+  try {
+    // Validate API key
+    const apiKey = request.headers.get('x-hrms-api-key');
+    const expectedKey = process.env.HRMS_BRIDGE_API_KEY;
+    if (!expectedKey || apiKey !== expectedKey) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { searchParams } = new URL(request.url);
+    const email = (searchParams.get('email') || '').toLowerCase().trim();
+    const phone = (searchParams.get('phone') || '').trim();
+    const month = parseInt(searchParams.get('month') || String(new Date().getMonth() + 1));
+    const year = parseInt(searchParams.get('year') || String(new Date().getFullYear()));
+
+    if (!email && !phone) {
+      return NextResponse.json(
+        { error: 'Either email or phone is required to identify the employee' },
+        { status: 400 }
+      );
+    }
+
+    // Look up employee by email (primary) or phone (fallback)
+    // We do NOT modify the employee record — purely read.
+    let employee: any = null;
+    if (email) {
+      employee = await db.employee.findFirst({
+        where: { email: { equals: email, mode: 'insensitive' } },
+        select: {
+          employeeId: true, fullName: true, email: true, mobile: true,
+          department: true, designation: true, location: true,
+          firm: true, shiftHours: true, employmentType: true,
+        },
+      });
+    }
+    if (!employee && phone) {
+      // Try matching the last 10 digits (handles +91 prefix etc.)
+      const phoneLast10 = phone.replace(/\D/g, '').slice(-10);
+      employee = await db.employee.findFirst({
+        where: { mobile: { contains: phoneLast10 } },
+        select: {
+          employeeId: true, fullName: true, email: true, mobile: true,
+          department: true, designation: true, location: true,
+          firm: true, shiftHours: true, employmentType: true,
+        },
+      });
+    }
+
+    if (!employee) {
+      // Soft-fail: ERP UI will show "no linked HRMS record"
+      return NextResponse.json({
+        employee: null,
+        records: [],
+        summary: null,
+        message: 'No HRMS employee found matching this email/phone.',
+      });
+    }
+
+    // Fetch attendance for the requested month
+    const startDate = new Date(year, month - 1, 1);
+    const endDate = new Date(year, month, 1);
+
+    const records = await db.attendance.findMany({
+      where: {
+        employeeId: employee.employeeId,
+        date: { gte: startDate, lt: endDate },
+      },
+      orderBy: { date: 'asc' },
+      // Select only safe, non-sensitive fields
+      select: {
+        id: true, date: true, checkIn: true, checkOut: true,
+        totalHours: true, status: true, lateEntry: true,
+        halfDay: true, overtimeHours: true, earlyOut: true,
+        isHoliday: true, isWeeklyOff: true,
+      },
+    });
+
+    // Build summary (read-only computation — no writes)
+    const summary = {
+      totalRecords: records.length,
+      present: records.filter(r => ['present', 'late', 'early-out'].includes(r.status)).length,
+      absent: records.filter(r => r.status === 'absent').length,
+      late: records.filter(r => r.lateEntry).length,
+      earlyOuts: records.filter(r => r.earlyOut).length,
+      halfDay: records.filter(r => r.halfDay).length,
+      totalOvertimeHours: records.reduce((sum, r) => sum + (r.overtimeHours || 0), 0),
+      totalWorkHours: records.reduce((sum, r) => sum + (r.totalHours || 0), 0),
+    };
+
+    return NextResponse.json({
+      employee,
+      records,
+      summary,
+    });
+  } catch (error: any) {
+    console.error('External attendance GET error:', error);
+    return NextResponse.json(
+      { error: error?.message || 'Server error' },
+      { status: 500 }
+    );
+  }
+}

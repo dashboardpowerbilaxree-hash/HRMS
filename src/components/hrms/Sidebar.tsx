@@ -6,7 +6,7 @@ import Image from 'next/image';
 import {
   LayoutDashboard, Users, Clock, DollarSign, CalendarDays,
   Palmtree, BarChart3, Bot, FileText,
-  Settings, ChevronLeft, ChevronRight, Filter, LogOut, Crown, TrendingUp, CreditCard
+  Settings, ChevronLeft, ChevronRight, Filter, LogOut, Crown, TrendingUp, CreditCard, MessageSquareText
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -23,6 +23,8 @@ const navItems: { key: PageKey; label: string; icon: any }[] = [
   { key: 'scorecard', label: 'Scorecard', icon: CreditCard },
   { key: 'salary-slip', label: 'Salary Slip', icon: FileText },
   { key: 'ai-assistant', label: 'AI Assistant', icon: Bot },
+  // v24·0625: ERP attendance queries bridge — HR views & responds to queries raised in ERP
+  { key: 'erp-queries', label: 'ERP Queries', icon: MessageSquareText },
   { key: 'settings', label: 'Settings', icon: Settings },
 ];
 

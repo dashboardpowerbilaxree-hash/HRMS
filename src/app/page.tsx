@@ -17,6 +17,7 @@ import { SalarySlipGenerator } from '@/components/hrms/SalarySlipGenerator';
 import { SettingsPanel } from '@/components/hrms/SettingsPanel';
 
 import { EmployeeProfile } from '@/components/hrms/EmployeeProfile';
+import { AttendanceQueries } from '@/components/hrms/AttendanceQueries';
 import { Header } from '@/components/hrms/Header';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Lock, User, Eye, EyeOff, Loader2, Crown, Sparkles } from 'lucide-react';
@@ -258,6 +259,7 @@ export default function Home() {
       case 'salary-slip': return <SalarySlipGenerator />;
       case 'settings': return <SettingsPanel />;
       case 'employee-profile': return <EmployeeProfile />;
+      case 'erp-queries': return <AttendanceQueries />;
       default: return <DashboardHome />;
     }
   };
