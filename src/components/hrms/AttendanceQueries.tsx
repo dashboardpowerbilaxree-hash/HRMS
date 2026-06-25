@@ -208,6 +208,18 @@ export function AttendanceQueries() {
                 <code className="mx-1 px-1 py-0.5 rounded bg-muted">HRMS_BRIDGE_API_KEY</code> on HRMS) — otherwise ERP employees
                 cannot see their attendance or raise queries.
               </div>
+              {error.includes('401') && (
+                <div className="text-xs mt-3 pt-3 border-t border-border/60 bg-amber-500/10 -mx-3 px-3 py-2 rounded-md">
+                  <strong className="text-amber-700 dark:text-amber-400">⚠ HTTP 401 specific guidance:</strong>{' '}
+                  A 401 means HRMS reached ERP successfully, but ERP rejected the shared secret. If you have
+                  <em> already </em> set <code className="px-1 py-0.5 rounded bg-muted">ERP_BRIDGE_API_KEY</code> on
+                  <em> both </em> Vercel projects with the same value, the most likely cause is that
+                  <strong> at least one of the projects has not been redeployed since the env var was added</strong>.
+                  Vercel only applies new env vars on the <strong>next</strong> deployment — running deployments
+                  keep using the old environment. Fix: trigger a redeploy on <strong>both</strong> the ERP and HRMS
+                  Vercel projects (Deployments tab → ⋮ → Redeploy), then come back to this page.
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
