@@ -141,24 +141,25 @@ function normalizeStatus(status: string | null | undefined): string {
   return status;
 }
 
-/** Calculate hourlyRate matching the API logic: monthlySalary / (shiftHours × daysInMonth)
+/** Calculate hourlyRate matching the API logic: CEIL(monthlySalary / (shiftHours × daysInMonth))
  *  daysInMonth = total calendar days (28, 29, 30, or 31) — NOT working days
- *  31 days × 9 hrs = 279 → ₹20,000/279 = ₹71.68
- *  30 days × 9 hrs = 270 → ₹20,000/270 = ₹74.07
- *  29 days × 9 hrs = 261 → ₹20,000/261 = ₹76.82
- *  28 days × 9 hrs = 252 → ₹20,000/252 = ₹79.37
+ *  Always rounds UP to the next whole number (ceiling).
+ *  31 days × 9 hrs = 279 → CEIL(₹20,000/279) = ₹72
+ *  30 days × 9 hrs = 270 → CEIL(₹20,000/270) = ₹75
+ *  29 days × 9 hrs = 261 → CEIL(₹20,000/261) = ₹77
+ *  28 days × 9 hrs = 252 → CEIL(₹20,000/252) = ₹80
  */
 function calcHourlyRate(salaryType: string, monthlySalary: number, shiftHours: number, dailyRate: number): number {
   const sh = shiftHours || 9;
   const now = new Date();
   const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
   if (daysInMonth < 1 || sh <= 0) return 0;
-  return Math.round((monthlySalary / (sh * daysInMonth)) * 100) / 100;
+  return Math.ceil(monthlySalary / (sh * daysInMonth));
 }
 
 /** Calculate overtimeRate — normal hourly rate (1x), NOT 1.5x */
 function calcOvertimeRate(hourlyRate: number): number {
-  return Math.round(hourlyRate * 100) / 100;
+  return hourlyRate; // Already a whole number via Math.ceil
 }
 
 export function EmployeeManagement() {
@@ -213,8 +214,7 @@ export function EmployeeManagement() {
     const now = new Date();
     const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
     if (daysInMonth < 1 || sh <= 0) return 0;
-    const hourlyRate = basicSalary / (sh * daysInMonth);
-    return Math.round(hourlyRate * 100) / 100;
+    return Math.ceil(basicSalary / (sh * daysInMonth));
   };
 
   // ── Compute next employee code from loaded employees ──
@@ -748,7 +748,7 @@ export function EmployeeManagement() {
                           </span>
                         </TableCell>
                         <TableCell className="hidden sm:table-cell text-sm font-mono whitespace-nowrap">
-                          {emp.hourlyRate > 0 ? `₹${emp.hourlyRate.toFixed(2)}` : '—'}
+                          {emp.hourlyRate > 0 ? `₹${Math.ceil(emp.hourlyRate)}` : '—'}
                         </TableCell>
                         <TableCell className="hidden sm:table-cell">
                           <EmpTypeBadge type={emp.employmentType || 'Full Time'} />
@@ -1103,8 +1103,8 @@ export function EmployeeManagement() {
                           <TableCell className="text-xs capitalize">{row.salaryType}</TableCell>
                           <TableCell className="text-sm font-mono">₹{row.monthlySalary.toLocaleString()}</TableCell>
                           <TableCell className="text-xs whitespace-nowrap">{row.shiftStart}–{row.shiftEnd} ({row.shiftHours}h)</TableCell>
-                          <TableCell className="text-sm font-mono">₹{row.hourlyRate.toFixed(2)}</TableCell>
-                          <TableCell className="text-sm font-mono">₹{row.overtimeRate.toFixed(2)}</TableCell>
+                          <TableCell className="text-sm font-mono">₹{Math.ceil(row.hourlyRate)}</TableCell>
+                          <TableCell className="text-sm font-mono">₹{Math.ceil(row.overtimeRate)}</TableCell>
                           <TableCell>
                             <span className={`text-xs px-1.5 py-0.5 rounded ${
                               row.active === 'Yes'

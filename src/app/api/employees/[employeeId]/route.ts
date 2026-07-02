@@ -51,9 +51,9 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     totalWorkingDays -= holidays.length;
     if (totalWorkingDays < 1) totalWorkingDays = 26;
 
-    const hourlyRate = Math.round((monthlySalary / (sh * daysInMonth)) * 100) / 100;
+    const hourlyRate = Math.ceil(monthlySalary / (sh * daysInMonth));
     // OT at normal hourly rate (1x), NOT 1.5x — user explicitly confirmed
-    const overtimeRate = Math.round(hourlyRate * 100) / 100;
+    const overtimeRate = hourlyRate; // Same as hourlyRate (already a whole number via ceil)
 
     const employee = await db.employee.update({
       where: { employeeId },

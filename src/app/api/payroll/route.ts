@@ -60,9 +60,9 @@ export async function GET(request: NextRequest) {
       // ── Cutoff day: caps all calculations at today (current month) or relievingDate ──
       const cutoffDay = getEffectiveCutoffDay(p.year, p.month, daysInMonth, emp?.relievingDate);
 
-      // FULL PRECISION hourly rate — matching Excel (no rounding)
+      // CEILING hourly rate — always round UP to next whole number
       const perDayRate = p.monthlySalary / daysInMonth;
-      const hourlyRate = p.monthlySalary / (daysInMonth * shiftHrs);
+      const hourlyRate = Math.ceil(p.monthlySalary / (daysInMonth * shiftHrs));
 
       // Count Sundays ONLY up to the cutoff day (not the whole month)
       const sundays = countSundaysUpTo(p.year, p.month, cutoffDay);
@@ -223,7 +223,7 @@ export async function POST(request: NextRequest) {
     const totalWorkingDays = Math.max(0, cutoffDay - sundays - elapsedHolidays);
 
     // ─── LAXREE PAYROLL FORMULA (matching Excel Payroll Master) ───
-    // Hourly Rate = monthlySalary / (daysInMonth × shiftHours) — FULL PRECISION
+    // Hourly Rate = CEIL(monthlySalary / (daysInMonth × shiftHours))
     // Total Worked Hrs = sum of (totalHours - overtimeHours) for each day
     // OT Hours = sum of overtimeHours
     // Sunday Hrs = sundayCount × shiftHours
@@ -232,9 +232,9 @@ export async function POST(request: NextRequest) {
     // Gross = hourlyRate × Total Hrs — round only final amount
     // Net = Gross + Bonus + Incentive + Arrear - Total Deductions
 
-    // FULL PRECISION rates — no intermediate rounding
+    // CEILING hourly rate — always round UP to next whole number
     const perDayRate = employee.monthlySalary / daysInMonth;
-    const hourlyRate = employee.monthlySalary / (daysInMonth * employee.shiftHours);
+    const hourlyRate = Math.ceil(employee.monthlySalary / (daysInMonth * employee.shiftHours));
 
     // Get attendance records for the month
     const attendance = await db.attendance.findMany({
@@ -364,10 +364,10 @@ export async function POST(request: NextRequest) {
 
     const payrollData = {
       monthlySalary: employee.monthlySalary,
-      hourlyRate: Math.round(hourlyRate * 100) / 100, // Store rounded for DB
+      hourlyRate, // Already a whole number via Math.ceil
       totalWorkedHrs,
       otHours,
-      otRate: Math.round(hourlyRate * 100) / 100, // Store rounded for DB
+      otRate: hourlyRate, // Same as hourlyRate (already a whole number via ceil)
       otAmount: Math.round(otAmount * 100) / 100,
       sundayHrs: sundayWorkedHrs,
       sundayCount,

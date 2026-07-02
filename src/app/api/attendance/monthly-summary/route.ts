@@ -244,9 +244,9 @@ export async function GET(request: NextRequest) {
     // Total Hrs = Total Worked Hrs + OT + Sunday + Paid Leave
     // Gross Salary = hourlyRate × Total Hrs — round only the final amount
 
-    // FULL PRECISION hourly rate — NO intermediate rounding (matching Excel)
+    // CEILING hourly rate — always round UP to next whole number
     const perDayRate = employee.monthlySalary / daysInMonth;
-    const calculatedHourlyRate = employee.monthlySalary / (daysInMonth * employee.shiftHours);
+    const calculatedHourlyRate = Math.ceil(employee.monthlySalary / (daysInMonth * employee.shiftHours));
     const sundayCount = sundays;
     const sundayHrs = sundayCount * employee.shiftHours;
     const paidLeaveHrs = effectivePaidLeaves * employee.shiftHours;
@@ -265,7 +265,7 @@ export async function GET(request: NextRequest) {
         ...employee,
         firm: effectiveFirm,
         firmFullName,
-        hourlyRate: calculatedHourlyRate, // Full precision — frontend will format
+        hourlyRate: calculatedHourlyRate, // Whole number via Math.ceil
       },
       month,
       year,

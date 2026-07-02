@@ -176,3 +176,42 @@ Stage Summary:
 - API routes working (Prisma queries successful)
 - Database seeded successfully
 - GitHub Actions workflow updated to seed laxree-hrms.vercel.app
+
+---
+Task ID: hourlyrate-ceil-update
+Agent: Main Agent
+Task: Update HRMS hourly rate pricing logic — apply Math.ceil() globally so hourlyRate is always a whole number (ceiling). Apply to code + existing data. No data deletion, no schema changes. Do NOT push to GitHub/Vercel until user confirms.
+
+Work Log:
+- Analyzed all 13 files that reference hourlyRate/overtimeRate across the codebase
+- Updated 9 source files to use Math.ceil() instead of Math.round(x*100)/100:
+  * src/app/api/employees/route.ts (POST) — hourlyRate = Math.ceil(monthlySalary / (sh * daysInMonth))
+  * src/app/api/employees/[employeeId]/route.ts (PUT) — same formula
+  * src/app/api/payroll/generate-all/route.ts — hourlyRate = Math.ceil(), otRate = hourlyRate
+  * src/app/api/payroll/route.ts (GET + POST) — same formula for both handlers
+  * src/app/api/payroll/export/route.ts — Math.ceil(p.hourlyRate) in Excel export
+  * src/app/api/attendance/monthly-summary/route.ts — Math.ceil() for calculatedHourlyRate
+  * src/app/api/seed/route.ts — Math.ceil() for seed data
+  * src/app/api/overtime/route.ts — Math.ceil() for rate calculation
+  * src/app/api/ai-assistant/route.ts — Math.ceil() for display
+  * src/components/hrms/EmployeeManagement.tsx — calcHourlyRate, calcOTRate, display formatting
+  * src/components/hrms/PayrollAutomation.tsx — Math.ceil() for display
+- Updated existing data in production Neon DB (batch SQL):
+  * Employee table: 43 rows — hourlyRate and overtimeRate now CEIL'd (e.g. 74.07→75, 55.56→56, 222.22→223)
+  * Payroll table: 69 rows — hourlyRate, otRate, otAmount, sundayEarnings, grossSalary, netSalary recalculated with ceil'd rate
+  * SalaryHistory table: synced netSalary with Payroll
+  * Overtime table: 677 rows — rate and amount recalculated with ceil'd rate
+- Verification: 0 decimals in Employee hourlyRate/overtimeRate, 0 decimals in Payroll hourlyRate/otRate
+- Build successful (npx next build — no TypeScript errors)
+- NO data deleted, NO schema changes, NO attendance records touched
+- NOT pushed to GitHub/Vercel per user instruction — waiting for preview confirmation
+
+Stage Summary:
+- Math.ceil() applied globally in all code + existing data
+- All hourlyRate/overtimeRate values are now whole numbers (no decimals)
+- Examples of the change:
+  * Sandeep (EMP-018): 74.07 → 75
+  * Khushboo (EMP-007): 64.52 → 67
+  * Jitendra (EMP-427): 222.22 → 78 (salary was also updated to 21000 by HR)
+  * Narayan (EMP-426): 50.00 → 54 (salary was updated to 16000)
+- Code changes are local only — awaiting user's go-ahead to push to GitHub/Vercel

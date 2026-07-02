@@ -37,9 +37,9 @@ export async function POST(request: NextRequest) {
         const totalWorkingDays = Math.max(0, cutoffDay - sundays - elapsedHolidays);
 
         // ─── LAXREE PAYROLL FORMULA (matching Excel Payroll Master) ───
-        // FULL PRECISION hourly rate — no intermediate rounding
+        // CEILING hourly rate — always round UP to next whole number
         const perDayRate = emp.monthlySalary / daysInMonth;
-        const hourlyRate = emp.monthlySalary / (daysInMonth * emp.shiftHours);
+        const hourlyRate = Math.ceil(emp.monthlySalary / (daysInMonth * emp.shiftHours));
 
         const attendance = await db.attendance.findMany({
           where: { employeeId: emp.employeeId, date: { gte: startDate, lt: endDate } },
@@ -155,10 +155,10 @@ export async function POST(request: NextRequest) {
 
         const payrollData = {
           monthlySalary: emp.monthlySalary,
-          hourlyRate: Math.round(hourlyRate * 100) / 100, // Store rounded for DB
+          hourlyRate, // Already a whole number via Math.ceil
           totalWorkedHrs,
           otHours,
-          otRate: Math.round(hourlyRate * 100) / 100, // Store rounded for DB
+          otRate: hourlyRate, // Same as hourlyRate (already a whole number via ceil)
           otAmount: Math.round(otAmount * 100) / 100,
           sundayHrs: sundayWorkedHrs,
           sundayCount,

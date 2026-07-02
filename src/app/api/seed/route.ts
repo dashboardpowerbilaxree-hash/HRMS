@@ -107,9 +107,9 @@ export async function POST(request: NextRequest) {
     for (let idx = 0; idx < employees.length; idx++) {
       const emp = employees[idx];
       const hourlyRate = emp.salaryType === 'hourly'
-        ? Math.round((emp.monthlySalary / (31 * emp.shiftHours)) * 100) / 100
-        : Math.round((emp.dailyRate || emp.monthlySalary / 30) / emp.shiftHours * 100) / 100;
-      const overtimeRate = Math.round(hourlyRate * 100) / 100;
+        ? Math.ceil(emp.monthlySalary / (31 * emp.shiftHours))
+        : Math.ceil((emp.dailyRate || emp.monthlySalary / 30) / emp.shiftHours);
+      const overtimeRate = hourlyRate; // Same as hourlyRate (already a whole number via ceil)
 
       await db.employee.create({
         data: {

@@ -938,7 +938,7 @@ export function PayrollAutomation() {
                           {(p.totalWorkedHrs || p.totalWorkHours || 0) > 0 ? `${displayHHMM(p.totalWorkedHrs || p.totalWorkHours || 0)}h` : '—'}
                         </TableCell>
                         <TableCell className="hidden xl:table-cell text-sm font-mono whitespace-nowrap">
-                          {(p.hourlyRate || p.salaryPerHour || 0) > 0 ? `₹${(p.hourlyRate || p.salaryPerHour).toFixed(2)}` : '—'}
+                          {(p.hourlyRate || p.salaryPerHour || 0) > 0 ? `₹${Math.ceil(p.hourlyRate || p.salaryPerHour)}` : '—'}
                         </TableCell>
                         <TableCell className="hidden lg:table-cell text-sm whitespace-nowrap">
                           {(p.otHours || 0) > 0 ? (
