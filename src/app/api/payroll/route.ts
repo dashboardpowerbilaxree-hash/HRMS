@@ -60,9 +60,8 @@ export async function GET(request: NextRequest) {
       // ── Cutoff day: caps all calculations at today (current month) or relievingDate ──
       const cutoffDay = getEffectiveCutoffDay(p.year, p.month, daysInMonth, emp?.relievingDate);
 
-      // CEILING hourly rate — always round UP to next whole number
       const perDayRate = p.monthlySalary / daysInMonth;
-      const hourlyRate = Math.ceil(p.monthlySalary / (daysInMonth * shiftHrs));
+      const hourlyRate = Math.round((p.monthlySalary / (daysInMonth * shiftHrs)) * 100) / 100;
 
       // Count Sundays ONLY up to the cutoff day (not the whole month)
       const sundays = countSundaysUpTo(p.year, p.month, cutoffDay);
@@ -223,7 +222,7 @@ export async function POST(request: NextRequest) {
     const totalWorkingDays = Math.max(0, cutoffDay - sundays - elapsedHolidays);
 
     // ─── LAXREE PAYROLL FORMULA (matching Excel Payroll Master) ───
-    // Hourly Rate = CEIL(monthlySalary / (daysInMonth × shiftHours))
+    // Hourly Rate = monthlySalary / (daysInMonth × shiftHours) — 2 decimal precision
     // Total Worked Hrs = sum of (totalHours - overtimeHours) for each day
     // OT Hours = sum of overtimeHours
     // Sunday Hrs = sundayCount × shiftHours
@@ -232,9 +231,8 @@ export async function POST(request: NextRequest) {
     // Gross = hourlyRate × Total Hrs — round only final amount
     // Net = Gross + Bonus + Incentive + Arrear - Total Deductions
 
-    // CEILING hourly rate — always round UP to next whole number
     const perDayRate = employee.monthlySalary / daysInMonth;
-    const hourlyRate = Math.ceil(employee.monthlySalary / (daysInMonth * employee.shiftHours));
+    const hourlyRate = Math.round((employee.monthlySalary / (daysInMonth * employee.shiftHours)) * 100) / 100;
 
     // Get attendance records for the month
     const attendance = await db.attendance.findMany({
@@ -364,10 +362,10 @@ export async function POST(request: NextRequest) {
 
     const payrollData = {
       monthlySalary: employee.monthlySalary,
-      hourlyRate, // Already a whole number via Math.ceil
+      hourlyRate,
       totalWorkedHrs,
       otHours,
-      otRate: hourlyRate, // Same as hourlyRate (already a whole number via ceil)
+      otRate: hourlyRate,
       otAmount: Math.round(otAmount * 100) / 100,
       sundayHrs: sundayWorkedHrs,
       sundayCount,

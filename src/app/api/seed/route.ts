@@ -107,9 +107,9 @@ export async function POST(request: NextRequest) {
     for (let idx = 0; idx < employees.length; idx++) {
       const emp = employees[idx];
       const hourlyRate = emp.salaryType === 'hourly'
-        ? Math.ceil(emp.monthlySalary / (31 * emp.shiftHours))
-        : Math.ceil((emp.dailyRate || emp.monthlySalary / 30) / emp.shiftHours);
-      const overtimeRate = hourlyRate; // Same as hourlyRate (already a whole number via ceil)
+        ? Math.round((emp.monthlySalary / (31 * emp.shiftHours)) * 100) / 100
+        : Math.round(((emp.dailyRate || emp.monthlySalary / 30) / emp.shiftHours) * 100) / 100;
+      const overtimeRate = hourlyRate;
 
       await db.employee.create({
         data: {
@@ -252,7 +252,7 @@ export async function POST(request: NextRequest) {
             // Create OT record (1x normal rate)
             if (actualOT > 0) {
               const daysInMonth = new Date(year, month + 1, 0).getDate();
-              const normalHourlyRate = Math.ceil(emp.monthlySalary / (daysInMonth * emp.shiftHours));
+              const normalHourlyRate = Math.round((emp.monthlySalary / (daysInMonth * emp.shiftHours)) * 100) / 100;
               await db.overtime.create({
                 data: {
                   employeeId: emp.employeeId, date,

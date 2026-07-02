@@ -283,8 +283,7 @@ export async function GET(request: NextRequest) {
     const totalHrsInclSunday = formatMinutesToHHMM(totalWorkMinutes + totalSundayMinutes);
 
     // ─── Salary Calculation (matching Excel Payroll Master) ───
-    // CEILING hourly rate — always round UP to next whole number
-    const salaryHourlyRate = Math.ceil(employee.monthlySalary / (daysInMonth * employee.shiftHours));
+    const salaryHourlyRate = employee.monthlySalary / (daysInMonth * employee.shiftHours);
     const salaryPerDayRate = employee.monthlySalary / daysInMonth;
     const salarySundayHrs = sundays * employee.shiftHours;
     const salaryPaidLeaveHrs = effectivePaidLeaves * employee.shiftHours;
@@ -698,7 +697,7 @@ export async function GET(request: NextRequest) {
       ['Total Hours', round2(salaryTotalHrs), round2(salaryHourlyRate), round2(salaryGrossSalary)],
       [],
       ['Summary', '', '', ''],
-      ['Hourly Rate', '', '', `₹${salaryHourlyRate}`],
+      ['Hourly Rate', '', '', `₹${round2(salaryHourlyRate)}`],
       ['Per Day Rate', '', '', `₹${round2(salaryPerDayRate)}`],
       ['Gross Salary', '', '', `₹${round2(salaryGrossSalary).toLocaleString('en-IN')}`],
       ['Sundays Earned', `${sundays} × ${employee.shiftHours} = ${salarySundayHrs}h`, '', `₹${round2(salarySundayEarnings).toLocaleString('en-IN')}`],

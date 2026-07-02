@@ -514,7 +514,7 @@ ${empAttendance.map(a => {
 ${empPayroll ? `
 **Payroll for ${effectiveMonth}/${effectiveYear}:**
 - Monthly Salary: ₹${empPayroll.monthlySalary.toLocaleString('en-IN')}
-- Hourly Rate: ₹${Math.ceil(empPayroll.hourlyRate)}
+- Hourly Rate: ₹${empPayroll.hourlyRate}
 - Total Worked Hours: ${empPayroll.totalWorkedHrs.toFixed(2)}
 - OT Hours: ${empPayroll.otHours.toFixed(2)} | OT Amount: ₹${empPayroll.otAmount.toLocaleString('en-IN')}
 - Sunday Hours: ${empPayroll.sundayHrs.toFixed(2)}

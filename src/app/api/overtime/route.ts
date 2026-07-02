@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
     let rate = body.rate;
     if (!rate || rate === employee.overtimeRate) {
       const daysInMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
-      rate = Math.ceil(employee.monthlySalary / (daysInMonth * employee.shiftHours));
+      rate = Math.round((employee.monthlySalary / (daysInMonth * employee.shiftHours)) * 100) / 100;
     }
     const hours = body.hours || 0;
     const amount = hours * rate;

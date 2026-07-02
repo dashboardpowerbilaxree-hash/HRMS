@@ -235,7 +235,7 @@ export async function GET(request: NextRequest) {
     const unpaidLeaves = leaves.filter(l => l.type === 'unpaid' || l.type === 'UL' || l.type === 'LOP').reduce((sum, l) => sum + l.days, 0);
 
     // ─── LAXREE SALARY CALCULATION — matching Excel Payroll Master ───
-    // Hourly Rate = monthlySalary / (daysInMonth × shiftHours) — FULL PRECISION, NO rounding
+    // Hourly Rate = monthlySalary / (daysInMonth × shiftHours) — 2 decimal precision
     // Total Worked Hrs = sum of (totalHours - overtimeHours) for each working day
     //   This correctly deducts late arrivals and early departures
     // Sunday Hours = sundayCount × shiftHours (paid weekly off)
@@ -244,9 +244,9 @@ export async function GET(request: NextRequest) {
     // Total Hrs = Total Worked Hrs + OT + Sunday + Paid Leave
     // Gross Salary = hourlyRate × Total Hrs — round only the final amount
 
-    // CEILING hourly rate — always round UP to next whole number
+    // Hourly Rate = monthlySalary / (daysInMonth × shiftHours) — 2 decimal precision
     const perDayRate = employee.monthlySalary / daysInMonth;
-    const calculatedHourlyRate = Math.ceil(employee.monthlySalary / (daysInMonth * employee.shiftHours));
+    const calculatedHourlyRate = Math.round((employee.monthlySalary / (daysInMonth * employee.shiftHours)) * 100) / 100;
     const sundayCount = sundays;
     const sundayHrs = sundayCount * employee.shiftHours;
     const paidLeaveHrs = effectivePaidLeaves * employee.shiftHours;
@@ -265,7 +265,7 @@ export async function GET(request: NextRequest) {
         ...employee,
         firm: effectiveFirm,
         firmFullName,
-        hourlyRate: calculatedHourlyRate, // Whole number via Math.ceil
+        hourlyRate: calculatedHourlyRate,
       },
       month,
       year,

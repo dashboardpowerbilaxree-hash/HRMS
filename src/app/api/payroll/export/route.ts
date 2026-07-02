@@ -240,7 +240,7 @@ export async function GET(request: NextRequest) {
         firmDisplay,
         p.employee?.designation || '',
         (p.totalWorkedHrs || 0) > 0 ? parseFloat(formatHours(p.totalWorkedHrs || 0)) : 0,
-        (p.hourlyRate || 0) > 0 ? Math.ceil(p.hourlyRate) : 0,
+        (p.hourlyRate || 0) > 0 ? Math.round((p.hourlyRate) * 100) / 100 : 0,
         parseFloat(formatHours(p.otHours || 0)),
         p.otAmount || 0,
         parseFloat(formatHours(p.sundayHrs || 0)),
