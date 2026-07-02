@@ -193,7 +193,7 @@ export async function GET(request: NextRequest) {
           if (overtimeHours > 0) {
             // OT at normal hourly rate (1x), NOT 1.5x
             const daysInMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
-            const normalHourlyRate = Math.round((employee.monthlySalary / (daysInMonth * employee.shiftHours)) * 100) / 100;
+            const normalHourlyRate = Math.ceil(employee.monthlySalary / (daysInMonth * employee.shiftHours));
             const otAmount = Math.round(overtimeHours * normalHourlyRate * 100) / 100;
             await db.overtime.upsert({
               where: { id: `ot-sheet-${employeeId}-${d.toISOString().split('T')[0]}` },
@@ -296,7 +296,7 @@ export async function GET(request: NextRequest) {
           if (overtimeHours > 0) {
             // OT at normal hourly rate (1x), NOT 1.5x
             const daysInMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
-            const normalHourlyRate = Math.round((employee.monthlySalary / (daysInMonth * employee.shiftHours)) * 100) / 100;
+            const normalHourlyRate = Math.ceil(employee.monthlySalary / (daysInMonth * employee.shiftHours));
             const otAmount = Math.round(overtimeHours * normalHourlyRate * 100) / 100;
             await db.overtime.upsert({
               where: { id: `ot-sheet-${employeeId}-${d.toISOString().split('T')[0]}` },
@@ -510,7 +510,7 @@ export async function POST(request: NextRequest) {
           if (finalOvertimeHours > 0) {
             // OT at normal hourly rate (1x), NOT 1.5x
             const daysInMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
-            const normalHourlyRate = Math.round((employee.monthlySalary / (daysInMonth * employee.shiftHours)) * 100) / 100;
+            const normalHourlyRate = Math.ceil(employee.monthlySalary / (daysInMonth * employee.shiftHours));
             const otAmount = Math.round(finalOvertimeHours * normalHourlyRate * 100) / 100;
             await db.overtime.upsert({
               where: { id: `ot-sheet-${employeeId}-${d.toISOString().split('T')[0]}` },

@@ -240,9 +240,9 @@ export async function POST(request: NextRequest) {
 
     // Create or update overtime record if applicable (OT at normal hourly rate, NOT 1.5x)
     if (overtimeHours > 0) {
-      // Calculate normal hourly rate: monthlySalary / (daysInMonth × shiftHours) — full precision
+      // Calculate normal hourly rate: CEIL(monthlySalary / (daysInMonth × shiftHours))
       const daysInMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
-      const normalHourlyRate = employee.monthlySalary / (daysInMonth * employee.shiftHours);
+      const normalHourlyRate = Math.ceil(employee.monthlySalary / (daysInMonth * employee.shiftHours));
       const otAmount = Math.round(overtimeHours * normalHourlyRate * 100) / 100;
       await db.overtime.upsert({
         where: { id: `ot-${record.id}` },

@@ -252,7 +252,7 @@ export async function POST(request: NextRequest) {
             // Create OT record (1x normal rate)
             if (actualOT > 0) {
               const daysInMonth = new Date(year, month + 1, 0).getDate();
-              const normalHourlyRate = Math.round((emp.monthlySalary / (daysInMonth * emp.shiftHours)) * 100) / 100;
+              const normalHourlyRate = Math.ceil(emp.monthlySalary / (daysInMonth * emp.shiftHours));
               await db.overtime.create({
                 data: {
                   employeeId: emp.employeeId, date,
