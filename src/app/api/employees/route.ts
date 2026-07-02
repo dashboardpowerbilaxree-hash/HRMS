@@ -102,6 +102,14 @@ export async function POST(request: NextRequest) {
     totalWorkingDays -= holidays.length;
     if (totalWorkingDays < 1) totalWorkingDays = 26; // fallback
 
+    // Helper: parse date string 'YYYY-MM-DD' to Date at midnight local time (timezone-safe)
+    const parseDateSafe = (dateStr: string | undefined | null): Date | null | undefined => {
+      if (!dateStr) return dateStr === null ? null : undefined;
+      if (typeof dateStr === 'string' && dateStr.includes('T')) return new Date(dateStr);
+      if (typeof dateStr === 'string') return new Date(dateStr + 'T00:00:00');
+      return undefined;
+    };
+
     const hourlyRate = Math.round((monthlySalary / (sh * daysInMonth)) * 100) / 100;
     // OT at normal hourly rate (1x), NOT 1.5x — user explicitly confirmed
     const overtimeRate = hourlyRate;
@@ -129,7 +137,9 @@ export async function POST(request: NextRequest) {
           shiftHours: sh || existing.shiftHours,
           designation: body.designation ?? existing.designation,
           gender: body.gender ?? existing.gender,
-          dateOfBirth: body.dateOfBirth ? new Date(body.dateOfBirth) : existing.dateOfBirth,
+          dateOfBirth: body.dateOfBirth ? parseDateSafe(body.dateOfBirth) : undefined,
+          joiningDate: body.joiningDate ? parseDateSafe(body.joiningDate) : undefined,
+          relievingDate: body.relievingDate ? parseDateSafe(body.relievingDate) : undefined,
           department: firm,
           address: body.address ?? existing.address,
           bankName: body.bankName ?? existing.bankName,
@@ -166,9 +176,10 @@ export async function POST(request: NextRequest) {
         shiftHours: sh,
         designation: body.designation || null,
         gender: body.gender || null,
-        dateOfBirth: body.dateOfBirth ? new Date(body.dateOfBirth) : null,
+        dateOfBirth: parseDateSafe(body.dateOfBirth),
         department: firm,
-        joiningDate: body.joiningDate ? new Date(body.joiningDate) : new Date(),
+        joiningDate: body.joiningDate ? parseDateSafe(body.joiningDate)! : new Date(),
+        relievingDate: parseDateSafe(body.relievingDate),
         address: body.address || null,
         bankName: body.bankName || null,
         bankAccount: body.bankAccount || null,

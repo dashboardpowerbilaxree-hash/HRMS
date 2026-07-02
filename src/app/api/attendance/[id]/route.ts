@@ -25,6 +25,18 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ error: 'Employee not found' }, { status: 404 });
     }
 
+    // Block attendance updates for relieved/inactive employees after their relieving date
+    if (employee.relievingDate) {
+      const attDate = new Date(existing.date);
+      const relDate = new Date(employee.relievingDate);
+      if (attDate > relDate) {
+        return NextResponse.json({ error: `Cannot update attendance after relieving date (${relDate.toISOString().split('T')[0]})` }, { status: 400 });
+      }
+    }
+    if (employee.status === 'No' || employee.status === 'inactive') {
+      return NextResponse.json({ error: 'Cannot update attendance for inactive/relieved employee' }, { status: 400 });
+    }
+
     // Use provided values, or fall back to existing values
     const finalCheckIn = checkIn !== undefined ? checkIn : existing.checkIn;
     const finalCheckOut = checkOut !== undefined ? checkOut : existing.checkOut;

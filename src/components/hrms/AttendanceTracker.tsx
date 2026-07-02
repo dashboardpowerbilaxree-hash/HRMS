@@ -349,18 +349,22 @@ export function AttendanceTracker() {
       return;
     }
     try {
-      await fetch('/api/attendance', {
+      const res = await fetch('/api/attendance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form),
       });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `Failed to record attendance`);
+      }
       toast.success('Attendance recorded successfully');
       setOpen(false);
       setForm({ employeeId: '', date: '', checkIn: '', checkOut: '' });
       setEmployeeSearch('');
       loadData();
-    } catch {
-      toast.error('Failed to record attendance');
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to record attendance');
     }
   };
 

@@ -88,6 +88,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Employee not found' }, { status: 404 });
     }
 
+    // Block attendance for relieved/inactive employees after their relieving date
+    if (employee.relievingDate) {
+      const attDate = new Date(date + 'T00:00:00');
+      const relDate = new Date(employee.relievingDate);
+      if (attDate > relDate) {
+        return NextResponse.json({ error: `Cannot mark attendance after relieving date (${relDate.toISOString().split('T')[0]})` }, { status: 400 });
+      }
+    }
+    if (employee.status === 'No' || employee.status === 'inactive') {
+      return NextResponse.json({ error: 'Cannot mark attendance for inactive/relieved employee' }, { status: 400 });
+    }
+
     const d = new Date(date);
     const dayOfWeek = d.getDay();
 

@@ -55,6 +55,16 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     // OT at normal hourly rate (1x), NOT 1.5x — user explicitly confirmed
     const overtimeRate = hourlyRate;
 
+    // Helper: parse date string 'YYYY-MM-DD' to Date at midnight local time (timezone-safe)
+    // new Date('YYYY-MM-DD') interprets as UTC midnight, which shifts in non-UTC timezones
+    // Adding 'T00:00:00' forces local midnight interpretation
+    const parseDateSafe = (dateStr: string | undefined | null): Date | undefined => {
+      if (!dateStr) return undefined;
+      // If already an ISO string with time, use as-is; otherwise append T00:00:00 for local midnight
+      if (dateStr.includes('T')) return new Date(dateStr);
+      return new Date(dateStr + 'T00:00:00');
+    };
+
     const employee = await db.employee.update({
       where: { employeeId },
       data: {
@@ -74,7 +84,9 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         shiftHours: sh,
         designation: body.designation,
         gender: body.gender,
-        dateOfBirth: body.dateOfBirth ? new Date(body.dateOfBirth) : undefined,
+        dateOfBirth: parseDateSafe(body.dateOfBirth),
+        joiningDate: parseDateSafe(body.joiningDate),
+        relievingDate: parseDateSafe(body.relievingDate),
         department: body.firm || body.department,
         address: body.address,
         bankName: body.bankName,

@@ -1,0 +1,1168 @@
+     1→'use client';
+     2→
+     3→import { useEffect, useState, useCallback, useRef } from 'react';
+     4→import { motion } from 'framer-motion';
+     5→import {
+     6→  Plus, Search, Edit, Trash2, Eye, Download,
+     7→  Users, Building2, MapPin, Filter, Clock, IndianRupee,
+     8→  Upload, FileSpreadsheet, AlertCircle, CheckCircle2, Loader2,
+     9→} from 'lucide-react';
+    10→import { Card, CardContent } from '@/components/ui/card';
+    11→import { Button } from '@/components/ui/button';
+    12→import { Input } from '@/components/ui/input';
+    13→import { Label } from '@/components/ui/label';
+    14→import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+    15→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+    16→import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+    17→import { ScrollArea } from '@/components/ui/scroll-area';
+    18→import { Badge } from '@/components/ui/badge';
+    19→import { useHRMSStore } from '@/lib/store';
+    20→import { toast } from 'sonner';
+    21→import * as XLSX from 'xlsx';
+    22→
+    23→// ── Firm badge class map ──
+    24→const FIRM_BADGE_CLASS: Record<string, string> = {
+    25→  LAPL: 'firm-badge-lapl',
+    26→  LRSL: 'firm-badge-lrsl',
+    27→  SI: 'firm-badge-si',
+    28→  SDF: 'firm-badge-sdf',
+    29→  Roofing: 'firm-badge-roofing',
+    30→};
+    31→
+    32→const FIRMS = ['LAPL', 'LRSL', 'SI', 'SDF'];
+    33→const LOCATIONS = ['Ajmer', 'Gurgaon', 'Palra Warehouse', 'Jaipur', 'Roofing Factory'];
+    34→const EMPLOYMENT_TYPES = ['Full Time', 'Part Time'];
+    35→// UI displays capitalized, but API stores lowercase
+    36→const SALARY_TYPES = ['Hourly', 'Daily'];
+    37→
+    38→// ── Employee type matching Prisma schema ──
+    39→interface Employee {
+    40→  id: string;
+    41→  employeeId: string;
+    42→  fullName: string;
+    43→  mobile: string | null;
+    44→  email: string | null;
+    45→  department: string;
+    46→  firm: string;
+    47→  location: string;
+    48→  designation: string;
+    49→  gender: string | null;
+    50→  dateOfBirth: string | null;
+    51→  joiningDate: string;
+    52→  salaryType: string;
+    53→  basicSalary: number;
+    54→  monthlySalary: number;
+    55→  dailyRate: number;
+    56→  hourlyRate: number;
+    57→  overtimeRate: number;
+    58→  shiftStart: string;
+    59→  shiftEnd: string;
+    60→  shiftHours: number;
+    61→  employmentType: string;
+    62→  status: string;
+    63→  panNumber: string | null;
+    64→  aadhaarNumber: string | null;
+    65→  pfNumber: string | null;
+    66→  esiNumber: string | null;
+    67→  bankName: string | null;
+    68→  bankAccount: string | null;
+    69→  bankIfsc: string | null;
+    70→  address: string | null;
+    71→  reportingManager: string | null;
+    72→  emergencyContact: string | null;
+    73→}
+    74→
+    75→// ── Import row type ──
+    76→interface ImportRow {
+    77→  empCode: number;
+    78→  fullName: string;
+    79→  firm: string;
+    80→  location: string;
+    81→  salaryType: string;
+    82→  monthlySalary: number;
+    83→  dailyRate: number;
+    84→  employmentType: string;
+    85→  active: string;
+    86→  shiftStart: string;
+    87→  shiftEnd: string;
+    88→  shiftHours: number;
+    89→  employeeId: string;
+    90→  hourlyRate: number;
+    91→  overtimeRate: number;
+    92→  _status?: 'pending' | 'success' | 'error';
+    93→  _error?: string;
+    94→}
+    95→
+    96→const emptyForm = {
+    97→  employeeId: '',
+    98→  fullName: '',
+    99→  mobile: '',
+   100→  email: '',
+   101→  department: '',
+   102→  location: 'Ajmer',
+   103→  designation: '',
+   104→  gender: '',
+   105→  dateOfBirth: '',
+   106→  joiningDate: '',
+   107→  salaryType: 'Hourly',
+   108→  basicSalary: 0,
+   109→  shiftStart: '10:00',
+   110→  shiftEnd: '19:00',
+   111→  shiftHours: 9,
+   112→  employmentType: 'Full Time',
+   113→  status: 'Yes',
+   114→  address: '',
+   115→  bankName: '',
+   116→  bankAccount: '',
+   117→  bankIfsc: '',
+   118→  panNumber: '',
+   119→  aadhaarNumber: '',
+   120→  pfNumber: '',
+   121→  esiNumber: '',
+   122→  reportingManager: '',
+   123→  emergencyContact: '',
+   124→};
+   125→
+   126→/** Capitalize first letter for salaryType display in UI */
+   127→function capitalizeSalaryType(val: string | null | undefined): string {
+   128→  if (!val) return 'Hourly';
+   129→  const lower = val.toLowerCase();
+   130→  if (lower === 'hourly') return 'Hourly';
+   131→  if (lower === 'daily') return 'Daily';
+   132→  return val.charAt(0).toUpperCase() + val.slice(1).toLowerCase();
+   133→}
+   134→
+   135→/** Map DB status to form status ('Yes'/'No') */
+   136→function normalizeStatus(status: string | null | undefined): string {
+   137→  if (!status) return 'Yes';
+   138→  const s = status.toLowerCase();
+   139→  if (s === 'yes' || s === 'active') return 'Yes';
+   140→  if (s === 'no' || s === 'inactive') return 'No';
+   141→  return status;
+   142→}
+   143→
+   144→/** Calculate hourlyRate matching the API logic: monthlySalary / (shiftHours × daysInMonth)
+   145→ *  daysInMonth = total calendar days (28, 29, 30, or 31) — NOT working days
+   146→ *  Returns 2 decimal precision.
+   147→ *  31 days × 9 hrs = 279 → ₹20,000/279 = ₹71.68
+   148→ *  30 days × 9 hrs = 270 → ₹20,000/270 = ₹74.07
+   149→ *  29 days × 9 hrs = 261 → ₹20,000/261 = ₹76.63
+   150→ *  28 days × 9 hrs = 252 → ₹20,000/252 = ₹79.37
+   151→ */
+   152→function calcHourlyRate(salaryType: string, monthlySalary: number, shiftHours: number, dailyRate: number): number {
+   153→  const sh = shiftHours || 9;
+   154→  const now = new Date();
+   155→  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+   156→  if (daysInMonth < 1 || sh <= 0) return 0;
+   157→  return Math.round((monthlySalary / (sh * daysInMonth)) * 100) / 100;
+   158→}
+   159→
+   160→/** Calculate overtimeRate — normal hourly rate (1x), NOT 1.5x */
+   161→function calcOvertimeRate(hourlyRate: number): number {
+   162→  return hourlyRate;
+   163→}
+   164→
+   165→export function EmployeeManagement() {
+   166→  const [employees, setEmployees] = useState<Employee[]>([]);
+   167→  const [loading, setLoading] = useState(true);
+   168→  const [search, setSearch] = useState('');
+   169→  const [filterFirm, setFilterFirm] = useState('all');
+   170→  const [filterLocation, setFilterLocation] = useState('all');
+   171→  const [filterStatus, setFilterStatus] = useState('all');
+   172→  const [filterEmpType, setFilterEmpType] = useState('all');
+   173→  const [filterSalaryType, setFilterSalaryType] = useState('all');
+   174→  const [form, setForm] = useState(emptyForm);
+   175→  const [editId, setEditId] = useState<string | null>(null);
+   176→  const [open, setOpen] = useState(false);
+   177→  const [nextEmpCode, setNextEmpCode] = useState<string>('');
+   178→  const { setSelectedEmployeeId, selectedFirm } = useHRMSStore();
+   179→
+   180→  // ── Import state ──
+   181→  const [importOpen, setImportOpen] = useState(false);
+   182→  const [importFile, setImportFile] = useState<File | null>(null);
+   183→  const [importPreview, setImportPreview] = useState<ImportRow[]>([]);
+   184→  const [importing, setImporting] = useState(false);
+   185→  const fileInputRef = useRef<HTMLInputElement>(null);
+   186→
+   187→  // ── Load employees ──
+   188→  const loadEmployees = useCallback(async () => {
+   189→    setLoading(true);
+   190→    try {
+   191→      const params = new URLSearchParams();
+   192→      if (search) params.set('search', search);
+   193→      const firmFilter = filterFirm !== 'all' ? filterFirm : (selectedFirm && selectedFirm !== '__all__' ? selectedFirm : '');
+   194→      if (firmFilter) params.set('firm', firmFilter);
+   195→      if (filterLocation !== 'all') params.set('location', filterLocation);
+   196→      if (filterStatus !== 'all') params.set('status', filterStatus === 'Active' ? 'Yes' : 'No');
+   197→      if (filterSalaryType !== 'all') params.set('salaryType', filterSalaryType === 'Hourly' ? 'hourly' : 'daily');
+   198→      const res = await fetch(`/api/employees?${params}`);
+   199→      const data = await res.json();
+   200→      setEmployees(Array.isArray(data) ? data : []);
+   201→    } catch {
+   202→      toast.error('Failed to load employees');
+   203→    }
+   204→    setLoading(false);
+   205→  }, [search, filterFirm, filterLocation, filterStatus, filterSalaryType, selectedFirm]);
+   206→
+   207→  useEffect(() => { loadEmployees(); }, [loadEmployees]);
+   208→
+   209→  // ── Auto-calculate OT Rate (1x normal rate, NOT 1.5x) ──
+   210→  // Hourly Rate = monthlySalary / (daysInMonth × shiftHours)
+   211→  // daysInMonth = total calendar days (28/29/30/31), NOT working days
+   212→  const calcOTRate = (basicSalary: number, shiftHours: number) => {
+   213→    const sh = shiftHours || 9;
+   214→    const now = new Date();
+   215→    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+   216→    if (daysInMonth < 1 || sh <= 0) return 0;
+   217→    return Math.ceil(basicSalary / (sh * daysInMonth));
+   218→  };
+   219→
+   220→  // ── Compute next employee code from loaded employees ──
+   221→  const computeNextCode = useCallback(() => {
+   222→    if (employees.length === 0) {
+   223→      setNextEmpCode('EMP-001');
+   224→      return;
+   225→    }
+   226→    const codes = employees.map(e => parseInt(e.employeeId.replace('EMP-', ''))).filter(n => !isNaN(n));
+   227→    const maxCode = codes.length > 0 ? Math.max(...codes) : 0;
+   228→    const nextNum = maxCode + 1;
+   229→    setNextEmpCode(nextNum >= 100 ? `EMP-${nextNum}` : `EMP-${String(nextNum).padStart(3, '0')}`);
+   230→  }, [employees]);
+   231→
+   232→  // ── Handle form field change ──
+   233→  const handleFormChange = (field: string, value: any) => {
+   234→    const updated = { ...form, [field]: value };
+   235→    // Auto-calculate shiftHours when shiftStart or shiftEnd changes
+   236→    if (field === 'shiftStart' || field === 'shiftEnd') {
+   237→      const start = field === 'shiftStart' ? value : updated.shiftStart;
+   238→      const end = field === 'shiftEnd' ? value : updated.shiftEnd;
+   239→      if (start && end) {
+   240→        const [sH, sM] = start.split(':').map(Number);
+   241→        const [eH, eM] = end.split(':').map(Number);
+   242→        const calculated = ((eH * 60 + eM) - (sH * 60 + sM)) / 60;
+   243→        if (calculated > 0) {
+   244→          (updated as any).shiftHours = calculated;
+   245→        }
+   246→      }
+   247→    }
+   248→    if (field === 'basicSalary' || field === 'shiftHours') {
+   249→      (updated as any).overtimeRate = calcOTRate(
+   250→        field === 'basicSalary' ? Number(value) : updated.basicSalary,
+   251→        field === 'shiftHours' ? Number(value) : updated.shiftHours
+   252→      );
+   253→    }
+   254→    setForm(updated);
+   255→  };
+   256→
+   257→  // ── Submit ──
+   258→  const handleSubmit = async () => {
+   259→    if (!form.fullName || !form.department) {
+   260→      toast.error('Please fill required fields (Name & Firm)');
+   261→      return;
+   262→    }
+   263→    try {
+   264→      // Convert salaryType to lowercase for API, keep form values as-is for UI
+   265→      const payload = {
+   266→        ...form,
+   267→        firm: form.department, // API accepts both firm and department
+   268→        salaryType: form.salaryType.toLowerCase(), // API expects lowercase
+   269→        monthlySalary: Number(form.basicSalary), // API accepts both monthlySalary and basicSalary
+   270→        basicSalary: Number(form.basicSalary),
+   271→        shiftHours: Number(form.shiftHours),
+   272→      };
+   273→      if (editId) {
+   274→        const res = await fetch(`/api/employees/${editId}`, {
+   275→          method: 'PUT',
+   276→          headers: { 'Content-Type': 'application/json' },
+   277→          body: JSON.stringify(payload),
+   278→        });
+   279→        if (!res.ok) {
+   280→          const err = await res.json().catch(() => ({}));
+   281→          throw new Error(err.error || 'Update failed');
+   282→        }
+   283→        toast.success('Employee updated successfully');
+   284→      } else {
+   285→        const res = await fetch('/api/employees', {
+   286→          method: 'POST',
+   287→          headers: { 'Content-Type': 'application/json' },
+   288→          body: JSON.stringify(payload),
+   289→        });
+   290→        if (!res.ok) {
+   291→          const err = await res.json().catch(() => ({}));
+   292→          throw new Error(err.error || 'Add failed');
+   293→        }
+   294→        toast.success('Employee added successfully');
+   295→      }
+   296→      setForm(emptyForm);
+   297→      setEditId(null);
+   298→      setOpen(false);
+   299→      loadEmployees();
+   300→    } catch (e: any) {
+   301→      toast.error(e.message || 'Failed to save employee');
+   302→    }
+   303→  };
+   304→
+   305→  // ── Edit ──
+   306→  const handleEdit = (emp: Employee) => {
+   307→    setEditId(emp.employeeId);
+   308→    setForm({
+   309→      employeeId: emp.employeeId,
+   310→      fullName: emp.fullName || '',
+   311→      mobile: emp.mobile || '',
+   312→      email: emp.email || '',
+   313→      department: emp.department || emp.firm || '',
+   314→      location: emp.location || 'Ajmer',
+   315→      designation: emp.designation || '',
+   316→      gender: emp.gender || '',
+   317→      dateOfBirth: emp.dateOfBirth?.split('T')[0] || '',
+   318→      joiningDate: emp.joiningDate?.split('T')[0] || '',
+   319→      salaryType: capitalizeSalaryType(emp.salaryType), // Capitalize for UI Select match
+   320→      basicSalary: emp.monthlySalary || emp.basicSalary || 0,
+   321→      shiftStart: emp.shiftStart || '10:00',
+   322→      shiftEnd: emp.shiftEnd || '19:00',
+   323→      shiftHours: emp.shiftHours || 9,
+   324→      employmentType: emp.employmentType || 'Full Time',
+   325→      status: normalizeStatus(emp.status), // Map to Yes/No for UI Select match
+   326→      address: emp.address || '',
+   327→      bankName: emp.bankName || '',
+   328→      bankAccount: emp.bankAccount || '',
+   329→      bankIfsc: emp.bankIfsc || '',
+   330→      panNumber: emp.panNumber || '',
+   331→      aadhaarNumber: emp.aadhaarNumber || '',
+   332→      pfNumber: emp.pfNumber || '',
+   333→      esiNumber: emp.esiNumber || '',
+   334→      reportingManager: emp.reportingManager || '',
+   335→      emergencyContact: emp.emergencyContact || '',
+   336→    });
+   337→    setOpen(true);
+   338→  };
+   339→
+   340→  // ── Delete (hard delete with confirmation) ──
+   341→  const handleDelete = async (employeeId: string, employeeName?: string) => {
+   342→    // Confirm with the user before permanently deleting
+   343→    const confirmMsg = `Are you sure you want to permanently delete ${employeeName || employeeId}?\n\nThis will remove:\n  - The employee record\n  - All attendance records\n  - All payroll records\n  - All overtime records\n  - All leave records\n  - All salary history\n\nThis action CANNOT be undone.`;
+   344→    if (!window.confirm(confirmMsg)) {
+   345→      return;
+   346→    }
+   347→    try {
+   348→      const resp = await fetch(`/api/employees/${employeeId}?hard=true`, { method: 'DELETE' });
+   349→      if (!resp.ok) {
+   350→        const errData = await resp.json().catch(() => ({}));
+   351→        throw new Error(errData.error || `HTTP ${resp.status}`);
+   352→      }
+   353→      toast.success('Employee permanently deleted');
+   354→      loadEmployees();
+   355→    } catch (err: any) {
+   356→      console.error('Delete failed:', err);
+   357→      toast.error(err.message || 'Failed to delete employee');
+   358→    }
+   359→  };
+   360→
+   361→  // ── Import: parse Excel file ──
+   362→  const handleImportFile = async (file: File) => {
+   363→    setImportFile(file);
+   364→    try {
+   365→      const arrayBuffer = await file.arrayBuffer();
+   366→      const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+   367→      const sheetName = workbook.SheetNames[0];
+   368→      const worksheet = workbook.Sheets[sheetName];
+   369→      const jsonData = XLSX.utils.sheet_to_json<Record<string, any>>(worksheet, { defval: '' });
+   370→
+   371→      const rows: ImportRow[] = jsonData.map((row) => {
+   372→        const empCode = Number(row['Emp Code'] || row['EmpCode'] || row['emp_code'] || 0);
+   373→        const fullName = String(row['Full Name'] || row['FullName'] || row['full_name'] || '').trim();
+   374→        const firm = String(row['Firm'] || row['firm'] || '').trim();
+   375→        const location = String(row['Location'] || row['location'] || '').trim();
+   376→        const salaryTypeRaw = String(row['Salary Type'] || row['SalaryType'] || row['salary_type'] || 'Hourly').trim();
+   377→        const monthlySalary = Number(row['Monthly Salary'] || row['MonthlySalary'] || row['monthly_salary'] || 0);
+   378→        const dailyRate = Number(row['Daily Rate'] || row['DailyRate'] || row['daily_rate'] || 0);
+   379→        const employmentType = String(row['Employment Type'] || row['EmploymentType'] || row['employment_type'] || 'Full Time').trim();
+   380→        const active = String(row['Active'] || row['active'] || 'Yes').trim();
+   381→        const shiftStart = String(row['Shift Start'] || row['ShiftStart'] || row['shift_start'] || '10:00').trim();
+   382→        const shiftEnd = String(row['Shift End'] || row['ShiftEnd'] || row['shift_end'] || '19:00').trim();
+   383→
+   384→        // Calculate shift hours from start/end
+   385→        let shiftHours = Number(row['Shift Hours'] || row['ShiftHours'] || row['shift_hours'] || 0);
+   386→        if (!shiftHours && shiftStart && shiftEnd) {
+   387→          const [sh, sm] = shiftStart.split(':').map(Number);
+   388→          const [eh, em] = shiftEnd.split(':').map(Number);
+   389→          if (!isNaN(sh) && !isNaN(sm) && !isNaN(eh) && !isNaN(em)) {
+   390→            shiftHours = (eh + em / 60) - (sh + sm / 60);
+   391→          }
+   392→        }
+   393→        if (!shiftHours || isNaN(shiftHours)) shiftHours = 9;
+   394→
+   395→        // Format employee ID: EMP-{code} with padding based on code magnitude
+   396→        const employeeId = empCode >= 100
+   397→          ? `EMP-${empCode}`
+   398→          : `EMP-${String(empCode).padStart(3, '0')}`;
+   399→
+   400→        // Normalize salaryType for calculations
+   401→        const salaryTypeLower = salaryTypeRaw.toLowerCase();
+   402→
+   403→        // Calculate hourlyRate and overtimeRate
+   404→        const hourlyRate = calcHourlyRate(salaryTypeLower, monthlySalary, shiftHours, dailyRate);
+   405→        const overtimeRate = calcOvertimeRate(hourlyRate);
+   406→
+   407→        return {
+   408→          empCode,
+   409→          fullName,
+   410→          firm,
+   411→          location,
+   412→          salaryType: salaryTypeRaw,
+   413→          monthlySalary,
+   414→          dailyRate,
+   415→          employmentType,
+   416→          active,
+   417→          shiftStart,
+   418→          shiftEnd,
+   419→          shiftHours: Math.round(shiftHours * 100) / 100,
+   420→          employeeId,
+   421→          hourlyRate,
+   422→          overtimeRate,
+   423→          _status: 'pending' as const,
+   424→        };
+   425→      }).filter((r) => r.empCode > 0 && r.fullName);
+   426→
+   427→      setImportPreview(rows);
+   428→    } catch (e: any) {
+   429→      toast.error('Failed to parse Excel file: ' + (e.message || 'Unknown error'));
+   430→      setImportPreview([]);
+   431→    }
+   432→  };
+   433→
+   434→  // ── Import: process rows ──
+   435→  const handleImportProcess = async () => {
+   436→    if (importPreview.length === 0) return;
+   437→    setImporting(true);
+   438→
+   439→    // First, load existing employees to check for updates
+   440→    let existingEmployees: Employee[] = [];
+   441→    try {
+   442→      const res = await fetch('/api/employees');
+   443→      const data = await res.json();
+   444→      if (Array.isArray(data)) existingEmployees = data;
+   445→    } catch { /* ignore */ }
+   446→
+   447→    const existingMap = new Map<string, Employee>();
+   448→    existingEmployees.forEach((e) => existingMap.set(e.employeeId, e));
+   449→
+   450→    const updatedRows = [...importPreview];
+   451→    let successCount = 0;
+   452→    let errorCount = 0;
+   453→
+   454→    for (let i = 0; i < updatedRows.length; i++) {
+   455→      const row = updatedRows[i];
+   456→      const existing = existingMap.get(row.employeeId);
+   457→
+   458→      const payload = {
+   459→        employeeId: row.employeeId,
+   460→        fullName: row.fullName,
+   461→        firm: row.firm,
+   462→        location: row.location || 'Ajmer',
+   463→        salaryType: row.salaryType.toLowerCase(),
+   464→        monthlySalary: row.monthlySalary,
+   465→        dailyRate: row.dailyRate || Math.round(row.monthlySalary / 30),
+   466→        hourlyRate: row.hourlyRate,
+   467→        overtimeRate: row.overtimeRate,
+   468→        employmentType: row.employmentType || 'Full Time',
+   469→        shiftStart: row.shiftStart || '10:00',
+   470→        shiftEnd: row.shiftEnd || '19:00',
+   471→        shiftHours: row.shiftHours,
+   472→        designation: '',
+   473→        department: row.firm,
+   474→        status: row.active === 'No' ? 'No' : 'Yes',
+   475→      };
+   476→
+   477→      try {
+   478→        if (existing) {
+   479→          // Update existing employee
+   480→          const res = await fetch(`/api/employees/${row.employeeId}`, {
+   481→            method: 'PUT',
+   482→            headers: { 'Content-Type': 'application/json' },
+   483→            body: JSON.stringify(payload),
+   484→          });
+   485→          if (!res.ok) {
+   486→            const err = await res.json().catch(() => ({}));
+   487→            throw new Error(err.error || 'Update failed');
+   488→          }
+   489→          updatedRows[i] = { ...row, _status: 'success' };
+   490→        } else {
+   491→          // Create new employee
+   492→          const res = await fetch('/api/employees', {
+   493→            method: 'POST',
+   494→            headers: { 'Content-Type': 'application/json' },
+   495→            body: JSON.stringify(payload),
+   496→          });
+   497→          if (!res.ok) {
+   498→            const err = await res.json().catch(() => ({}));
+   499→            throw new Error(err.error || 'Create failed');
+   500→          }
+   501→          updatedRows[i] = { ...row, _status: 'success' };
+   502→        }
+   503→        successCount++;
+   504→      } catch (e: any) {
+   505→        updatedRows[i] = { ...row, _status: 'error', _error: e.message || 'Failed' };
+   506→        errorCount++;
+   507→      }
+   508→      setImportPreview([...updatedRows]);
+   509→    }
+   510→
+   511→    setImporting(false);
+   512→    if (errorCount === 0) {
+   513→      toast.success(`Successfully imported ${successCount} employees`);
+   514→    } else {
+   515→      toast.warning(`Imported ${successCount} employees, ${errorCount} failed`);
+   516→    }
+   517→    loadEmployees();
+   518→  };
+   519→
+   520→  // ── Firm badge renderer ──
+   521→  const FirmBadge = ({ firm }: { firm: string }) => (
+   522→    <span className={`${FIRM_BADGE_CLASS[firm] || 'firm-badge-lapl'} whitespace-nowrap shrink-0`}>{firm}</span>
+   523→  );
+   524→
+   525→  // ── Status badge ──
+   526→  const StatusBadge = ({ status }: { status: string }) => (
+   527→    <span
+   528→      className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap shrink-0 ${
+   529→        status === 'Yes' || status === 'active'
+   530→          ? 'bg-gold/15 text-gold dark:text-gold border border-gold/20'
+   531→          : 'bg-red-500/15 text-red-600 dark:text-red-400 border border-red-500/20'
+   532→      }`}
+   533→    >
+   534→      <span className={`w-1.5 h-1.5 rounded-full mr-1 ${status === 'Yes' || status === 'active' ? 'bg-gold' : 'bg-red-500'}`} />
+   535→      {(status === 'Yes' || status === 'active') ? 'Active' : 'Inactive'}
+   536→    </span>
+   537→  );
+   538→
+   539→  // ── Employment Type badge ──
+   540→  const EmpTypeBadge = ({ type }: { type: string }) => (
+   541→    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium whitespace-nowrap shrink-0 ${
+   542→      type === 'Full Time'
+   543→        ? 'bg-gold/10 text-gold border border-gold/20'
+   544→        : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
+   545→    }`}>
+   546→      {type}
+   547→    </span>
+   548→  );
+   549→
+   550→  // ── Import success/error counts ──
+   551→  const importSuccessCount = importPreview.filter(r => r._status === 'success').length;
+   552→  const importErrorCount = importPreview.filter(r => r._status === 'error').length;
+   553→  const importPendingCount = importPreview.filter(r => r._status === 'pending').length;
+   554→
+   555→  return (
+   556→    <div className="space-y-4">
+   557→      {/* ── Header ── */}
+   558→      <motion.div
+   559→        initial={{ opacity: 0, y: -10 }}
+   560→        animate={{ opacity: 1, y: 0 }}
+   561→        className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3"
+   562→      >
+   563→        <div>
+   564→          <h2 className="text-xl font-bold flex items-center gap-2">
+   565→            <Users className="w-5 h-5 text-gold" />
+   566→            Employee Management
+   567→          </h2>
+   568→          <p className="text-sm text-muted-foreground">
+   569→            {employees.length} employee{employees.length !== 1 ? 's' : ''} across Laxree Group
+   570→          </p>
+   571→        </div>
+   572→        <div className="flex items-center gap-2">
+   573→          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => toast.info('Export feature coming soon')}>
+   574→            <Download className="w-3.5 h-3.5" /> Export
+   575→          </Button>
+   576→          <Button
+   577→            variant="outline"
+   578→            size="sm"
+   579→            className="gap-1.5"
+   580→            onClick={() => {
+   581→              setImportFile(null);
+   582→              setImportPreview([]);
+   583→              setImportOpen(true);
+   584→            }}
+   585→          >
+   586→            <Upload className="w-3.5 h-3.5" /> Import Master
+   587→          </Button>
+   588→          <Button
+   589→            className="gradient-laxree text-white gap-1.5"
+   590→            size="sm"
+   591→            onClick={() => {
+   592→              // Compute next code inline for immediate use
+   593→              const codes = employees.map(e => parseInt(e.employeeId.replace('EMP-', ''))).filter(n => !isNaN(n));
+   594→              const maxCode = codes.length > 0 ? Math.max(...codes) : 0;
+   595→              const nextNum = maxCode + 1;
+   596→              const nextCode = nextNum >= 100 ? `EMP-${nextNum}` : `EMP-${String(nextNum).padStart(3, '0')}`;
+   597→              setNextEmpCode(nextCode);
+   598→              setForm({ ...emptyForm, employeeId: nextCode });
+   599→              setEditId(null);
+   600→              setOpen(true);
+   601→            }}
+   602→          >
+   603→            <Plus className="w-4 h-4" /> Add Employee
+   604→          </Button>
+   605→        </div>
+   606→      </motion.div>
+   607→
+   608→      {/* ── Filter Bar ── */}
+   609→      <motion.div
+   610→        initial={{ opacity: 0, y: -5 }}
+   611→        animate={{ opacity: 1, y: 0 }}
+   612→        transition={{ delay: 0.05 }}
+   613→        className="glass-card p-3"
+   614→      >
+   615→        <div className="flex flex-col sm:flex-row gap-3 flex-wrap">
+   616→          <div className="relative flex-1">
+   617→            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+   618→            <Input
+   619→              className="pl-9 h-9"
+   620→              placeholder="Search by name, ID, designation..."
+   621→              value={search}
+   622→              onChange={(e) => setSearch(e.target.value)}
+   623→            />
+   624→          </div>
+   625→          <Select value={filterFirm} onValueChange={setFilterFirm}>
+   626→            <SelectTrigger className="w-full sm:w-36 h-9">
+   627→              <Building2 className="w-3.5 h-3.5 mr-1.5 text-muted-foreground" />
+   628→              <SelectValue placeholder="All Firms" />
+   629→            </SelectTrigger>
+   630→            <SelectContent>
+   631→              <SelectItem value="all">All Firms</SelectItem>
+   632→              {FIRMS.map((f) => (
+   633→                <SelectItem key={f} value={f}>{f}</SelectItem>
+   634→              ))}
+   635→            </SelectContent>
+   636→          </Select>
+   637→          <Select value={filterLocation} onValueChange={setFilterLocation}>
+   638→            <SelectTrigger className="w-full sm:w-40 h-9">
+   639→              <MapPin className="w-3.5 h-3.5 mr-1.5 text-muted-foreground" />
+   640→              <SelectValue placeholder="All Locations" />
+   641→            </SelectTrigger>
+   642→            <SelectContent>
+   643→              <SelectItem value="all">All Locations</SelectItem>
+   644→              {LOCATIONS.map((l) => (
+   645→                <SelectItem key={l} value={l}>{l}</SelectItem>
+   646→              ))}
+   647→            </SelectContent>
+   648→          </Select>
+   649→          <Select value={filterSalaryType} onValueChange={setFilterSalaryType}>
+   650→            <SelectTrigger className="w-full sm:w-32 h-9">
+   651→              <SelectValue placeholder="Salary Type" />
+   652→            </SelectTrigger>
+   653→            <SelectContent>
+   654→              <SelectItem value="all">All Types</SelectItem>
+   655→              {SALARY_TYPES.map((t) => (
+   656→                <SelectItem key={t} value={t}>{t}</SelectItem>
+   657→              ))}
+   658→            </SelectContent>
+   659→          </Select>
+   660→          <Select value={filterStatus} onValueChange={setFilterStatus}>
+   661→            <SelectTrigger className="w-full sm:w-32 h-9">
+   662→              <SelectValue placeholder="Status" />
+   663→            </SelectTrigger>
+   664→            <SelectContent>
+   665→              <SelectItem value="all">All Status</SelectItem>
+   666→              <SelectItem value="Active">Active</SelectItem>
+   667→              <SelectItem value="Inactive">Inactive</SelectItem>
+   668→            </SelectContent>
+   669→          </Select>
+   670→        </div>
+   671→      </motion.div>
+   672→
+   673→      {/* ── Employee Table ── */}
+   674→      <motion.div
+   675→        initial={{ opacity: 0, y: 10 }}
+   676→        animate={{ opacity: 1, y: 0 }}
+   677→        transition={{ delay: 0.1 }}
+   678→      >
+   679→        <Card className="glass-card card-gold-hover border-0">
+   680→          <CardContent className="p-0">
+   681→            <div className="overflow-x-auto overflow-y-visible">
+   682→              <Table>
+   683→                <TableHeader>
+   684→                  <TableRow className="hover:bg-transparent">
+   685→                    <TableHead className="w-24">Emp ID</TableHead>
+   686→                    <TableHead>Name</TableHead>
+   687→                    <TableHead className="hidden md:table-cell">Firm</TableHead>
+   688→                    <TableHead className="hidden lg:table-cell">Location</TableHead>
+   689→                    <TableHead className="hidden md:table-cell">Salary Type</TableHead>
+   690→                    <TableHead className="hidden sm:table-cell">Hourly Rate</TableHead>
+   691→                    <TableHead className="hidden sm:table-cell">Emp. Type</TableHead>
+   692→                    <TableHead>Status</TableHead>
+   693→                    <TableHead className="text-right">Actions</TableHead>
+   694→                  </TableRow>
+   695→                </TableHeader>
+   696→                <TableBody>
+   697→                  {loading ? (
+   698→                    Array.from({ length: 5 }).map((_, i) => (
+   699→                      <TableRow key={i}>
+   700→                        {Array.from({ length: 9 }).map((_, j) => (
+   701→                          <TableCell key={j}>
+   702→                            <div className="h-4 bg-muted/50 rounded animate-pulse" />
+   703→                          </TableCell>
+   704→                        ))}
+   705→                      </TableRow>
+   706→                    ))
+   707→                  ) : employees.length === 0 ? (
+   708→                    <TableRow>
+   709→                      <TableCell colSpan={9} className="text-center py-12 text-muted-foreground">
+   710→                        No employees found
+   711→                      </TableCell>
+   712→                    </TableRow>
+   713→                  ) : (
+   714→                    employees.map((emp, i) => (
+   715→                      <motion.tr
+   716→                        key={emp.id}
+   717→                        initial={{ opacity: 0, x: -10 }}
+   718→                        animate={{ opacity: 1, x: 0 }}
+   719→                        transition={{ delay: i * 0.02 }}
+   720→                        className="border-b border-border/50 hover:bg-muted/30 cursor-pointer transition-colors"
+   721→                        onClick={() => setSelectedEmployeeId(emp.employeeId)}
+   722→                      >
+   723→                        <TableCell className="font-mono text-xs text-gold font-semibold whitespace-nowrap">
+   724→                          {emp.employeeId}
+   725→                        </TableCell>
+   726→                        <TableCell>
+   727→                          <div className="flex items-center gap-2.5">
+   728→                            <div className="w-8 h-8 rounded-full gradient-laxree flex items-center justify-center text-white text-xs font-bold shrink-0">
+   729→                              {emp.fullName.charAt(0).toUpperCase()}
+   730→                            </div>
+   731→                            <div className="min-w-0 overflow-hidden">
+   732→                              <p className="font-medium text-sm truncate">{emp.fullName}</p>
+   733→                              <p className="text-[10px] text-muted-foreground truncate">
+   734→                                {emp.designation}{emp.gender ? <span className="ml-1 inline-flex items-center px-1 py-0 rounded text-[9px] font-medium bg-muted/80 text-muted-foreground">{emp.gender}</span> : null}
+   735→                              </p>
+   736→                            </div>
+   737→                          </div>
+   738→                        </TableCell>
+   739→                        <TableCell className="hidden md:table-cell">
+   740→                          <FirmBadge firm={emp.department || emp.firm} />
+   741→                        </TableCell>
+   742→                        <TableCell className="hidden lg:table-cell text-sm text-muted-foreground truncate max-w-[120px]">
+   743→                          {emp.location}
+   744→                        </TableCell>
+   745→                        <TableCell className="hidden md:table-cell whitespace-nowrap">
+   746→                          <span className="text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground capitalize">
+   747→                            {emp.salaryType}
+   748→                          </span>
+   749→                        </TableCell>
+   750→                        <TableCell className="hidden sm:table-cell text-sm font-mono whitespace-nowrap">
+   751→                          {emp.hourlyRate > 0 ? `₹${emp.hourlyRate}` : '—'}
+   752→                        </TableCell>
+   753→                        <TableCell className="hidden sm:table-cell">
+   754→                          <EmpTypeBadge type={emp.employmentType || 'Full Time'} />
+   755→                        </TableCell>
+   756→                        <TableCell>
+   757→                          <StatusBadge status={emp.status} />
+   758→                        </TableCell>
+   759→                        <TableCell className="text-right">
+   760→                          <div className="flex items-center justify-end gap-0.5" onClick={(e) => e.stopPropagation()}>
+   761→                            <Button
+   762→                              variant="ghost"
+   763→                              size="icon"
+   764→                              className="h-7 w-7"
+   765→                              onClick={() => setSelectedEmployeeId(emp.employeeId)}
+   766→                              title="View Profile"
+   767→                            >
+   768→                              <Eye className="w-3.5 h-3.5" />
+   769→                            </Button>
+   770→                            <Button
+   771→                              variant="ghost"
+   772→                              size="icon"
+   773→                              className="h-7 w-7"
+   774→                              onClick={() => handleEdit(emp)}
+   775→                              title="Edit"
+   776→                            >
+   777→                              <Edit className="w-3.5 h-3.5" />
+   778→                            </Button>
+   779→                            <Button
+   780→                              variant="ghost"
+   781→                              size="icon"
+   782→                              className="h-7 w-7 text-destructive hover:text-destructive"
+   783→                              onClick={() => handleDelete(emp.employeeId, emp.fullName)}
+   784→                              title="Delete"
+   785→                            >
+   786→                              <Trash2 className="w-3.5 h-3.5" />
+   787→                            </Button>
+   788→                          </div>
+   789→                        </TableCell>
+   790→                      </motion.tr>
+   791→                    ))
+   792→                  )}
+   793→                </TableBody>
+   794→              </Table>
+   795→            </div>
+   796→          </CardContent>
+   797→        </Card>
+   798→      </motion.div>
+   799→
+   800→      {/* ── Add/Edit Dialog ── */}
+   801→      <Dialog open={open} onOpenChange={(v) => { if (!v) { setOpen(false); setForm(emptyForm); setEditId(null); } }}>
+   802→        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+   803→          <DialogHeader>
+   804→            <DialogTitle className="flex items-center gap-2">
+   805→              <Users className="w-5 h-5 text-gold" />
+   806→              {editId ? 'Edit Employee' : 'Add New Employee'}
+   807→            </DialogTitle>
+   808→          </DialogHeader>
+   809→
+   810→          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-4">
+   811→            {/* Employee Code */}
+   812→            <div className="sm:col-span-2">
+   813→              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Employee Code *</Label>
+   814→              <div className="mt-1 flex items-center gap-2">
+   815→                <Input
+   816→                  value={form.employeeId}
+   817→                  onChange={(e) => handleFormChange('employeeId', e.target.value)}
+   818→                  placeholder="e.g. EMP-427"
+   819→                  className="font-mono font-bold text-gold max-w-[200px]"
+   820→                  disabled={!!editId}
+   821→                />
+   822→                {!editId && (
+   823→                  <span className="text-xs text-muted-foreground">Auto-suggested — you can change it</span>
+   824→                )}
+   825→                {editId && (
+   826→                  <span className="text-xs text-muted-foreground">Cannot change existing employee code</span>
+   827→                )}
+   828→              </div>
+   829→            </div>
+   830→
+   831→            {/* Personal Info */}
+   832→            <div className="sm:col-span-2">
+   833→              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Personal Information</p>
+   834→            </div>
+   835→            <div>
+   836→              <Label>Full Name *</Label>
+   837→              <Input value={form.fullName} onChange={(e) => handleFormChange('fullName', e.target.value)} placeholder="Enter full name" />
+   838→            </div>
+   839→            <div>
+   840→              <Label>Mobile</Label>
+   841→              <Input value={form.mobile} onChange={(e) => handleFormChange('mobile', e.target.value)} placeholder="Mobile number" />
+   842→            </div>
+   843→            <div>
+   844→              <Label>Email</Label>
+   845→              <Input value={form.email} onChange={(e) => handleFormChange('email', e.target.value)} placeholder="Email address" />
+   846→            </div>
+   847→            <div>
+   848→              <Label>Emergency Contact</Label>
+   849→              <Input value={form.emergencyContact} onChange={(e) => handleFormChange('emergencyContact', e.target.value)} placeholder="Emergency contact" />
+   850→            </div>
+   851→
+   852→            {/* Employment Info */}
+   853→            <div className="sm:col-span-2 mt-2">
+   854→              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Employment Details</p>
+   855→            </div>
+   856→            <div>
+   857→              <Label>Firm / Department *</Label>
+   858→              <Select value={form.department} onValueChange={(v) => handleFormChange('department', v)}>
+   859→                <SelectTrigger><SelectValue placeholder="Select firm" /></SelectTrigger>
+   860→                <SelectContent>
+   861→                  {FIRMS.map((f) => (
+   862→                    <SelectItem key={f} value={f}>{f}</SelectItem>
+   863→                  ))}
+   864→                </SelectContent>
+   865→              </Select>
+   866→            </div>
+   867→            <div>
+   868→              <Label>Location</Label>
+   869→              <Select value={form.location} onValueChange={(v) => handleFormChange('location', v)}>
+   870→                <SelectTrigger><SelectValue placeholder="Select location" /></SelectTrigger>
+   871→                <SelectContent>
+   872→                  {LOCATIONS.map((l) => (
+   873→                    <SelectItem key={l} value={l}>{l}</SelectItem>
+   874→                  ))}
+   875→                </SelectContent>
+   876→              </Select>
+   877→            </div>
+   878→            <div>
+   879→              <Label>Designation</Label>
+   880→              <Input value={form.designation} onChange={(e) => handleFormChange('designation', e.target.value)} placeholder="Designation" />
+   881→            </div>
+   882→            <div>
+   883→              <Label className="text-xs font-medium">Gender</Label>
+   884→              <Select value={form.gender || ''} onValueChange={(v) => handleFormChange('gender', v)}>
+   885→                <SelectTrigger className="h-9 mt-1"><SelectValue placeholder="Select Gender" /></SelectTrigger>
+   886→                <SelectContent>
+   887→                  <SelectItem value="Male">Male</SelectItem>
+   888→                  <SelectItem value="Female">Female</SelectItem>
+   889→                  <SelectItem value="Other">Other</SelectItem>
+   890→                </SelectContent>
+   891→              </Select>
+   892→            </div>
+   893→            <div>
+   894→              <Label className="text-xs font-medium">Date of Birth</Label>
+   895→              <Input type="date" value={form.dateOfBirth} onChange={(e) => handleFormChange('dateOfBirth', e.target.value)} className="mt-1" />
+   896→            </div>
+   897→            <div>
+   898→              <Label>Joining Date</Label>
+   899→              <Input type="date" value={form.joiningDate} onChange={(e) => handleFormChange('joiningDate', e.target.value)} />
+   900→            </div>
+   901→            <div>
+   902→              <Label>Employment Type</Label>
+   903→              <Select value={form.employmentType} onValueChange={(v) => handleFormChange('employmentType', v)}>
+   904→                <SelectTrigger><SelectValue /></SelectTrigger>
+   905→                <SelectContent>
+   906→                  {EMPLOYMENT_TYPES.map((t) => (
+   907→                    <SelectItem key={t} value={t}>{t}</SelectItem>
+   908→                  ))}
+   909→                </SelectContent>
+   910→              </Select>
+   911→            </div>
+   912→            <div>
+   913→              <Label>Status</Label>
+   914→              <Select value={form.status} onValueChange={(v) => handleFormChange('status', v)}>
+   915→                <SelectTrigger><SelectValue /></SelectTrigger>
+   916→                <SelectContent>
+   917→                  <SelectItem value="Yes">Active</SelectItem>
+   918→                  <SelectItem value="No">Inactive</SelectItem>
+   919→                </SelectContent>
+   920→              </Select>
+   921→            </div>
+   922→            <div>
+   923→              <Label>Reporting Manager</Label>
+   924→              <Input value={form.reportingManager} onChange={(e) => handleFormChange('reportingManager', e.target.value)} placeholder="Manager name" />
+   925→            </div>
+   926→
+   927→            {/* Salary Info */}
+   928→            <div className="sm:col-span-2 mt-2">
+   929→              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Salary & Shift</p>
+   930→            </div>
+   931→            <div>
+   932→              <Label>Salary Type</Label>
+   933→              <Select value={form.salaryType} onValueChange={(v) => handleFormChange('salaryType', v)}>
+   934→                <SelectTrigger><SelectValue /></SelectTrigger>
+   935→                <SelectContent>
+   936→                  {SALARY_TYPES.map((t) => (
+   937→                    <SelectItem key={t} value={t}>{t}</SelectItem>
+   938→                  ))}
+   939→                </SelectContent>
+   940→              </Select>
+   941→            </div>
+   942→            <div>
+   943→              <Label>Monthly Salary (₹)</Label>
+   944→              <Input
+   945→                type="number"
+   946→                value={form.basicSalary || ''}
+   947→                onChange={(e) => handleFormChange('basicSalary', e.target.value)}
+   948→                placeholder="Enter monthly salary"
+   949→              />
+   950→            </div>
+   951→            <div>
+   952→              <Label>OT Rate (₹/hr) <span className="text-muted-foreground font-normal">— auto-calculated (1x normal rate)</span></Label>
+   953→              <Input
+   954→                type="number"
+   955→                value={calcOTRate(form.basicSalary, form.shiftHours)}
+   956→                disabled
+   957→                className="bg-muted"
+   958→              />
+   959→            </div>
+   960→            <div>
+   961→              <Label>Shift Start</Label>
+   962→              <Input type="time" value={form.shiftStart} onChange={(e) => handleFormChange('shiftStart', e.target.value)} />
+   963→            </div>
+   964→            <div>
+   965→              <Label>Shift End</Label>
+   966→              <Input type="time" value={form.shiftEnd} onChange={(e) => handleFormChange('shiftEnd', e.target.value)} />
+   967→            </div>
+   968→
+   969→            {/* Statutory Info */}
+   970→            <div className="sm:col-span-2 mt-2">
+   971→              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Statutory & Bank Details</p>
+   972→            </div>
+   973→            <div>
+   974→              <Label>PAN Number</Label>
+   975→              <Input value={form.panNumber} onChange={(e) => handleFormChange('panNumber', e.target.value)} placeholder="PAN" />
+   976→            </div>
+   977→            <div>
+   978→              <Label>Aadhaar Number</Label>
+   979→              <Input value={form.aadhaarNumber} onChange={(e) => handleFormChange('aadhaarNumber', e.target.value)} placeholder="Aadhaar" />
+   980→            </div>
+   981→            <div>
+   982→              <Label>PF Number</Label>
+   983→              <Input value={form.pfNumber} onChange={(e) => handleFormChange('pfNumber', e.target.value)} placeholder="PF" />
+   984→            </div>
+   985→            <div>
+   986→              <Label>ESI Number</Label>
+   987→              <Input value={form.esiNumber} onChange={(e) => handleFormChange('esiNumber', e.target.value)} placeholder="ESI" />
+   988→            </div>
+   989→            <div>
+   990→              <Label>Bank Name</Label>
+   991→              <Input value={form.bankName} onChange={(e) => handleFormChange('bankName', e.target.value)} placeholder="Bank name" />
+   992→            </div>
+   993→            <div>
+   994→              <Label>Bank Account</Label>
+   995→              <Input value={form.bankAccount} onChange={(e) => handleFormChange('bankAccount', e.target.value)} placeholder="Account number" />
+   996→            </div>
+   997→            <div>
+   998→              <Label>IFSC Code</Label>
+   999→              <Input value={form.bankIfsc} onChange={(e) => handleFormChange('bankIfsc', e.target.value)} placeholder="IFSC" />
+  1000→            </div>
+  1001→          </div>
+  1002→
+  1003→          <div className="flex justify-end gap-2 pt-2 border-t">
+  1004→            <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+  1005→            <Button className="gradient-laxree text-white" onClick={handleSubmit}>
+  1006→              {editId ? 'Update' : 'Add'} Employee
+  1007→            </Button>
+  1008→          </div>
+  1009→        </DialogContent>
+  1010→      </Dialog>
+  1011→
+  1012→      {/* ── Import Master Dialog ── */}
+  1013→      <Dialog open={importOpen} onOpenChange={(v) => { setImportOpen(v); if (!v) { setImportFile(null); setImportPreview([]); } }}>
+  1014→        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+  1015→          <DialogHeader>
+  1016→            <DialogTitle className="flex items-center gap-2">
+  1017→              <FileSpreadsheet className="w-5 h-5 text-gold" />
+  1018→              Import Master Employee Data
+  1019→            </DialogTitle>
+  1020→          </DialogHeader>
+  1021→
+  1022→          <div className="space-y-4 py-4">
+  1023→            {/* File Upload Area */}
+  1024→            <div className="space-y-3">
+  1025→              <div
+  1026→                className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-8 text-center hover:border-gold/50 transition-colors cursor-pointer"
+  1027→                onClick={() => fileInputRef.current?.click()}
+  1028→              >
+  1029→                <Upload className="w-10 h-10 mx-auto text-muted-foreground mb-3" />
+  1030→                <p className="text-sm font-medium">
+  1031→                  {importFile ? importFile.name : 'Click to upload Excel file (.xlsx, .xls)'}
+  1032→                </p>
+  1033→                <p className="text-xs text-muted-foreground mt-1">
+  1034→                  Expected columns: Emp Code, Full Name, Firm, Location, Salary Type, Monthly Salary, Daily Rate, Employment Type, Active, Shift Start, Shift End, Shift Hours
+  1035→                </p>
+  1036→              </div>
+  1037→              <input
+  1038→                ref={fileInputRef}
+  1039→                type="file"
+  1040→                accept=".xlsx,.xls,.csv"
+  1041→                className="hidden"
+  1042→                onChange={(e) => {
+  1043→                  const file = e.target.files?.[0];
+  1044→                  if (file) handleImportFile(file);
+  1045→                }}
+  1046→              />
+  1047→            </div>
+  1048→
+  1049→            {/* Import Summary */}
+  1050→            {importPreview.length > 0 && (
+  1051→              <div className="flex items-center gap-4 text-sm">
+  1052→                <span className="font-medium">{importPreview.length} employees found</span>
+  1053→                {importSuccessCount > 0 && (
+  1054→                  <span className="flex items-center gap-1 text-green-600">
+  1055→                    <CheckCircle2 className="w-3.5 h-3.5" /> {importSuccessCount} imported
+  1056→                  </span>
+  1057→                )}
+  1058→                {importErrorCount > 0 && (
+  1059→                  <span className="flex items-center gap-1 text-red-600">
+  1060→                    <AlertCircle className="w-3.5 h-3.5" /> {importErrorCount} failed
+  1061→                  </span>
+  1062→                )}
+  1063→                {importPendingCount > 0 && (
+  1064→                  <span className="flex items-center gap-1 text-amber-600">
+  1065→                    <Clock className="w-3.5 h-3.5" /> {importPendingCount} pending
+  1066→                  </span>
+  1067→                )}
+  1068→              </div>
+  1069→            )}
+  1070→
+  1071→            {/* Preview Table */}
+  1072→            {importPreview.length > 0 && (
+  1073→              <div className="border rounded-lg overflow-hidden">
+  1074→                <ScrollArea className="max-h-[45vh]">
+  1075→                  <Table>
+  1076→                    <TableHeader>
+  1077→                      <TableRow className="hover:bg-transparent">
+  1078→                        <TableHead className="w-8">#</TableHead>
+  1079→                        <TableHead>Emp ID</TableHead>
+  1080→                        <TableHead>Full Name</TableHead>
+  1081→                        <TableHead>Firm</TableHead>
+  1082→                        <TableHead>Location</TableHead>
+  1083→                        <TableHead>Salary Type</TableHead>
+  1084→                        <TableHead>Monthly Salary</TableHead>
+  1085→                        <TableHead>Shift</TableHead>
+  1086→                        <TableHead>Hourly Rate</TableHead>
+  1087→                        <TableHead>OT Rate</TableHead>
+  1088→                        <TableHead>Active</TableHead>
+  1089→                        <TableHead>Status</TableHead>
+  1090→                      </TableRow>
+  1091→                    </TableHeader>
+  1092→                    <TableBody>
+  1093→                      {importPreview.map((row, i) => (
+  1094→                        <TableRow key={i} className={
+  1095→                          row._status === 'success' ? 'bg-green-50 dark:bg-green-950/20' :
+  1096→                          row._status === 'error' ? 'bg-red-50 dark:bg-red-950/20' : ''
+  1097→                        }>
+  1098→                          <TableCell className="text-xs text-muted-foreground">{i + 1}</TableCell>
+  1099→                          <TableCell className="font-mono text-xs font-semibold text-gold whitespace-nowrap">{row.employeeId}</TableCell>
+  1100→                          <TableCell className="text-sm">{row.fullName}</TableCell>
+  1101→                          <TableCell className="text-sm">{row.firm}</TableCell>
+  1102→                          <TableCell className="text-sm text-muted-foreground">{row.location}</TableCell>
+  1103→                          <TableCell className="text-xs capitalize">{row.salaryType}</TableCell>
+  1104→                          <TableCell className="text-sm font-mono">₹{row.monthlySalary.toLocaleString()}</TableCell>
+  1105→                          <TableCell className="text-xs whitespace-nowrap">{row.shiftStart}–{row.shiftEnd} ({row.shiftHours}h)</TableCell>
+  1106→                          <TableCell className="text-sm font-mono">₹{row.hourlyRate}</TableCell>
+  1107→                          <TableCell className="text-sm font-mono">₹{row.overtimeRate}</TableCell>
+  1108→                          <TableCell>
+  1109→                            <span className={`text-xs px-1.5 py-0.5 rounded ${
+  1110→                              row.active === 'Yes'
+  1111→                                ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+  1112→                                : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+  1113→                            }`}>
+  1114→                              {row.active}
+  1115→                            </span>
+  1116→                          </TableCell>
+  1117→                          <TableCell>
+  1118→                            {row._status === 'success' && (
+  1119→                              <span className="flex items-center gap-1 text-green-600 text-xs">
+  1120→                                <CheckCircle2 className="w-3.5 h-3.5" /> Done
+  1121→                              </span>
+  1122→                            )}
+  1123→                            {row._status === 'error' && (
+  1124→                              <span className="flex items-center gap-1 text-red-600 text-xs" title={row._error}>
+  1125→                                <AlertCircle className="w-3.5 h-3.5" /> {row._error || 'Failed'}
+  1126→                              </span>
+  1127→                            )}
+  1128→                            {row._status === 'pending' && (
+  1129→                              <span className="text-xs text-muted-foreground">Pending</span>
+  1130→                            )}
+  1131→                          </TableCell>
+  1132→                        </TableRow>
+  1133→                      ))}
+  1134→                    </TableBody>
+  1135→                  </Table>
+  1136→                </ScrollArea>
+  1137→              </div>
+  1138→            )}
+  1139→          </div>
+  1140→
+  1141→          <div className="flex justify-end gap-2 pt-2 border-t">
+  1142→            <Button variant="outline" onClick={() => setImportOpen(false)}>
+  1143→              {importSuccessCount > 0 ? 'Close' : 'Cancel'}
+  1144→            </Button>
+  1145→            {importPendingCount > 0 && (
+  1146→              <Button
+  1147→                className="gradient-laxree text-white gap-1.5"
+  1148→                onClick={handleImportProcess}
+  1149→                disabled={importing || importPreview.length === 0}
+  1150→              >
+  1151→                {importing ? (
+  1152→                  <>
+  1153→                    <Loader2 className="w-4 h-4 animate-spin" /> Importing...
+  1154→                  </>
+  1155→                ) : (
+  1156→                  <>
+  1157→                    <Upload className="w-4 h-4" /> Import {importPendingCount} Employees
+  1158→                  </>
+  1159→                )}
+  1160→              </Button>
+  1161→            )}
+  1162→          </div>
+  1163→        </DialogContent>
+  1164→      </Dialog>
+  1165→    </div>
+  1166→  );
+  1167→}
+  1168→

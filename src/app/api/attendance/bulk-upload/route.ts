@@ -36,6 +36,22 @@ export async function POST(request: NextRequest) {
           continue;
         }
 
+        // Block attendance for relieved/inactive employees
+        if (employee.status === 'No' || employee.status === 'inactive') {
+          results.push({ employeeId, date, status: 'error', error: 'Employee is inactive/relieved' });
+          errorCount++;
+          continue;
+        }
+        if (employee.relievingDate) {
+          const attDate = new Date(date + 'T00:00:00');
+          const relDate = new Date(employee.relievingDate);
+          if (attDate > relDate) {
+            results.push({ employeeId, date, status: 'error', error: `Date after relieving date (${relDate.toISOString().split('T')[0]})` });
+            errorCount++;
+            continue;
+          }
+        }
+
         const d = new Date(date);
         if (isNaN(d.getTime())) {
           results.push({ employeeId, date, status: 'error', error: 'Invalid date' });

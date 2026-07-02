@@ -70,6 +70,7 @@ interface Employee {
   address: string | null;
   reportingManager: string | null;
   emergencyContact: string | null;
+  relievingDate: string | null;
 }
 
 // ── Import row type ──
@@ -121,6 +122,7 @@ const emptyForm = {
   esiNumber: '',
   reportingManager: '',
   emergencyContact: '',
+  relievingDate: '',
 };
 
 /** Capitalize first letter for salaryType display in UI */
@@ -333,6 +335,7 @@ export function EmployeeManagement() {
       esiNumber: emp.esiNumber || '',
       reportingManager: emp.reportingManager || '',
       emergencyContact: emp.emergencyContact || '',
+      relievingDate: emp.relievingDate?.split('T')[0] || '',
     });
     setOpen(true);
   };
@@ -897,6 +900,10 @@ export function EmployeeManagement() {
             <div>
               <Label>Joining Date</Label>
               <Input type="date" value={form.joiningDate} onChange={(e) => handleFormChange('joiningDate', e.target.value)} />
+            </div>
+            <div>
+              <Label>Relieving Date</Label>
+              <Input type="date" value={form.relievingDate} onChange={(e) => handleFormChange('relievingDate', e.target.value)} />
             </div>
             <div>
               <Label>Employment Type</Label>
