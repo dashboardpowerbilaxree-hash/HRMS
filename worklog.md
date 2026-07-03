@@ -215,3 +215,45 @@ Stage Summary:
   * Jitendra (EMP-427): 222.22 → 78 (salary was also updated to 21000 by HR)
   * Narayan (EMP-426): 50.00 → 54 (salary was updated to 16000)
 - Code changes are local only — awaiting user's go-ahead to push to GitHub/Vercel
+
+---
+Task ID: 1
+Agent: Main Agent
+Task: Fix daily attendance export format, template download, and add Master Excel Sheet
+
+Work Log:
+- Read and analyzed Daily_Attendance_Formate.xlsx and Laxree Group Monthly Excel Formate.xlsx templates
+- Read current export-daily/route.ts, export-monthly/route.ts, and AttendanceTracker.tsx
+- Rewrote export-daily/route.ts to match new format:
+  * Row 1: LAXREE GROUP OF COMPANIES (gold on dark, sz=20)
+  * Row 2: Date of Attendance with actual selected date (formatted dddd, mmmm dd, yyyy)
+  * Row 3: Daily Attendance Report —
+  * 10 columns: S.No, Employee Name, Emp Code, Company, In Time, Out Time, Hours, Status, OT Hours, Remark
+  * Shows ALL active employees even without attendance for that date
+  * Color-coded status cells
+  * Summary sheet auto-populated
+- Created /api/attendance/template/route.ts:
+  * Server-side blank template generation
+  * No pre-filled employee names or company data
+  * Includes selected date in header
+  * 50 empty rows for data entry
+- Created /api/attendance/export-master/route.ts:
+  * Firm-wise dropdown (All Firms / LAPL / LRSL / SI / SDF)
+  * Each firm gets its own sheet with calendar-style layout
+  * Date columns with actual dates (1 Jun, 2 Jun, etc. - not just "Date" word)
+  * Employee rows with attendance data (IN-OUT format or status codes)
+  * Summary columns: Total Working Hours, OT, Present, Absent
+  * Color-coded: Present=green, Absent=red, Sunday=amber highlight, WO=dark
+- Updated AttendanceTracker.tsx:
+  * Changed template download from static file to server-side API call with importDate
+  * Added masterFirm and masterExporting state variables
+  * Added handleExportMasterSheet function
+  * Added Master Excel Sheet section in Monthly tab with firm dropdown + download button
+- Pushed to GitHub (commit 0b76726) - NO data changes, NO DB changes
+
+Stage Summary:
+- Daily export now matches user's provided format exactly
+- Template download is now BLANK (no pre-filled data)
+- Master Excel Sheet added with firm-wise sheets and calendar format
+- Dates show as "1 Jun", "2 Jun" etc. (not "Date" word)
+- All changes are template/export format only - zero data tampering
