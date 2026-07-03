@@ -137,11 +137,11 @@ export async function GET(request: NextRequest) {
       // This ensures Total Working Hours & Leave are correct
       // regardless of which section they appear in
       // ═══════════════════════════════════════════════════════════
-      const empTotals = new Map<string, { totalWorkMin: number; absentDays: number; presentDays: number }>();
+      const empTotals = new Map<string, { totalWorkHrs: number; absentDays: number; presentDays: number }>();
 
       for (const emp of employees) {
         const empAttendance = attendanceByEmp.get(emp.employeeId);
-        let totalWorkMin = 0;
+        let totalWorkHrs = 0;
         let absentDays = 0;
         let presentDays = 0;
 
@@ -159,23 +159,23 @@ export async function GET(request: NextRequest) {
               absentDays++;
             } else if (rec.status === 'weekly-off') {
               if (rec.checkIn && rec.totalHours > 0) {
-                totalWorkMin += rec.totalHours * 60;
+                totalWorkHrs += rec.totalHours;
                 presentDays++;
               }
               // WO without checkIn doesn't count as absent
             } else if (rec.status === 'holiday') {
               if (rec.checkIn && rec.totalHours > 0) {
-                totalWorkMin += rec.totalHours * 60;
+                totalWorkHrs += rec.totalHours;
                 presentDays++;
               }
               // Holiday without checkIn doesn't count as absent
             } else if (rec.halfDay) {
-              totalWorkMin += rec.totalHours * 60;
+              totalWorkHrs += rec.totalHours;
               presentDays += 0.5;
               absentDays += 0.5;
             } else {
               // present, late, early-out
-              totalWorkMin += rec.totalHours * 60;
+              totalWorkHrs += rec.totalHours;
               presentDays++;
             }
           } else {
@@ -187,7 +187,7 @@ export async function GET(request: NextRequest) {
           }
         }
 
-        empTotals.set(emp.employeeId, { totalWorkMin, absentDays, presentDays });
+        empTotals.set(emp.employeeId, { totalWorkHrs, absentDays, presentDays });
       }
 
       // ═══════════════════════════════════════════════════════════
@@ -287,7 +287,7 @@ export async function GET(request: NextRequest) {
             // Future dates in current month = leave blank
             if (isCurrentMonth && d > effectiveCutoffDay) {
               if (isSunday) {
-                empRow.push('WO', '', '');
+                empRow.push('Weekly Off', '', '');
               } else {
                 empRow.push('', '', '');
               }
@@ -296,21 +296,21 @@ export async function GET(request: NextRequest) {
 
             if (rec) {
               if (rec.status === 'absent') {
-                empRow.push('A', '', '');
+                empRow.push('Absent', '', '');
               } else if (rec.status === 'weekly-off') {
                 if (rec.checkIn && rec.totalHours > 0) {
                   empRow.push(rec.checkIn || '', rec.checkOut || '', formatHours(rec.totalHours));
                 } else {
-                  empRow.push('WO', '', '');
+                  empRow.push('Weekly Off', '', '');
                 }
               } else if (rec.status === 'holiday') {
                 if (rec.checkIn && rec.totalHours > 0) {
                   empRow.push(rec.checkIn || '', rec.checkOut || '', formatHours(rec.totalHours));
                 } else {
-                  empRow.push('H', '', '');
+                  empRow.push('Holiday', '', '');
                 }
               } else if (rec.halfDay) {
-                empRow.push(rec.checkIn || 'HD', rec.checkOut || '', formatHours(rec.totalHours));
+                empRow.push(rec.checkIn || 'Half Day', rec.checkOut || '', formatHours(rec.totalHours));
               } else {
                 // present, late, early-out
                 empRow.push(rec.checkIn || '', rec.checkOut || '', formatHours(rec.totalHours));
@@ -318,9 +318,9 @@ export async function GET(request: NextRequest) {
             } else {
               // No record
               if (isSunday) {
-                empRow.push('WO', '', '');
+                empRow.push('Weekly Off', '', '');
               } else {
-                empRow.push('A', '', '');
+                empRow.push('Absent', '', '');
               }
             }
           }
@@ -329,7 +329,7 @@ export async function GET(request: NextRequest) {
           const totals = empTotals.get(emp.employeeId);
           for (const extraCol of extraCols) {
             if (extraCol === 'Total Working Hours') {
-              empRow.push(formatHours((totals?.totalWorkMin || 0) / 60));
+              empRow.push(formatHours(totals?.totalWorkHrs || 0));
             } else if (extraCol === 'Leave') {
               empRow.push(Math.round(totals?.absentDays || 0));
             } else {
@@ -443,42 +443,40 @@ export async function GET(request: NextRequest) {
                 alignment: { horizontal: 'left' as const, vertical: 'center' as const },
                 border: fullBorder('FFFFFF', 'thin'),
               };
-            } else if (val === 'A') {
+            } else if (val === 'Absent') {
+              // Absent - red on light red
               cell.s = {
-                font: { bold: true, sz: 10, color: { rgb: 'DC2626' } },
+                font: { bold: true, sz: 9, color: { rgb: 'DC2626' } },
                 fill: { fgColor: { rgb: LIGHT_RED } },
                 alignment: { horizontal: 'center' as const, vertical: 'center' as const },
                 border: fullBorder('D0D0D0'),
               };
-            } else if (val === 'WO') {
+            } else if (val === 'Weekly Off') {
+              // Weekly Off - teal/emerald on light green
               cell.s = {
-                font: { bold: true, sz: 10, color: { rgb: '059669' } },
+                font: { bold: true, sz: 9, color: { rgb: '0D9488' } },
                 fill: { fgColor: { rgb: LIGHT_GREEN } },
                 alignment: { horizontal: 'center' as const, vertical: 'center' as const },
                 border: fullBorder('D0D0D0'),
               };
-            } else if (val === 'H') {
+            } else if (val === 'Holiday') {
+              // Holiday - purple on light purple
               cell.s = {
-                font: { bold: true, sz: 10, color: { rgb: '7C3AED' } },
-                fill: { fgColor: { rgb: 'EDE9FE' } },
+                font: { bold: true, sz: 9, color: { rgb: '7C3AED' } },
+                fill: { fgColor: { rgb: 'F5F3FF' } },
                 alignment: { horizontal: 'center' as const, vertical: 'center' as const },
                 border: fullBorder('D0D0D0'),
               };
-            } else if (val === 'HD' || val.startsWith('HD')) {
+            } else if (val === 'Half Day' || val.startsWith('Half Day')) {
+              // Half Day - amber on light amber
               cell.s = {
-                font: { bold: true, sz: 10, color: { rgb: 'D97706' } },
+                font: { bold: true, sz: 9, color: { rgb: 'D97706' } },
                 fill: { fgColor: { rgb: LIGHT_AMBER } },
                 alignment: { horizontal: 'center' as const, vertical: 'center' as const },
                 border: fullBorder('D0D0D0'),
               };
-            } else if (val === 'L') {
-              cell.s = {
-                font: { bold: true, sz: 10, color: { rgb: 'D97706' } },
-                fill: { fgColor: { rgb: 'FEF3C7' } },
-                alignment: { horizontal: 'center' as const, vertical: 'center' as const },
-                border: fullBorder('D0D0D0'),
-              };
             } else if (isSundayCol && val) {
+              // Sunday with data - green text on light green
               cell.s = {
                 font: { sz: 9, color: { rgb: '059669' } },
                 fill: { fgColor: { rgb: LIGHT_GREEN } },
@@ -486,6 +484,7 @@ export async function GET(request: NextRequest) {
                 border: fullBorder('D0D0D0'),
               };
             } else {
+              // Default data cell - normal text on alternating bg
               cell.s = {
                 font: { sz: 9, color: { rgb: '333333' } },
                 fill: { fgColor: { rgb: bg } },
