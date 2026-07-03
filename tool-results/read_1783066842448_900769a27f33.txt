@@ -1,0 +1,502 @@
+  1001→              }}
+  1002→            >
+  1003→              <Trash2 className="w-3.5 h-3.5" /> Clear All
+  1004→            </Button>
+  1005→          </motion.div>
+  1006→
+  1007→          {/* ── Attendance Table ── */}
+  1008→          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+  1009→            <Card className="glass-card card-gold-hover border-0">
+  1010→              <CardContent className="p-0">
+  1011→                <div className="overflow-auto max-h-[65vh]" style={{ WebkitOverflowScrolling: 'touch' }}>
+  1012→                  <Table id="daily-attendance-table">
+  1013→                    <TableHeader>
+  1014→                      <TableRow className="hover:bg-transparent sticky top-0 bg-card z-10">
+  1015→                        <TableHead className="min-w-[160px]">Employee</TableHead>
+  1016→                        <TableHead className="min-w-[70px]">Emp Code</TableHead>
+  1017→                        <TableHead className="hidden md:table-cell min-w-[70px]">Company</TableHead>
+  1018→                        <TableHead className="min-w-[80px]">In Time</TableHead>
+  1019→                        <TableHead className="hidden sm:table-cell min-w-[70px]">Out Time</TableHead>
+  1020→                        <TableHead className="min-w-[50px]">Hrs</TableHead>
+  1021→                        <TableHead className="min-w-[80px]">Status</TableHead>
+  1022→                        <TableHead className="hidden lg:table-cell min-w-[50px]">OT</TableHead>
+  1023→                        <TableHead className="w-[70px] sticky right-0 bg-card">Actions</TableHead>
+  1024→                      </TableRow>
+  1025→                    </TableHeader>
+  1026→                    <TableBody>
+  1027→                      {loading ? (
+  1028→                        Array.from({ length: 5 }).map((_, i) => (
+  1029→                          <TableRow key={i}>
+  1030→                            {Array.from({ length: 9 }).map((_, j) => (
+  1031→                              <TableCell key={j}><div className="h-4 bg-muted/50 rounded animate-pulse" /></TableCell>
+  1032→                            ))}
+  1033→                          </TableRow>
+  1034→                        ))
+  1035→                      ) : filteredRecords.length === 0 ? (
+  1036→                        <TableRow>
+  1037→                          <TableCell colSpan={9} className="text-center py-12 text-muted-foreground">
+  1038→                            <CalendarDays className="w-10 h-10 mx-auto mb-2 opacity-30" />
+  1039→                            <p className="font-medium">No attendance records for this date</p>
+  1040→                            <p className="text-xs mt-1">Select a different date or import attendance data</p>
+  1041→                          </TableCell>
+  1042→                        </TableRow>
+  1043→                      ) : (
+  1044→                        filteredRecords.map((rec) => (
+  1045→                          <TableRow key={rec.id} className="hover:bg-muted/30 transition-colors">
+  1046→                            <TableCell>
+  1047→                              <div className="flex items-center gap-2">
+  1048→                                <div className="w-7 h-7 rounded-full gradient-laxree flex items-center justify-center text-white text-[10px] font-bold shrink-0">
+  1049→                                  {rec.employee?.fullName?.charAt(0) || '?'}
+  1050→                                </div>
+  1051→                                <div className="min-w-0 overflow-hidden">
+  1052→                                  <p className="text-sm font-medium truncate max-w-[120px]">{rec.employee?.fullName || rec.employeeId}</p>
+  1053→                                </div>
+  1054→                              </div>
+  1055→                            </TableCell>
+  1056→                            <TableCell className="text-xs font-mono text-muted-foreground">{rec.employeeId}</TableCell>
+  1057→                            <TableCell className="hidden md:table-cell">
+  1058→                              <FirmBadge firm={getFirmFromEmployeeId(rec.employeeId) || rec.employee?.department || ''} />
+  1059→                            </TableCell>
+  1060→                            <TableCell className="text-sm font-mono whitespace-nowrap">{rec.checkIn || '—'}</TableCell>
+  1061→                            <TableCell className="hidden sm:table-cell text-sm font-mono whitespace-nowrap">{rec.checkOut || '—'}</TableCell>
+  1062→                            <TableCell className="text-sm font-medium whitespace-nowrap">{rec.totalHours > 0 ? `${formatHours(rec.totalHours)}h` : '—'}</TableCell>
+  1063→                            <TableCell><StatusBadge status={rec.status} /></TableCell>
+  1064→                            <TableCell className="hidden lg:table-cell text-sm whitespace-nowrap">
+  1065→                              {rec.overtimeHours > 0 ? (
+  1066→                                <span className="text-cyan-600 dark:text-cyan-400 font-medium">{formatOT(rec.overtimeHours)}</span>
+  1067→                              ) : '—'}
+  1068→                            </TableCell>
+  1069→                            <TableCell className="sticky right-0 bg-card">
+  1070→                              <div className="flex items-center gap-1">
+  1071→                                <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => handleEdit(rec)} title="Edit">
+  1072→                                  <Pencil className="w-3 h-3" />
+  1073→                                </Button>
+  1074→                                <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-destructive hover:text-destructive" onClick={() => handleDelete(rec.id)} title="Delete">
+  1075→                                  <Trash2 className="w-3 h-3" />
+  1076→                                </Button>
+  1077→                              </div>
+  1078→                            </TableCell>
+  1079→                          </TableRow>
+  1080→                        ))
+  1081→                      )}
+  1082→                    </TableBody>
+  1083→                  </Table>
+  1084→                </div>
+  1085→              </CardContent>
+  1086→            </Card>
+  1087→          </motion.div>
+  1088→        </TabsContent>
+  1089→
+  1090→        {/* ══════════════════════════════════════════════════
+  1091→            MONTHLY ATTENDANCE TAB
+  1092→            ══════════════════════════════════════════════════ */}
+  1093→        <TabsContent value="monthly" className="space-y-4">
+  1094→          {/* ── Employee Selector ── */}
+  1095→          <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-3">
+  1096→            <div className="flex flex-col sm:flex-row gap-3 flex-wrap items-end">
+  1097→              <div className="flex-1 min-w-[200px]">
+  1098→                <Label className="text-xs text-muted-foreground mb-1 block">Select Employee</Label>
+  1099→                <Select value={monthlyEmpId} onValueChange={setMonthlyEmpId}>
+  1100→                  <SelectTrigger className="w-full h-9">
+  1101→                    <Search className="w-3.5 h-3.5 mr-1.5 text-muted-foreground" />
+  1102→                    <SelectValue placeholder="Select Employee..." />
+  1103→                  </SelectTrigger>
+  1104→                  <SelectContent>
+  1105→                    {employees.sort((a, b) => a.fullName.localeCompare(b.fullName)).map(e => (
+  1106→                      <SelectItem key={e.employeeId} value={e.employeeId}>
+  1107→                        {e.fullName} ({e.employeeId})
+  1108→                      </SelectItem>
+  1109→                    ))}
+  1110→                  </SelectContent>
+  1111→                </Select>
+  1112→              </div>
+  1113→              <Select value={filterMonth} onValueChange={setFilterMonth}>
+  1114→                <SelectTrigger className="w-full sm:w-36 h-9"><SelectValue /></SelectTrigger>
+  1115→                <SelectContent>
+  1116→                  {MONTHS.map((m, i) => (<SelectItem key={i + 1} value={String(i + 1)}>{m}</SelectItem>))}
+  1117→                </SelectContent>
+  1118→              </Select>
+  1119→              <Select value={filterYear} onValueChange={setFilterYear}>
+  1120→                <SelectTrigger className="w-full sm:w-24 h-9"><SelectValue /></SelectTrigger>
+  1121→                <SelectContent>
+  1122→                  {[2024, 2025, 2026, 2027].map(y => (<SelectItem key={y} value={String(y)}>{y}</SelectItem>))}
+  1123→                </SelectContent>
+  1124→              </Select>
+  1125→              {monthlySummary && (
+  1126→                <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={handleExportExcel}>
+  1127→                  <FileDown className="w-3.5 h-3.5" /> Export Excel
+  1128→                </Button>
+  1129→              )}
+  1130→            </div>
+  1131→          </motion.div>
+  1132→
+  1133→          {/* ── Monthly Summary Card — Spreadsheet Format ── */}
+  1134→          {monthlyLoading ? (
+  1135→            <Card className="glass-card card-gold-hover border-0">
+  1136→              <CardContent className="p-8 text-center text-muted-foreground">
+  1137→                <div className="animate-spin w-8 h-8 border-2 border-gold border-t-transparent rounded-full mx-auto mb-3" />
+  1138→                <p>Loading monthly summary...</p>
+  1139→              </CardContent>
+  1140→            </Card>
+  1141→          ) : monthlySummary ? (
+  1142→            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+  1143→              <Card className="glass-card card-gold-hover border-0">
+  1144→                <CardContent className="p-4 md:p-6 space-y-4">
+  1145→                  {/* Employee Info Header */}
+  1146→                  <div className="flex items-center gap-3 pb-3 border-b border-border/50">
+  1147→                    {(() => {
+  1148→                      const firmCode = getFirmFromEmployeeId(monthlySummary.employee.employeeId) || monthlySummary.employee.firm || monthlySummary.employee.department;
+  1149→                      const logoSrc = FIRM_LOGOS[firmCode];
+  1150→                      return logoSrc ? (
+  1151→                        <div className="w-14 h-14 rounded-xl overflow-hidden border-2 border-gold/30 shrink-0 bg-white p-1">
+  1152→                          <Image src={logoSrc} alt={firmCode} width={48} height={48} className="w-full h-full object-contain" />
+  1153→                        </div>
+  1154→                      ) : (
+  1155→                        <div className="w-14 h-14 rounded-xl gradient-laxree flex items-center justify-center text-white text-lg font-bold shrink-0">
+  1156→                          {monthlySummary.employee.fullName.charAt(0)}
+  1157→                        </div>
+  1158→                      );
+  1159→                    })()}
+  1160→                    <div className="min-w-0">
+  1161→                      <h3 className="font-bold text-lg">{monthlySummary.employee.fullName}</h3>
+  1162→                      <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
+  1163→                        <span className="font-mono">{monthlySummary.employee.employeeId}</span>
+  1164→                        <span>•</span>
+  1165→                        <FirmBadge firm={getFirmFromEmployeeId(monthlySummary.employee.employeeId) || monthlySummary.employee.firm || monthlySummary.employee.department} />
+  1166→                        <span>•</span>
+  1167→                        <span>{monthlySummary.employee.location}</span>
+  1168→                        <span>•</span>
+  1169→                        <span>{monthlySummary.monthName} {monthlySummary.year}</span>
+  1170→                      </div>
+  1171→                    </div>
+  1172→                  </div>
+  1173→
+  1174→                  {/* ── Spreadsheet-style Summary Table ── */}
+  1175→                  <div className="overflow-x-auto rounded-lg border border-border/50">
+  1176→                    <table className="w-full text-sm border-collapse">
+  1177→                      <thead>
+  1178→                        <tr className="bg-emerald-700 dark:bg-emerald-900 text-white">
+  1179→                          <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider border-r border-emerald-600/30">Days Present</th>
+  1180→                          <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider border-r border-emerald-600/30">Days Absent</th>
+  1181→                          <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider border-r border-emerald-600/30">Half Days</th>
+  1182→                          <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider border-r border-emerald-600/30">AL</th>
+  1183→                          <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider border-r border-emerald-600/30">UL</th>
+  1184→                          <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider border-r border-emerald-600/30">Total Hrs Worked</th>
+  1185→                          <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider border-r border-emerald-600/30">OT Hrs</th>
+  1186→                          <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider border-r border-emerald-600/30">Sunday Hrs</th>
+  1187→                          <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider">Total Hrs (incl. Sunday)</th>
+  1188→                        </tr>
+  1189→                      </thead>
+  1190→                      <tbody>
+  1191→                        <tr className="bg-muted/30 hover:bg-muted/50 transition-colors">
+  1192→                          <td className="px-3 py-3 font-bold text-emerald-600 dark:text-emerald-400 border-r border-border/30">{monthlySummary.presentDays}</td>
+  1193→                          <td className="px-3 py-3 font-bold text-red-500 border-r border-border/30">{monthlySummary.absentDays}</td>
+  1194→                          <td className="px-3 py-3 font-bold text-orange-500 border-r border-border/30">{monthlySummary.halfDays}</td>
+  1195→                          <td className="px-3 py-3 text-blue-500 border-r border-border/30">{monthlySummary.annualLeaves || 0}</td>
+  1196→                          <td className="px-3 py-3 text-amber-600 dark:text-amber-400 border-r border-border/30">{monthlySummary.unpaidLeaves || 0}</td>
+  1197→                          <td className="px-3 py-3 font-bold text-cyan-600 dark:text-cyan-400 border-r border-border/30">{displayHHMM(monthlySummary.totalWorkHours)}</td>
+  1198→                          <td className="px-3 py-3 font-bold text-yellow-600 dark:text-yellow-400 border-r border-border/30">{formatOT(monthlySummary.totalOvertimeHours)}</td>
+  1199→                          <td className="px-3 py-3 text-blue-600 dark:text-blue-400 border-r border-border/30">{displayHHMM(monthlySummary.totalSundayHours)}</td>
+  1200→                          <td className="px-3 py-3 font-bold text-gold">{displayHHMM(monthlySummary.totalHrsInclSunday || (monthlySummary.totalWorkHours || 0))}</td>
+  1201→                        </tr>
+  1202→                      </tbody>
+  1203→                    </table>
+  1204→                  </div>
+  1205→
+  1206→                  {/* Additional Info Row */}
+  1207→                  <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+  1208→                    {[
+  1209→                      { label: 'Working Days', value: monthlySummary.totalWorkingDays, color: 'text-foreground' },
+  1210→                      { label: 'Weekly Offs', value: monthlySummary.weeklyOffs, color: 'text-sky-500' },
+  1211→                      { label: 'Sundays', value: monthlySummary.sundays, color: 'text-blue-500' },
+  1212→                      { label: 'Late Entries', value: monthlySummary.lateEntries, color: 'text-amber-500' },
+  1213→                      { label: 'Early Outs', value: monthlySummary.earlyOuts || 0, color: 'text-rose-500' },
+  1214→                      { label: 'Shift Hrs', value: `${displayHHMM(monthlySummary.employee.shiftHours)}h`, color: 'text-muted-foreground' },
+  1215→                    ].map(item => (
+  1216→                      <div key={item.label} className="p-2 rounded-lg bg-muted/20 text-center">
+  1217→                        <p className="text-[9px] text-muted-foreground font-medium uppercase tracking-wider">{item.label}</p>
+  1218→                        <p className={`text-sm font-bold ${item.color}`}>{item.value}</p>
+  1219→                      </div>
+  1220→                    ))}
+  1221→                  </div>
+  1222→
+  1223→                  <Separator />
+  1224→
+  1225→                  {/* Daily Records Table — Full scrollable */}
+  1226→                  <div>
+  1227→                    <h4 className="text-sm font-semibold mb-2 flex items-center gap-1.5">
+  1228→                      <ChevronRight className="w-4 h-4 text-gold" />
+  1229→                      Daily Attendance Breakdown ({monthlySummary.records.length} days)
+  1230→                    </h4>
+  1231→                    <div
+  1232→                      className="rounded-lg border border-border/50"
+  1233→                      style={{
+  1234→                        maxHeight: '60vh',
+  1235→                        overflowY: 'auto',
+  1236→                        WebkitOverflowScrolling: 'touch',
+  1237→                        scrollBehavior: 'smooth',
+  1238→                      }}
+  1239→                    >
+  1240→                      <Table>
+  1241→                        <TableHeader>
+  1242→                          <TableRow className="hover:bg-transparent sticky top-0 bg-card z-10">
+  1243→                            <TableHead className="text-xs">Date</TableHead>
+  1244→                            <TableHead className="text-xs">Day</TableHead>
+  1245→                            <TableHead className="text-xs">In</TableHead>
+  1246→                            <TableHead className="text-xs">Out</TableHead>
+  1247→                            <TableHead className="text-xs">Hrs</TableHead>
+  1248→                            <TableHead className="text-xs">Status</TableHead>
+  1249→                            <TableHead className="text-xs">OT</TableHead>
+  1250→                          </TableRow>
+  1251→                        </TableHeader>
+  1252→                        <TableBody>
+  1253→                          {(() => {
+  1254→                            const daysInMonth = new Date(monthlySummary.year, monthlySummary.month, 0).getDate();
+  1255→                            const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  1256→                            const rows = [];
+  1257→                            for (let day = 1; day <= daysInMonth; day++) {
+  1258→                              const dateStr = `${monthlySummary.year}-${String(monthlySummary.month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  1259→                              const dateObj = new Date(dateStr + 'T00:00:00');
+  1260→                              const dayName = dayNames[dateObj.getDay()];
+  1261→                              const rec = monthlySummary.records.find((r: any) => {
+  1262→                                const rDate = new Date(r.date);
+  1263→                                return rDate.getFullYear() === monthlySummary.year && rDate.getMonth() + 1 === monthlySummary.month && rDate.getDate() === day;
+  1264→                              });
+  1265→                              const isSunday = dateObj.getDay() === 0;
+  1266→                              rows.push(
+  1267→                                <TableRow
+  1268→                                  key={day}
+  1269→                                  className={`${isSunday ? 'bg-blue-500/5' : 'hover:bg-muted/30'} transition-colors`}
+  1270→                                >
+  1271→                                  <TableCell className="text-xs whitespace-nowrap font-medium">
+  1272→                                    {dateObj.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+  1273→                                  </TableCell>
+  1274→                                  <TableCell className={`text-xs ${isSunday ? 'text-blue-500 font-bold' : ''}`}>{dayName}</TableCell>
+  1275→                                  <TableCell className="text-xs font-mono">{rec?.checkIn || '—'}</TableCell>
+  1276→                                  <TableCell className="text-xs font-mono">{rec?.checkOut || '—'}</TableCell>
+  1277→                                  <TableCell className="text-xs font-medium">{rec && rec.totalHours > 0 ? `${formatHours(rec.totalHours)}h` : '—'}</TableCell>
+  1278→                                  <TableCell>
+  1279→                                    {rec ? (
+  1280→                                      <StatusBadge status={rec.status} />
+  1281→                                    ) : isSunday ? (
+  1282→                                      <StatusBadge status="weekly-off" />
+  1283→                                    ) : (
+  1284→                                      <span className="text-xs text-muted-foreground italic">No Record</span>
+  1285→                                    )}
+  1286→                                  </TableCell>
+  1287→                                  <TableCell className="text-xs">{rec && rec.overtimeHours > 0 ? formatOT(rec.overtimeHours) : '—'}</TableCell>
+  1288→                                </TableRow>
+  1289→                              );
+  1290→                            }
+  1291→                            return rows;
+  1292→                          })()}
+  1293→                        </TableBody>
+  1294→                      </Table>
+  1295→                    </div>
+  1296→                  </div>
+  1297→                </CardContent>
+  1298→              </Card>
+  1299→            </motion.div>
+  1300→          ) : (
+  1301→            <Card className="glass-card card-gold-hover border-0">
+  1302→              <CardContent className="p-8 text-center text-muted-foreground">
+  1303→                <CalendarDays className="w-12 h-12 mx-auto mb-3 opacity-30" />
+  1304→                <p>Select an employee to view monthly attendance summary</p>
+  1305→              </CardContent>
+  1306→            </Card>
+  1307→          )}
+  1308→
+  1309→          {/* ── Master Excel Sheet Export Section ── */}
+  1310→          <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-3 border border-gold/20">
+  1311→            <div className="flex items-center gap-2 mb-2">
+  1312→              <FileSpreadsheet className="w-4 h-4 text-gold" />
+  1313→              <h3 className="text-sm font-semibold">Master Excel Sheet</h3>
+  1314→              <span className="text-[10px] text-muted-foreground">— Firm-wise monthly attendance with calendar format</span>
+  1315→            </div>
+  1316→            <div className="flex flex-col sm:flex-row gap-3 flex-wrap items-end">
+  1317→              <div className="min-w-[140px]">
+  1318→                <Label className="text-xs text-muted-foreground mb-1 block">Select Firm</Label>
+  1319→                <Select value={masterFirm} onValueChange={setMasterFirm}>
+  1320→                  <SelectTrigger className="w-full h-9">
+  1321→                    <Building2 className="w-3.5 h-3.5 mr-1 text-muted-foreground" />
+  1322→                    <SelectValue placeholder="All Firms" />
+  1323→                  </SelectTrigger>
+  1324→                  <SelectContent>
+  1325→                    <SelectItem value="all">All Firms (Separate Sheets)</SelectItem>
+  1326→                    {FIRMS.map((f) => (<SelectItem key={f} value={f}>{f} — {FIRM_NAMES[f]}</SelectItem>))}
+  1327→                  </SelectContent>
+  1328→                </Select>
+  1329→              </div>
+  1330→              <Select value={filterMonth} onValueChange={setFilterMonth} disabled>
+  1331→                <SelectTrigger className="w-full sm:w-36 h-9"><SelectValue /></SelectTrigger>
+  1332→                <SelectContent>
+  1333→                  {MONTHS.map((m, i) => (<SelectItem key={i + 1} value={String(i + 1)}>{m}</SelectItem>))}
+  1334→                </SelectContent>
+  1335→              </Select>
+  1336→              <Select value={filterYear} onValueChange={setFilterYear} disabled>
+  1337→                <SelectTrigger className="w-full sm:w-24 h-9"><SelectValue /></SelectTrigger>
+  1338→                <SelectContent>
+  1339→                  {[2024, 2025, 2026, 2027].map(y => (<SelectItem key={y} value={String(y)}>{y}</SelectItem>))}
+  1340→                </SelectContent>
+  1341→              </Select>
+  1342→              <Button
+  1343→                variant="outline"
+  1344→                size="sm"
+  1345→                className="h-9 gap-1.5 border-gold/30 hover:border-gold/60 hover:bg-gold/5 text-gold"
+  1346→                onClick={handleExportMasterSheet}
+  1347→                disabled={masterExporting}
+  1348→              >
+  1349→                {masterExporting ? (
+  1350→                  <>
+  1351→                    <div className="w-3.5 h-3.5 border-2 border-gold border-t-transparent rounded-full animate-spin" />
+  1352→                    Generating...
+  1353→                  </>
+  1354→                ) : (
+  1355→                  <>
+  1356→                    <FileDown className="w-3.5 h-3.5" /> Download Master Sheet
+  1357→                  </>
+  1358→                )}
+  1359→              </Button>
+  1360→            </div>
+  1361→          </motion.div>
+  1362→        </TabsContent>
+  1363→
+  1364→        {/* ══════════════════════════════════════════════════
+  1365→            DAILY ATTENDANCE IMPORT TAB
+  1366→            ══════════════════════════════════════════════════ */}
+  1367→        <TabsContent value="import" className="space-y-4">
+  1368→          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+  1369→            <Card className="glass-card card-gold-hover border-0">
+  1370→              <CardContent className="p-6 space-y-6">
+  1371→                {/* Upload Section */}
+  1372→                <div>
+  1373→                  <div className="flex items-center justify-between mb-3">
+  1374→                    <h3 className="text-sm font-semibold flex items-center gap-2">
+  1375→                      <Upload className="w-4 h-4 text-gold" />
+  1376→                      Upload Attendance Sheet
+  1377→                    </h3>
+  1378→                    <Button
+  1379→                      variant="outline"
+  1380→                      size="sm"
+  1381→                      className="h-8 gap-1.5 text-xs border-gold/30 hover:border-gold/60 hover:bg-gold/5"
+  1382→                      onClick={handleDownloadTemplate}
+  1383→                    >
+  1384→                      <Download className="w-3.5 h-3.5" /> Download Template
+  1385→                    </Button>
+  1386→                  </div>
+  1387→
+  1388→                  {/* Attendance Date Picker */}
+  1389→                  <div className="mb-4">
+  1390→                    <Label htmlFor="importDate" className="text-xs font-semibold flex items-center gap-1.5 mb-1.5">
+  1391→                      <CalendarDays className="w-3.5 h-3.5 text-gold" />
+  1392→                      Attendance Date
+  1393→                    </Label>
+  1394→                    <Input
+  1395→                      id="importDate"
+  1396→                      type="date"
+  1397→                      value={importDate}
+  1398→                      onChange={(e) => setImportDate(e.target.value)}
+  1399→                      className="w-full sm:w-56 h-9 text-sm font-medium input-premium rounded-lg"
+  1400→                    />
+  1401→                    <p className="text-[10px] text-muted-foreground mt-1">
+  1402→                      This date will be used for all rows in the uploaded file (daily template has no Date column per row).
+  1403→                    </p>
+  1404→                  </div>
+  1405→
+  1406→                  <div className="border-2 border-dashed border-border rounded-xl p-8 text-center hover:border-gold/50 transition-colors">
+  1407→                    <input
+  1408→                      ref={fileInputRef}
+  1409→                      type="file"
+  1410→                      accept=".xlsx,.xls,.csv"
+  1411→                      onChange={handleFileUpload}
+  1412→                      className="hidden"
+  1413→                    />
+  1414→                    <FileSpreadsheet className="w-12 h-12 mx-auto mb-3 text-muted-foreground/50" />
+  1415→                    <p className="text-sm text-muted-foreground mb-3">
+  1416→                      Upload Excel (.xlsx, .xls) or CSV file with attendance data
+  1417→                    </p>
+  1418→                    <Button
+  1419→                      variant="outline"
+  1420→                      onClick={() => fileInputRef.current?.click()}
+  1421→                      className="gap-1.5"
+  1422→                    >
+  1423→                      <Upload className="w-4 h-4" /> Choose File
+  1424→                    </Button>
+  1425→                    {importFile && (
+  1426→                      <p className="text-xs text-muted-foreground mt-2">
+  1427→                        Selected: {importFile.name} ({(importFile.size / 1024).toFixed(1)} KB)
+  1428→                      </p>
+  1429→                    )}
+  1430→                  </div>
+  1431→                  <div className="mt-3 p-3 rounded-lg bg-gold/5 border border-gold/10">
+  1432→                    <Info className="w-4 h-4 text-gold inline mr-1.5 -mt-0.5" />
+  1433→                    <span className="text-xs text-muted-foreground">
+  1434→                      <strong>Template format:</strong> SNo, E. Code, Name, Shift, InTime, OutTime, Work Dur., OT, Tot. Dur., Status, Remarks. 
+  1435→                      The daily template has no Date column — set the <strong>Attendance Date</strong> above before uploading.
+  1436→                      Click <strong>"Download Template"</strong> to get the correct format with all employees pre-filled. 
+  1437→                      The system auto-converts Excel dates/times and matches employees by E. Code or Name.
+  1438→                      Also supports the old format (Employee ID, Employee Name, Date, In Time, Out Time, Status).
+  1439→                    </span>
+  1440→                  </div>
+  1441→                </div>
+  1442→
+  1443→                {/* Preview Section */}
+  1444→                {importPreview.length > 0 && (
+  1445→                  <div>
+  1446→                    <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+  1447→                      <Search className="w-4 h-4 text-gold" />
+  1448→                      Preview ({importPreview.length} records found)
+  1449→                      {!importPreview.some(r => r.date) && importDate && (
+  1450→                        <span className="text-[10px] text-muted-foreground font-normal ml-1">
+  1451→                          — using date: {importDate}
+  1452→                        </span>
+  1453→                      )}
+  1454→                    </h3>
+  1455→                    <div className="max-h-[40vh] overflow-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
+  1456→                      <Table>
+  1457→                        <TableHeader>
+  1458→                          <TableRow className="hover:bg-transparent">
+  1459→                            <TableHead className="text-xs">E. Code</TableHead>
+  1460→                            <TableHead className="text-xs">Name</TableHead>
+  1461→                            <TableHead className="text-xs">Shift</TableHead>
+  1462→                            <TableHead className="text-xs">InTime</TableHead>
+  1463→                            <TableHead className="text-xs">OutTime</TableHead>
+  1464→                            <TableHead className="text-xs">Status</TableHead>
+  1465→                            <TableHead className="text-xs">Remarks</TableHead>
+  1466→                          </TableRow>
+  1467→                        </TableHeader>
+  1468→                        <TableBody>
+  1469→                          {importPreview.slice(0, 100).map((row, i) => (
+  1470→                            <TableRow key={i} className="hover:bg-muted/30">
+  1471→                              <TableCell className="text-xs font-mono">{row.employeeId || '—'}</TableCell>
+  1472→                              <TableCell className="text-xs">{row.employeeName || '—'}</TableCell>
+  1473→                              <TableCell className="text-xs">{row.shift || '—'}</TableCell>
+  1474→                              <TableCell className="text-xs font-mono">{row.checkIn || '—'}</TableCell>
+  1475→                              <TableCell className="text-xs font-mono">{row.checkOut || '—'}</TableCell>
+  1476→                              <TableCell className="text-xs">{row.status || '—'}</TableCell>
+  1477→                              <TableCell className="text-xs">{row.remarks || '—'}</TableCell>
+  1478→                            </TableRow>
+  1479→                          ))}
+  1480→                        </TableBody>
+  1481→                      </Table>
+  1482→                    </div>
+  1483→
+  1484→                    {/* Process Button */}
+  1485→                    <div className="flex items-center gap-3 mt-4 pt-4 border-t relative z-10 bg-background">
+  1486→                      <Button
+  1487→                        className="gradient-laxree text-white gap-1.5 shrink-0"
+  1488→                        onClick={handleProcessImport}
+  1489→                        disabled={importing}
+  1490→                      >
+  1491→                        {importing ? (
+  1492→                          <>
+  1493→                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+  1494→                            Processing...
+  1495→                          </>
+  1496→                        ) : (
+  1497→                          <>
+  1498→                            <CheckCircle className="w-4 h-4" /> Process Attendance
+  1499→                          </>
+  1500→                        )}
+
+[showing lines 1001-1500 of 1685; use offset=1501 with limit to continue reading]

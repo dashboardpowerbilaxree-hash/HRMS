@@ -1,0 +1,1685 @@
+     1→'use client';
+     2→
+     3→import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+     4→import { motion } from 'framer-motion';
+     5→import {
+     6→  Clock, CheckCircle, XCircle, AlertTriangle, Timer,
+     7→  CalendarDays, Search, Building2, Info, MapPin, X,
+     8→  Upload, FileSpreadsheet, Pencil, Trash2,
+     9→  Download, FileDown, ChevronRight, Users
+    10→} from 'lucide-react';
+    11→// xlsx-js-style moved to server-side API routes for reliable export
+    12→import { Card, CardContent } from '@/components/ui/card';
+    13→import { Button } from '@/components/ui/button';
+    14→import { Input } from '@/components/ui/input';
+    15→import { Label } from '@/components/ui/label';
+    16→import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+    17→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+    18→import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+    19→import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+    20→import { ScrollArea } from '@/components/ui/scroll-area';
+    21→import { Separator } from '@/components/ui/separator';
+    22→import { toast } from 'sonner';
+    23→import Image from 'next/image';
+    24→
+    25→// ── Firm badge class map ──
+    26→const FIRM_BADGE_CLASS: Record<string, string> = {
+    27→  LAPL: 'firm-badge-lapl',
+    28→  LRSL: 'firm-badge-lrsl',
+    29→  SI: 'firm-badge-si',
+    30→  SDF: 'firm-badge-sdf',
+    31→  Roofing: 'firm-badge-roofing',
+    32→};
+    33→
+    34→const FIRM_NAMES: Record<string, string> = {
+    35→  LAPL: 'LAXREE AMENITIES PVT LTD',
+    36→  LRSL: 'LAXREE ROOFING SOLUTION',
+    37→  SI: 'SMARTH INTERNATIONAL',
+    38→  SDF: 'SANGRAH DECOR & FURNITURE',
+    39→};
+    40→
+    41→const FIRM_LOGOS: Record<string, string> = {
+    42→  LAPL: '/logos/lapl.jpg',
+    43→  LRSL: '/logos/lrsl.jpg',
+    44→  SI: '/logos/si.png',
+    45→  SDF: '/logos/sdf.png',
+    46→};
+    47→
+    48→// ── Convert decimal hours to HH:MM display format ──
+    49→// e.g., 6.25 → "6:15", 9.5 → "9:30", 8.0 → "8:00"
+    50→// Uses colon (:) separator so it's clearly hours:minutes, NOT a decimal fraction
+    51→function formatHours(decimal: number): string {
+    52→  if (!decimal || decimal === 0) return '0:00';
+    53→  const hours = Math.floor(decimal);
+    54→  const minutes = Math.round((decimal - hours) * 60);
+    55→  if (minutes >= 60) return `${hours + 1}:00`;
+    56→  return `${hours}:${String(minutes).padStart(2, '0')}`;
+    57→}
+    58→
+    59→// ── Format overtime hours in clear human-readable format ──
+    60→// Under 1 hour: shows minutes only (e.g., 7m, 20m)
+    61→// 1+ hours: shows hours and minutes (e.g., 1h 30m, 2h 15m)
+    62→// This avoids the confusing decimal display like "0.07h" which looks like 4.2 min but means 7 min
+    63→function formatOT(decimal: number): string {
+    64→  if (!decimal || decimal === 0) return '0m';
+    65→  const totalMinutes = Math.round(decimal * 60);
+    66→  if (totalMinutes < 60) {
+    67→    return `${totalMinutes}m`;
+    68→  }
+    69→  const hours = Math.floor(totalMinutes / 60);
+    70→  const minutes = totalMinutes % 60;
+    71→  if (minutes === 0) return `${hours}h`;
+    72→  return `${hours}h ${minutes}m`;
+    73→}
+    74→
+    75→// ── Display a value that's already in HH:MM format ──
+    76→function displayHHMM(value: number | undefined | null): string {
+    77→  if (!value && value !== 0) return '0:00';
+    78→  return formatHours(value);
+    79→}
+    80→
+    81→// ── Get firm code from employee ID prefix ──
+    82→function getFirmFromEmployeeId(employeeId: string): string {
+    83→  const id = employeeId.toUpperCase();
+    84→  if (id.startsWith('LAPL')) return 'LAPL';
+    85→  if (id.startsWith('LRSL')) return 'LRSL';
+    86→  if (id.startsWith('SI-') || id.startsWith('SI0')) return 'SI';
+    87→  if (id.startsWith('SDF')) return 'SDF';
+    88→  return ''; // fallback to existing department/firm
+    89→}
+    90→
+    91→const FIRMS = ['LAPL', 'LRSL', 'SI', 'SDF'];
+    92→const LOCATIONS = ['Ajmer', 'Gurgaon', 'Palra Warehouse', 'Jaipur', 'Roofing Factory'];
+    93→const MONTHS = [
+    94→  'January', 'February', 'March', 'April', 'May', 'June',
+    95→  'July', 'August', 'September', 'October', 'November', 'December',
+    96→];
+    97→
+    98→// ── Attendance Record Type ──
+    99→interface AttendanceRecord {
+   100→  id: string;
+   101→  employeeId: string;
+   102→  date: string;
+   103→  checkIn: string | null;
+   104→  checkOut: string | null;
+   105→  totalHours: number;
+   106→  status: string;
+   107→  lateEntry: boolean;
+   108→  earlyOut: boolean;
+   109→  halfDay: boolean;
+   110→  overtimeHours: number;
+   111→  isSunday: boolean;
+   112→  isPH: boolean;
+   113→  sundayHours: number;
+   114→  employee?: {
+   115→    fullName: string;
+   116→    employeeId: string;
+   117→    department: string;
+   118→    designation: string;
+   119→    location: string;
+   120→  };
+   121→}
+   122→
+   123→// ── Monthly Summary Type ──
+   124→interface MonthlySummary {
+   125→  employee: {
+   126→    fullName: string;
+   127→    employeeId: string;
+   128→    firm: string;
+   129→    firmFullName?: string;
+   130→    location: string;
+   131→    department: string;
+   132→    designation: string;
+   133→    shiftHours: number;
+   134→    employmentType?: string;
+   135→    hourlyRate?: number;
+   136→    monthlySalary?: number;
+   137→    overtimeRate?: number;
+   138→  };
+   139→  month: number;
+   140→  year: number;
+   141→  monthName: string;
+   142→  daysInMonth: number;
+   143→  totalWorkingDays: number;
+   144→  presentDays: number;
+   145→  absentDays: number;
+   146→  leaveDays: number;
+   147→  paidLeaves?: number;
+   148→  annualLeaves?: number;
+   149→  unpaidLeaves?: number;
+   150→  halfDays: number;
+   151→  holidayDays: number;
+   152→  weeklyOffs: number;
+   153→  sundays: number;
+   154→  totalAttendance: number;
+   155→  totalWorkHours: number;
+   156→  totalOvertimeHours: number;
+   157→  totalSundayHours: number;
+   158→  totalHrsInclSunday?: number;
+   159→  lateEntries: number;
+   160→  earlyOuts?: number;
+   161→  records: AttendanceRecord[];
+   162→  // Salary calculation fields (from monthly-summary API)
+   163→  perDayRate?: number;
+   164→  calculatedHourlyRate?: number;
+   165→  calculatedBaseSalary?: number;
+   166→  calculatedOtAmount?: number;
+   167→  calculatedGrossSalary?: number;
+   168→}
+   169→
+   170→// ── Animated Counter ──
+   171→function AnimatedCounter({ value, prefix = '', suffix = '', decimals = 0 }: {
+   172→  value: number; prefix?: string; suffix?: string; decimals?: number;
+   173→}) {
+   174→  const [display, setDisplay] = useState(0);
+   175→  useEffect(() => {
+   176→    const duration = 1000;
+   177→    const startTime = Date.now();
+   178→    const step = () => {
+   179→      const elapsed = Date.now() - startTime;
+   180→      const progress = Math.min(elapsed / duration, 1);
+   181→      const eased = 1 - Math.pow(1 - progress, 3);
+   182→      setDisplay(value * eased);
+   183→      if (progress < 1) requestAnimationFrame(step);
+   184→    };
+   185→    requestAnimationFrame(step);
+   186→  }, [value]);
+   187→
+   188→  if (decimals > 0) {
+   189→    return <span>{prefix}{display.toFixed(decimals)}{suffix}</span>;
+   190→  }
+   191→  return <span>{prefix}{Math.round(display).toLocaleString()}{suffix}</span>;
+   192→}
+   193→
+   194→// ── Status badge with colors ──
+   195→function StatusBadge({ status }: { status: string }) {
+   196→  const config: Record<string, { bg: string; text: string; label: string }> = {
+   197→    present: { bg: 'bg-emerald-500/15 border-emerald-500/20', text: 'text-emerald-600 dark:text-emerald-400', label: 'Present' },
+   198→    late: { bg: 'bg-yellow-500/15 border-yellow-500/20', text: 'text-yellow-600 dark:text-yellow-400', label: 'Late' },
+   199→    'early-out': { bg: 'bg-rose-500/15 border-rose-500/20', text: 'text-rose-600 dark:text-rose-400', label: 'Early Out' },
+   200→    absent: { bg: 'bg-red-500/15 border-red-500/20', text: 'text-red-600 dark:text-red-400', label: 'Absent' },
+   201→    'half-day': { bg: 'bg-orange-500/15 border-orange-500/20', text: 'text-orange-600 dark:text-orange-400', label: 'Half-Day' },
+   202→    holiday: { bg: 'bg-purple-500/15 border-purple-500/20', text: 'text-purple-600 dark:text-purple-400', label: 'Holiday' },
+   203→    'weekly-off': { bg: 'bg-blue-500/15 border-blue-500/20', text: 'text-blue-600 dark:text-blue-400', label: 'Weekly Off' },
+   204→  };
+   205→  const s = config[status] || { bg: 'bg-muted border-border', text: 'text-muted-foreground', label: status };
+   206→  return (
+   207→    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border whitespace-nowrap ${s.bg} ${s.text}`}>
+   208→      {s.label}
+   209→    </span>
+   210→  );
+   211→}
+   212→
+   213→// ── Firm badge ──
+   214→function FirmBadge({ firm }: { firm: string }) {
+   215→  return <span className={`${FIRM_BADGE_CLASS[firm] || 'firm-badge-lapl'} whitespace-nowrap shrink-0`}>{firm}</span>;
+   216→}
+   217→
+   218→export function AttendanceTracker() {
+   219→  const [records, setRecords] = useState<AttendanceRecord[]>([]);
+   220→  const [summary, setSummary] = useState({
+   221→    present: 0, absent: 0, late: 0, earlyOut: 0, halfDay: 0, ot: 0,
+   222→  });
+   223→  const [employees, setEmployees] = useState<{ employeeId: string; fullName: string; department: string; location: string; firm: string; shiftStart: string; shiftEnd: string; shiftHours: number }[]>([]);
+   224→  const [loading, setLoading] = useState(true);
+   225→  const [open, setOpen] = useState(false);
+   226→  const [form, setForm] = useState({ employeeId: '', date: '', checkIn: '', checkOut: '' });
+   227→  const [employeeSearch, setEmployeeSearch] = useState('');
+   228→
+   229→  // ── Filters ──
+   230→  const now = new Date();
+   231→  const [filterMonth, setFilterMonth] = useState(String(now.getMonth() + 1));
+   232→  const [filterYear, setFilterYear] = useState(String(now.getFullYear()));
+   233→  const [filterFirm, setFilterFirm] = useState('all');
+   234→  const [filterLocation, setFilterLocation] = useState('all');
+   235→  const [searchEmployee, setSearchEmployee] = useState('');
+   236→
+   237→  // ── Daily tab: date filter + status filter ──
+   238→  const [filterDate, setFilterDate] = useState(() => {
+   239→    const d = new Date();
+   240→    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+   241→  });
+   242→  const [statusFilter, setStatusFilter] = useState<string>('all'); // 'all' | 'present' | 'absent' | 'late' | 'early-out' | 'ot'
+   243→
+   244→  // ── Edit state ──
+   245→  const [editOpen, setEditOpen] = useState(false);
+   246→  const [editRecord, setEditRecord] = useState<AttendanceRecord | null>(null);
+   247→  const [editForm, setEditForm] = useState({ checkIn: '', checkOut: '' });
+   248→
+   249→  // ── Monthly Summary state ──
+   250→  const [monthlyEmpId, setMonthlyEmpId] = useState('');
+   251→  const [monthlySummary, setMonthlySummary] = useState<MonthlySummary | null>(null);
+   252→  const [monthlyLoading, setMonthlyLoading] = useState(false);
+   253→
+   254→  // ── Import state ──
+   255→  const [importFile, setImportFile] = useState<File | null>(null);
+   256→  const [importPreview, setImportPreview] = useState<any[]>([]);
+   257→  const [importing, setImporting] = useState(false);
+   258→  const [importResult, setImportResult] = useState<any>(null);
+   259→  const [importDate, setImportDate] = useState(() => {
+   260→    const d = new Date();
+   261→    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+   262→  });
+   263→  const fileInputRef = useRef<HTMLInputElement>(null);
+   264→
+   265→  // ── Master Excel Sheet state ──
+   266→  const [masterFirm, setMasterFirm] = useState('all');
+   267→  const [masterExporting, setMasterExporting] = useState(false);
+   268→
+   269→  // ── Load data ──
+   270→  const loadData = useCallback(async () => {
+   271→    setLoading(true);
+   272→    try {
+   273→      const params = new URLSearchParams();
+   274→      // If a specific date is selected, use date filter; otherwise use month/year
+   275→      if (filterDate) {
+   276→        params.set('date', filterDate);
+   277→      } else {
+   278→        params.set('month', filterMonth);
+   279→        params.set('year', filterYear);
+   280→      }
+   281→      if (filterFirm !== 'all') params.set('department', filterFirm);
+   282→      if (filterLocation !== 'all') params.set('location', filterLocation);
+   283→
+   284→      const [attRes, empRes] = await Promise.all([
+   285→        fetch(`/api/attendance?${params}`),
+   286→        fetch('/api/employees?status=Yes'),
+   287→      ]);
+   288→      const attData = await attRes.json();
+   289→      const empData = await empRes.json();
+   290→
+   291→      const recs: AttendanceRecord[] = attData.records || attData;
+   292→      setRecords(recs);
+   293→      setEmployees(empData.map((e: any) => ({
+   294→        employeeId: e.employeeId,
+   295→        fullName: e.fullName,
+   296→        department: e.department,
+   297→        location: e.location,
+   298→        firm: e.firm,
+   299→        shiftStart: e.shiftStart || '10:00',
+   300→        shiftEnd: e.shiftEnd || '19:00',
+   301→        shiftHours: e.shiftHours || 9,
+   302→      })));
+   303→
+   304→      const summ = attData.summary || {};
+   305→      setSummary({
+   306→        present: summ.present || recs.filter((a: any) => ['present', 'late', 'early-out'].includes(a.status)).length,
+   307→        absent: summ.absent || recs.filter((a: any) => a.status === 'absent').length,
+   308→        late: summ.late || recs.filter((a: any) => a.lateEntry).length,
+   309→        earlyOut: summ.earlyOuts || recs.filter((a: any) => a.earlyOut).length,
+   310→        halfDay: summ.halfDay || recs.filter((a: any) => a.halfDay).length,
+   311→        ot: Math.round((summ.totalOvertimeHours || recs.reduce((s: number, a: any) => s + a.overtimeHours, 0)) * 100) / 100,
+   312→      });
+   313→    } catch {
+   314→      toast.error('Failed to load attendance data');
+   315→    }
+   316→    setLoading(false);
+   317→  }, [filterDate, filterMonth, filterYear, filterFirm, filterLocation]);
+   318→
+   319→  useEffect(() => { loadData(); }, [loadData]);
+   320→
+   321→  // ── Filtered records by employee search + status filter ──
+   322→  const filteredRecords = useMemo(() => {
+   323→    let filtered = records;
+   324→    // Status filter
+   325→    if (statusFilter !== 'all') {
+   326→      if (statusFilter === 'present') {
+   327→        filtered = filtered.filter((r) => ['present', 'late', 'early-out'].includes(r.status));
+   328→      } else if (statusFilter === 'absent') {
+   329→        filtered = filtered.filter((r) => r.status === 'absent');
+   330→      } else if (statusFilter === 'late') {
+   331→        filtered = filtered.filter((r) => r.lateEntry);
+   332→      } else if (statusFilter === 'early-out') {
+   333→        filtered = filtered.filter((r) => r.earlyOut);
+   334→      } else if (statusFilter === 'ot') {
+   335→        filtered = filtered.filter((r) => r.overtimeHours > 0);
+   336→      }
+   337→    }
+   338→    // Employee search
+   339→    if (searchEmployee) {
+   340→      const q = searchEmployee.toLowerCase();
+   341→      filtered = filtered.filter((r) =>
+   342→        r.employee?.fullName?.toLowerCase().includes(q) ||
+   343→        r.employeeId.toLowerCase().includes(q)
+   344→      );
+   345→    }
+   346→    return filtered;
+   347→  }, [records, searchEmployee, statusFilter]);
+   348→
+   349→  // ── Mark attendance submit ──
+   350→  const handleSubmit = async () => {
+   351→    if (!form.employeeId || !form.date) {
+   352→      toast.error('Please select employee and date');
+   353→      return;
+   354→    }
+   355→    try {
+   356→      const res = await fetch('/api/attendance', {
+   357→        method: 'POST',
+   358→        headers: { 'Content-Type': 'application/json' },
+   359→        body: JSON.stringify(form),
+   360→      });
+   361→      if (!res.ok) {
+   362→        const errData = await res.json().catch(() => ({}));
+   363→        throw new Error(errData.error || `Failed to record attendance`);
+   364→      }
+   365→      toast.success('Attendance recorded successfully');
+   366→      setOpen(false);
+   367→      setForm({ employeeId: '', date: '', checkIn: '', checkOut: '' });
+   368→      setEmployeeSearch('');
+   369→      loadData();
+   370→    } catch (e: any) {
+   371→      toast.error(e.message || 'Failed to record attendance');
+   372→    }
+   373→  };
+   374→
+   375→  // ── Edit attendance ──
+   376→  const handleEdit = (rec: AttendanceRecord) => {
+   377→    setEditRecord(rec);
+   378→    setEditForm({ checkIn: rec.checkIn || '', checkOut: rec.checkOut || '' });
+   379→    setEditOpen(true);
+   380→  };
+   381→
+   382→  const handleEditSubmit = async () => {
+   383→    if (!editRecord) return;
+   384→    try {
+   385→      const res = await fetch(`/api/attendance/${editRecord.id}`, {
+   386→        method: 'PUT',
+   387→        headers: { 'Content-Type': 'application/json' },
+   388→        body: JSON.stringify(editForm),
+   389→      });
+   390→      if (res.ok) {
+   391→        toast.success('Attendance updated successfully');
+   392→        setEditOpen(false);
+   393→        setEditRecord(null);
+   394→        loadData();
+   395→      } else {
+   396→        const data = await res.json();
+   397→        toast.error(data.error || 'Failed to update');
+   398→      }
+   399→    } catch {
+   400→      toast.error('Failed to update attendance');
+   401→    }
+   402→  };
+   403→
+   404→  // ── Delete attendance ──
+   405→  const handleDelete = async (id: string) => {
+   406→    if (!confirm('Delete this attendance record?')) return;
+   407→    try {
+   408→      const res = await fetch(`/api/attendance/${id}`, { method: 'DELETE' });
+   409→      if (res.ok) {
+   410→        toast.success('Attendance record deleted');
+   411→        loadData();
+   412→      }
+   413→    } catch {
+   414→      toast.error('Failed to delete');
+   415→    }
+   416→  };
+   417→
+   418→  // ── Load Monthly Summary ──
+   419→  const loadMonthlySummary = useCallback(async () => {
+   420→    if (!monthlyEmpId) return;
+   421→    setMonthlyLoading(true);
+   422→    try {
+   423→      const res = await fetch(`/api/attendance/monthly-summary?employeeId=${monthlyEmpId}&month=${filterMonth}&year=${filterYear}`);
+   424→      if (res.ok) {
+   425→        const data = await res.json();
+   426→        setMonthlySummary(data);
+   427→      } else {
+   428→        setMonthlySummary(null);
+   429→      }
+   430→    } catch {
+   431→      toast.error('Failed to load monthly summary');
+   432→      setMonthlySummary(null);
+   433→    }
+   434→    setMonthlyLoading(false);
+   435→  }, [monthlyEmpId, filterMonth, filterYear]);
+   436→
+   437→  useEffect(() => { loadMonthlySummary(); }, [loadMonthlySummary]);
+   438→
+   439→  // ── Export Daily Attendance — via server-side API ──
+   440→  const handleExportDailyExcel = async () => {
+   441→    if (filteredRecords.length === 0) {
+   442→      toast.error('No records to export');
+   443→      return;
+   444→    }
+   445→    try {
+   446→      const params = new URLSearchParams();
+   447→      if (filterDate) params.set('date', filterDate);
+   448→      else { params.set('month', filterMonth); params.set('year', filterYear); }
+   449→      if (filterFirm !== 'all') params.set('department', filterFirm);
+   450→      if (filterLocation !== 'all') params.set('location', filterLocation);
+   451→
+   452→      const res = await fetch(`/api/attendance/export-daily?${params}`);
+   453→      if (!res.ok) { toast.error('Export failed'); return; }
+   454→      const blob = await res.blob();
+   455→      const url = window.URL.createObjectURL(blob);
+   456→      const a = document.createElement('a');
+   457→      a.href = url;
+   458→      a.download = `Daily_Attendance_${MONTHS[parseInt(filterMonth) - 1]}_${filterYear}.xlsx`;
+   459→      document.body.appendChild(a);
+   460→      a.click();
+   461→      document.body.removeChild(a);
+   462→      window.URL.revokeObjectURL(url);
+   463→      toast.success('Daily Attendance Excel downloaded successfully!');
+   464→    } catch (err) {
+   465→      console.error('Daily export error:', err);
+   466→      toast.error('Export failed. Please try again.');
+   467→    }
+   468→  };
+   469→
+   470→  // ── Export Monthly Attendance Register — via server-side API ──
+   471→  const handleExportExcel = async () => {
+   472→    if (!monthlySummary) return;
+   473→    try {
+   474→      const params = new URLSearchParams({
+   475→        employeeId: monthlyEmpId,
+   476→        month: filterMonth,
+   477→        year: filterYear,
+   478→      });
+   479→      const res = await fetch(`/api/attendance/export-monthly?${params}`);
+   480→      if (!res.ok) { toast.error('Export failed'); return; }
+   481→      const blob = await res.blob();
+   482→      const url = window.URL.createObjectURL(blob);
+   483→      const a = document.createElement('a');
+   484→      a.href = url;
+   485→      a.download = `Monthly_Attendance_${monthlySummary.employee.fullName}_${monthlySummary.monthName}_${monthlySummary.year}.xlsx`;
+   486→      document.body.appendChild(a);
+   487→      a.click();
+   488→      document.body.removeChild(a);
+   489→      window.URL.revokeObjectURL(url);
+   490→      toast.success('Monthly Attendance Excel downloaded successfully!');
+   491→    } catch (err) {
+   492→      console.error('Monthly export error:', err);
+   493→      toast.error('Export failed. Please try again.');
+   494→    }
+   495→  };
+   496→
+   497→  // ── Convert Excel serial date to YYYY-MM-DD ──
+   498→  const excelSerialToDate = (serial: number): string => {
+   499→    // Excel serial date: days since Jan 1, 1900 (with the 1900 leap year bug)
+   500→    const epoch = new Date(1899, 11, 30); // Dec 30, 1899 is day 0
+   501→    const date = new Date(epoch.getTime() + serial * 86400000);
+   502→    const y = date.getFullYear();
+   503→    const m = String(date.getMonth() + 1).padStart(2, '0');
+   504→    const d = String(date.getDate()).padStart(2, '0');
+   505→    return `${y}-${m}-${d}`;
+   506→  };
+   507→
+   508→  // ── Convert Excel decimal time to HH:MM ──
+   509→  const excelDecimalToTime = (value: any): string => {
+   510→    if (typeof value === 'string') {
+   511→      // Already a string - check if it looks like HH:MM
+   512→      const trimmed = value.trim();
+   513→      if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(trimmed)) return trimmed.substring(0, 5);
+   514→      // Try parsing as number
+   515→      const num = parseFloat(trimmed);
+   516→      if (!isNaN(num) && num >= 0 && num < 1) {
+   517→        const totalMinutes = Math.round(num * 1440);
+   518→        const hours = Math.floor(totalMinutes / 60);
+   519→        const minutes = totalMinutes % 60;
+   520→        return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+   521→      }
+   522→      return trimmed;
+   523→    }
+   524→    if (typeof value === 'number') {
+   525→      if (value >= 1) {
+   526→        // Could be a full datetime serial - extract time portion
+   527→        const timePart = value - Math.floor(value);
+   528→        const totalMinutes = Math.round(timePart * 1440);
+   529→        const hours = Math.floor(totalMinutes / 60);
+   530→        const minutes = totalMinutes % 60;
+   531→        return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+   532→      }
+   533→      // Decimal time fraction (0 to <1)
+   534→      const totalMinutes = Math.round(value * 1440);
+   535→      const hours = Math.floor(totalMinutes / 60);
+   536→      const minutes = totalMinutes % 60;
+   537→      return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+   538→    }
+   539→    return String(value || '');
+   540→  };
+   541→
+   542→  // ── Parse any date value to YYYY-MM-DD ──
+   543→  const parseDateValue = (value: any): string => {
+   544→    if (!value && value !== 0) return '';
+   545→    if (typeof value === 'number') {
+   546→      // Excel serial date number
+   547→      return excelSerialToDate(value);
+   548→    }
+   549→    const str = String(value).trim();
+   550→    if (!str) return '';
+   551→    // Already in YYYY-MM-DD format
+   552→    if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+   553→    // Try DD/MM/YYYY or DD-MM-YYYY
+   554→    const dmyMatch = str.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})$/);
+   555→    if (dmyMatch) return `${dmyMatch[3]}-${dmyMatch[2].padStart(2, '0')}-${dmyMatch[1].padStart(2, '0')}`;
+   556→    // Try MM/DD/YYYY
+   557→    const mdyMatch = str.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})$/);
+   558→    if (mdyMatch) return `${mdyMatch[3]}-${mdyMatch[1].padStart(2, '0')}-${mdyMatch[2].padStart(2, '0')}`;
+   559→    // Fallback: try native Date parse
+   560→    try {
+   561→      const d = new Date(str);
+   562→      if (!isNaN(d.getTime())) {
+   563→        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+   564→      }
+   565→    } catch {}
+   566→    return str;
+   567→  };
+   568→
+   569→  // ── Smart Employee ID matching ──
+   570→  const smartMatchEmployeeId = (rawId: string, empName: string): string => {
+   571→    if (!rawId && !empName) return '';
+   572→    let empId = String(rawId).trim();
+   573→
+   574→    // If we have an ID, try exact match first
+   575→    if (empId) {
+   576→      // Try exact match
+   577→      const exact = employees.find(e => e.employeeId === empId);
+   578→      if (exact) return exact.employeeId;
+   579→
+   580→      // Try with EMP- prefix (e.g., "41" → "EMP-041" or "EMP-41")
+   581→      const withPrefix = `EMP-${empId.padStart(3, '0')}`;
+   582→      const matchPad = employees.find(e => e.employeeId === withPrefix);
+   583→      if (matchPad) return matchPad.employeeId;
+   584→
+   585→      const withoutPad = `EMP-${empId}`;
+   586→      const matchNoPad = employees.find(e => e.employeeId === withoutPad);
+   587→      if (matchNoPad) return matchNoPad.employeeId;
+   588→    }
+   589→
+   590→    // Match by employee name
+   591→    if (empName) {
+   592→      const nameLower = empName.toLowerCase().trim();
+   593→      // Exact name match
+   594→      const exactName = employees.find(e => e.fullName.toLowerCase() === nameLower);
+   595→      if (exactName) return exactName.employeeId;
+   596→      // Partial name match
+   597→      const partialName = employees.find(e =>
+   598→        e.fullName.toLowerCase().includes(nameLower) || nameLower.includes(e.fullName.toLowerCase())
+   599→      );
+   600→      if (partialName) return partialName.employeeId;
+   601→    }
+   602→
+   603→    return empId; // Return whatever we have
+   604→  };
+   605→
+   606→  // ── File upload handler ──
+   607→  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+   608→    const file = e.target.files?.[0];
+   609→    if (!file) return;
+   610→    setImportFile(file);
+   611→    setImportResult(null);
+   612→
+   613→    try {
+   614→      const XLSX = await import('xlsx');
+   615→      const arrayBuffer = await file.arrayBuffer();
+   616→      const workbook = XLSX.read(arrayBuffer, { cellDates: false, raw: true });
+   617→      const sheetName = workbook.SheetNames[0];
+   618→      const sheet = workbook.Sheets[sheetName];
+   619→      // Use raw:true to get actual values, then we convert ourselves
+   620→      const data = XLSX.utils.sheet_to_json(sheet, { raw: true });
+   621→
+   622→      if (data.length === 0) {
+   623→        toast.error('No data found in the file');
+   624→        return;
+   625→      }
+   626→
+   627→      // Try to map columns - look for common column names (supports both old and new template formats)
+   628→      const mapped = data.map((row: any) => {
+   629→        // Get raw values from various possible column names
+   630→        const rawEmpId = row['E. Code'] || row['ECode'] || row['Emp Code'] || row['Employee Code'] || row['Employee_Code'] ||
+   631→          row['Employee ID'] || row['employeeId'] || row['Employee_Code'] || row['EMP ID'] || row['Emp ID'] || row['Emp_Code'] || '';
+   632→        const rawEmpName = row['Name'] || row['Employee Name'] || row['fullName'] || row['Employee_Name'] || row['Emp Name'] || '';
+   633→        const rawDate = row['Date'] || row['date'] || row['Attendance Date'] || row['Att Date'] || '';
+   634→        const rawCheckIn = row[' InTime'] || row['InTime'] || row['In Time'] || row['Check In'] || row['checkIn'] || row['In_Time'] || row['IN'] || row['Time In'] || '';
+   635→        const rawCheckOut = row[' OutTime'] || row['OutTime'] || row['Out Time'] || row['Check Out'] || row['checkOut'] || row['Out_Time'] || row['OUT'] || row['Time Out'] || '';
+   636→        const rawShift = row['Shift'] || row['shift'] || '';
+   637→        const rawStatus = row['Status'] || row['status'] || '';
+   638→        const rawRemarks = row['Remarks'] || row['remarks'] || row['Remark'] || row['remark'] || '';
+   639→
+   640→        // Convert values
+   641→        const empId = String(rawEmpId).trim();
+   642→        const empName = String(rawEmpName).trim();
+   643→        const date = parseDateValue(rawDate);
+   644→        const checkIn = excelDecimalToTime(rawCheckIn);
+   645→        const checkOut = excelDecimalToTime(rawCheckOut);
+   646→        const shift = String(rawShift).trim();
+   647→        const status = String(rawStatus).trim();
+   648→        const remarks = String(rawRemarks).trim();
+   649→
+   650→        return { employeeId: empId, employeeName: empName, date, checkIn, checkOut, shift, status, remarks };
+   651→      }).filter(r => r.employeeId || r.employeeName);
+   652→
+   653→      setImportPreview(mapped);
+   654→    } catch (err: any) {
+   655→      toast.error('Failed to parse file: ' + err.message);
+   656→    }
+   657→  };
+   658→
+   659→  // ── Download Excel Template ──
+   660→  // Server-side generated blank template with selected date
+   661→  const handleDownloadTemplate = async () => {
+   662→    try {
+   663→      const params = new URLSearchParams();
+   664→      if (importDate) params.set('date', importDate);
+   665→      const res = await fetch(`/api/attendance/template?${params}`);
+   666→      if (!res.ok) { toast.error('Template download failed'); return; }
+   667→      const blob = await res.blob();
+   668→      const url = window.URL.createObjectURL(blob);
+   669→      const a = document.createElement('a');
+   670→      a.href = url;
+   671→      a.download = `Daily_Attendance_Template.xlsx`;
+   672→      document.body.appendChild(a);
+   673→      a.click();
+   674→      document.body.removeChild(a);
+   675→      window.URL.revokeObjectURL(url);
+   676→      toast.success('Template downloaded! Fill it and upload.');
+   677→    } catch {
+   678→      toast.error('Failed to download template.');
+   679→    }
+   680→  };
+   681→
+   682→  // ── Process import ──
+   683→  const handleProcessImport = async () => {
+   684→    if (importPreview.length === 0) return;
+   685→    setImporting(true);
+   686→
+   687→    try {
+   688→      // Use smart matching for employee IDs
+   689→      const recordsToImport = importPreview.map((row) => {
+   690→        const empId = smartMatchEmployeeId(row.employeeId, row.employeeName);
+   691→        // Use row date if available, otherwise fall back to the selected importDate
+   692→        const date = row.date || importDate;
+   693→        return {
+   694→          employeeId: empId,
+   695→          date,
+   696→          checkIn: row.checkIn || '',
+   697→          checkOut: row.checkOut || '',
+   698→        };
+   699→      }).filter(r => r.employeeId && r.date);
+   700→
+   701→      if (recordsToImport.length === 0) {
+   702→        toast.error('No valid records found. Ensure Employee IDs or Names match the system.');
+   703→        setImporting(false);
+   704→        return;
+   705→      }
+   706→
+   707→      const res = await fetch('/api/attendance/bulk-upload', {
+   708→        method: 'POST',
+   709→        headers: { 'Content-Type': 'application/json' },
+   710→        body: JSON.stringify({ records: recordsToImport }),
+   711→      });
+   712→      const data = await res.json();
+   713→
+   714→      if (res.ok) {
+   715→        setImportResult(data);
+   716→        toast.success(`Processed ${data.successCount} records successfully!`);
+   717→        loadData();
+   718→      } else {
+   719→        toast.error(data.error || 'Import failed');
+   720→      }
+   721→    } catch (err: any) {
+   722→      toast.error('Import failed: ' + err.message);
+   723→    }
+   724→    setImporting(false);
+   725→  };
+   726→
+   727→  // ── Export Master Excel Sheet (firm-wise sheets) ──
+   728→  const handleExportMasterSheet = async () => {
+   729→    setMasterExporting(true);
+   730→    try {
+   731→      const params = new URLSearchParams({
+   732→        firm: masterFirm,
+   733→        month: filterMonth,
+   734→        year: filterYear,
+   735→      });
+   736→      const res = await fetch(`/api/attendance/export-master?${params}`);
+   737→      if (!res.ok) {
+   738→        const errData = await res.json().catch(() => ({}));
+   739→        toast.error(errData.error || 'Master sheet export failed');
+   740→        setMasterExporting(false);
+   741→        return;
+   742→      }
+   743→      const blob = await res.blob();
+   744→      const url = window.URL.createObjectURL(blob);
+   745→      const a = document.createElement('a');
+   746→      a.href = url;
+   747→      a.download = `Master_Sheet_${MONTHS[parseInt(filterMonth) - 1]}_${filterYear}.xlsx`;
+   748→      document.body.appendChild(a);
+   749→      a.click();
+   750→      document.body.removeChild(a);
+   751→      window.URL.revokeObjectURL(url);
+   752→      toast.success('Master Excel Sheet downloaded successfully!');
+   753→    } catch (err) {
+   754→      console.error('Master export error:', err);
+   755→      toast.error('Master sheet export failed. Please try again.');
+   756→    }
+   757→    setMasterExporting(false);
+   758→  };
+   759→
+   760→  // ── Summary cards config — clickable for daily tab ──
+   761→  const statCards = [
+   762→    { title: 'Present', value: summary.present, icon: CheckCircle, gradient: 'gradient-success', color: 'text-emerald-500', filter: 'present' },
+   763→    { title: 'Absent', value: summary.absent, icon: XCircle, gradient: 'gradient-danger', color: 'text-red-500', filter: 'absent' },
+   764→    { title: 'Late', value: summary.late, icon: AlertTriangle, gradient: 'gradient-warning', color: 'text-yellow-500', filter: 'late' },
+   765→    { title: 'Early Out', value: summary.earlyOut, icon: Clock, gradient: 'gradient-rose', color: 'text-rose-500', filter: 'early-out' },
+   766→    { title: 'OT Hours', value: summary.ot, icon: Timer, gradient: 'gradient-info', color: 'text-cyan-500', isHours: true, filter: 'ot' },
+   767→  ];
+   768→
+   769→  // ── Filtered employees for the dialog searchable list ──
+   770→  const filteredEmployees = useMemo(() => {
+   771→    let list = employees;
+   772→    if (employeeSearch) {
+   773→      const q = employeeSearch.toLowerCase();
+   774→      list = list.filter((e) =>
+   775→        e.fullName.toLowerCase().includes(q) || e.employeeId.toLowerCase().includes(q)
+   776→      );
+   777→    }
+   778→    return list;
+   779→  }, [employees, employeeSearch]);
+   780→
+   781→  // Selected employee info
+   782→  const selectedEmployee = useMemo(() => {
+   783→    return employees.find((e) => e.employeeId === form.employeeId);
+   784→  }, [employees, form.employeeId]);
+   785→
+   786→  return (
+   787→    <div className="space-y-4">
+   788→      {/* ── Header ── */}
+   789→      <motion.div
+   790→        initial={{ opacity: 0, y: -10 }}
+   791→        animate={{ opacity: 1, y: 0 }}
+   792→        className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3"
+   793→      >
+   794→        <div>
+   795→          <h2 className="text-xl font-bold flex items-center gap-2">
+   796→            <Clock className="w-5 h-5 text-gold" />
+   797→            Attendance Tracker
+   798→          </h2>
+   799→          <p className="text-sm text-muted-foreground">
+   800→            Auto-calculated working hours, overtime & deductions
+   801→          </p>
+   802→        </div>
+   803→        <Button
+   804→          className="gradient-laxree text-white gap-1.5 shrink-0"
+   805→          size="sm"
+   806→          onClick={() => setOpen(true)}
+   807→        >
+   808→          <Clock className="w-4 h-4" /> Mark Attendance
+   809→        </Button>
+   810→      </motion.div>
+   811→
+   812→      {/* ── Date Picker + Summary Cards (clickable) ── */}
+   813→      <motion.div
+   814→        initial={{ opacity: 0, y: -10 }}
+   815→        animate={{ opacity: 1, y: 0 }}
+   816→        className="glass-card p-4 space-y-4 border border-gold/10"
+   817→      >
+   818→        {/* Date Picker Row */}
+   819→        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+   820→          <div className="flex items-center gap-2">
+   821→            <CalendarDays className="w-5 h-5 text-gold" />
+   822→            <span className="text-sm font-semibold">Select Date</span>
+   823→          </div>
+   824→          <Input
+   825→            type="date"
+   826→            value={filterDate}
+   827→            onChange={(e) => {
+   828→              setFilterDate(e.target.value);
+   829→              setStatusFilter('all');
+   830→              // Auto-set month/year from date for monthly tab sync
+   831→              if (e.target.value) {
+   832→                const d = new Date(e.target.value);
+   833→                setFilterMonth(String(d.getMonth() + 1));
+   834→                setFilterYear(String(d.getFullYear()));
+   835→              }
+   836→            }}
+   837→            className="w-full sm:w-48 h-10 text-sm font-medium input-premium rounded-lg"
+   838→          />
+   839→          {filterDate && (
+   840→            <span className="text-xs text-muted-foreground">
+   841→              {new Date(filterDate + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}
+   842→            </span>
+   843→          )}
+   844→          <div className="sm:ml-auto flex items-center gap-2">
+   845→            <Select value={filterFirm} onValueChange={(v) => { setFilterFirm(v); setStatusFilter('all'); }}>
+   846→              <SelectTrigger className="w-32 h-9 text-xs">
+   847→                <Building2 className="w-3.5 h-3.5 mr-1 text-muted-foreground" />
+   848→                <SelectValue placeholder="All Firms" />
+   849→              </SelectTrigger>
+   850→              <SelectContent>
+   851→                <SelectItem value="all">All Firms</SelectItem>
+   852→                {FIRMS.map((f) => (<SelectItem key={f} value={f}>{f}</SelectItem>))}
+   853→              </SelectContent>
+   854→            </Select>
+   855→            <Select value={filterLocation} onValueChange={(v) => { setFilterLocation(v); setStatusFilter('all'); }}>
+   856→              <SelectTrigger className="w-36 h-9 text-xs">
+   857→                <MapPin className="w-3.5 h-3.5 mr-1 text-muted-foreground" />
+   858→                <SelectValue placeholder="All Locations" />
+   859→              </SelectTrigger>
+   860→              <SelectContent>
+   861→                <SelectItem value="all">All Locations</SelectItem>
+   862→                {LOCATIONS.map((l) => (<SelectItem key={l} value={l}>{l}</SelectItem>))}
+   863→              </SelectContent>
+   864→            </Select>
+   865→          </div>
+   866→        </div>
+   867→
+   868→        {/* Clickable Summary Cards */}
+   869→        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+   870→          {/* "All" card */}
+   871→          <motion.div
+   872→            initial={{ opacity: 0, y: 10 }}
+   873→            animate={{ opacity: 1, y: 0 }}
+   874→            transition={{ delay: 0 }}
+   875→            className={`cursor-pointer transition-all duration-200 rounded-xl border-2 ${
+   876→              statusFilter === 'all'
+   877→                ? 'border-gold shadow-lg shadow-gold/10 kpi-card'
+   878→                : 'border-transparent kpi-card hover:border-gold/30'
+   879→            }`}
+   880→            onClick={() => setStatusFilter('all')}
+   881→          >
+   882→            <Card className="border-0 shadow-none bg-transparent">
+   883→              <CardContent className="p-3 flex items-center gap-3">
+   884→                <div className="w-10 h-10 rounded-xl gradient-laxree flex items-center justify-center shrink-0 shadow-lg">
+   885→                  <Users className="w-5 h-5 text-white" />
+   886→                </div>
+   887→                <div className="min-w-0">
+   888→                  <p className="text-[10px] text-muted-foreground font-medium truncate">Total</p>
+   889→                  <p className="text-xl font-bold">
+   890→                    <AnimatedCounter value={records.length} />
+   891→                  </p>
+   892→                </div>
+   893→              </CardContent>
+   894→            </Card>
+   895→          </motion.div>
+   896→          {statCards.map((card, i) => {
+   897→            const Icon = card.icon;
+   898→            const isActive = statusFilter === card.filter;
+   899→            return (
+   900→              <motion.div
+   901→                key={card.title}
+   902→                initial={{ opacity: 0, y: 10 }}
+   903→                animate={{ opacity: 1, y: 0 }}
+   904→                transition={{ delay: (i + 1) * 0.05 }}
+   905→                className={`cursor-pointer transition-all duration-200 rounded-xl border-2 ${
+   906→                  isActive
+   907→                    ? 'border-gold shadow-lg shadow-gold/10 kpi-card'
+   908→                    : 'border-transparent kpi-card hover:border-gold/30'
+   909→                }`}
+   910→                onClick={() => setStatusFilter(isActive ? 'all' : card.filter)}
+   911→              >
+   912→                <Card className="border-0 shadow-none bg-transparent">
+   913→                  <CardContent className="p-3 flex items-center gap-3">
+   914→                    <div className={`w-10 h-10 rounded-xl ${card.gradient} flex items-center justify-center shrink-0 shadow-lg ${isActive ? 'animate-pulse' : ''}`}>
+   915→                      <Icon className="w-5 h-5 text-white" />
+   916→                    </div>
+   917→                    <div className="min-w-0">
+   918→                      <p className="text-[10px] text-muted-foreground font-medium truncate">{card.title}</p>
+   919→                      <p className="text-xl font-bold">
+   920→                        {card.isHours ? (
+   921→                          <span>{formatOT(card.value)}</span>
+   922→                        ) : (
+   923→                          <AnimatedCounter
+   924→                            value={card.value}
+   925→                            suffix={'suffix' in card ? (card as any).suffix : ''}
+   926→                            decimals={'decimals' in card ? (card as any).decimals : 0}
+   927→                          />
+   928→                        )}
+   929→                      </p>
+   930→                    </div>
+   931→                  </CardContent>
+   932→                </Card>
+   933→              </motion.div>
+   934→            );
+   935→          })}
+   936→        </div>
+   937→
+   938→        {/* Active filter indicator */}
+   939→        {statusFilter !== 'all' && (
+   940→          <div className="flex items-center gap-2">
+   941→            <span className="text-xs text-muted-foreground">Showing:</span>
+   942→            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-gold/10 text-gold border border-gold/20">
+   943→              {statCards.find(c => c.filter === statusFilter)?.title || statusFilter} ({filteredRecords.length} records)
+   944→            </span>
+   945→            <button
+   946→              className="text-xs text-muted-foreground hover:text-gold underline"
+   947→              onClick={() => setStatusFilter('all')}
+   948→            >
+   949→              Show All
+   950→            </button>
+   951→          </div>
+   952→        )}
+   953→      </motion.div>
+   954→
+   955→      {/* ── Tabs: Daily / Monthly / Import ── */}
+   956→      <Tabs defaultValue="daily" className="space-y-4">
+   957→        <TabsList className="bg-muted/50">
+   958→          <TabsTrigger value="daily" className="gap-1.5 text-xs">
+   959→            <CalendarDays className="w-3.5 h-3.5" /> Daily
+   960→          </TabsTrigger>
+   961→          <TabsTrigger value="monthly" className="gap-1.5 text-xs">
+   962→            <FileSpreadsheet className="w-3.5 h-3.5" /> Monthly
+   963→          </TabsTrigger>
+   964→          <TabsTrigger value="import" className="gap-1.5 text-xs">
+   965→            <Upload className="w-3.5 h-3.5" /> Import
+   966→          </TabsTrigger>
+   967→        </TabsList>
+   968→
+   969→        {/* ══════════════════════════════════════════════════
+   970→            DAILY ATTENDANCE TAB
+   971→            ══════════════════════════════════════════════════ */}
+   972→        <TabsContent value="daily" className="space-y-4">
+   973→          {/* ── Search + Export Row ── */}
+   974→          <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
+   975→            <div className="relative flex-1">
+   976→              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+   977→              <Input className="pl-9 h-9" placeholder="Search employee by name or ID..." value={searchEmployee} onChange={(e) => setSearchEmployee(e.target.value)} />
+   978→            </div>
+   979→            <Button variant="outline" size="sm" className="h-9 gap-1.5 shrink-0" onClick={handleExportDailyExcel}>
+   980→              <FileDown className="w-3.5 h-3.5" /> Export Excel
+   981→            </Button>
+   982→            <Button
+   983→              variant="outline"
+   984→              size="sm"
+   985→              className="h-9 gap-1.5 shrink-0 border-red-500/30 hover:border-red-500/60 hover:bg-red-500/5 text-red-500"
+   986→              onClick={async () => {
+   987→                if (!confirm('Are you sure you want to CLEAR ALL attendance records? This cannot be undone!')) return;
+   988→                if (!confirm('FINAL WARNING: All attendance data will be permanently deleted. Continue?')) return;
+   989→                try {
+   990→                  const res = await fetch('/api/attendance/clear-all', { method: 'DELETE' });
+   991→                  if (res.ok) {
+   992→                    const data = await res.json();
+   993→                    toast.success(`Cleared ${data.deletedCount} attendance records`);
+   994→                    loadData();
+   995→                  } else {
+   996→                    toast.error('Failed to clear attendance records');
+   997→                  }
+   998→                } catch {
+   999→                  toast.error('Failed to clear attendance records');
+  1000→                }
+  1001→              }}
+  1002→            >
+  1003→              <Trash2 className="w-3.5 h-3.5" /> Clear All
+  1004→            </Button>
+  1005→          </motion.div>
+  1006→
+  1007→          {/* ── Attendance Table ── */}
+  1008→          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+  1009→            <Card className="glass-card card-gold-hover border-0">
+  1010→              <CardContent className="p-0">
+  1011→                <div className="overflow-auto max-h-[65vh]" style={{ WebkitOverflowScrolling: 'touch' }}>
+  1012→                  <Table id="daily-attendance-table">
+  1013→                    <TableHeader>
+  1014→                      <TableRow className="hover:bg-transparent sticky top-0 bg-card z-10">
+  1015→                        <TableHead className="min-w-[160px]">Employee</TableHead>
+  1016→                        <TableHead className="min-w-[70px]">Emp Code</TableHead>
+  1017→                        <TableHead className="hidden md:table-cell min-w-[70px]">Company</TableHead>
+  1018→                        <TableHead className="min-w-[80px]">In Time</TableHead>
+  1019→                        <TableHead className="hidden sm:table-cell min-w-[70px]">Out Time</TableHead>
+  1020→                        <TableHead className="min-w-[50px]">Hrs</TableHead>
+  1021→                        <TableHead className="min-w-[80px]">Status</TableHead>
+  1022→                        <TableHead className="hidden lg:table-cell min-w-[50px]">OT</TableHead>
+  1023→                        <TableHead className="w-[70px] sticky right-0 bg-card">Actions</TableHead>
+  1024→                      </TableRow>
+  1025→                    </TableHeader>
+  1026→                    <TableBody>
+  1027→                      {loading ? (
+  1028→                        Array.from({ length: 5 }).map((_, i) => (
+  1029→                          <TableRow key={i}>
+  1030→                            {Array.from({ length: 9 }).map((_, j) => (
+  1031→                              <TableCell key={j}><div className="h-4 bg-muted/50 rounded animate-pulse" /></TableCell>
+  1032→                            ))}
+  1033→                          </TableRow>
+  1034→                        ))
+  1035→                      ) : filteredRecords.length === 0 ? (
+  1036→                        <TableRow>
+  1037→                          <TableCell colSpan={9} className="text-center py-12 text-muted-foreground">
+  1038→                            <CalendarDays className="w-10 h-10 mx-auto mb-2 opacity-30" />
+  1039→                            <p className="font-medium">No attendance records for this date</p>
+  1040→                            <p className="text-xs mt-1">Select a different date or import attendance data</p>
+  1041→                          </TableCell>
+  1042→                        </TableRow>
+  1043→                      ) : (
+  1044→                        filteredRecords.map((rec) => (
+  1045→                          <TableRow key={rec.id} className="hover:bg-muted/30 transition-colors">
+  1046→                            <TableCell>
+  1047→                              <div className="flex items-center gap-2">
+  1048→                                <div className="w-7 h-7 rounded-full gradient-laxree flex items-center justify-center text-white text-[10px] font-bold shrink-0">
+  1049→                                  {rec.employee?.fullName?.charAt(0) || '?'}
+  1050→                                </div>
+  1051→                                <div className="min-w-0 overflow-hidden">
+  1052→                                  <p className="text-sm font-medium truncate max-w-[120px]">{rec.employee?.fullName || rec.employeeId}</p>
+  1053→                                </div>
+  1054→                              </div>
+  1055→                            </TableCell>
+  1056→                            <TableCell className="text-xs font-mono text-muted-foreground">{rec.employeeId}</TableCell>
+  1057→                            <TableCell className="hidden md:table-cell">
+  1058→                              <FirmBadge firm={getFirmFromEmployeeId(rec.employeeId) || rec.employee?.department || ''} />
+  1059→                            </TableCell>
+  1060→                            <TableCell className="text-sm font-mono whitespace-nowrap">{rec.checkIn || '—'}</TableCell>
+  1061→                            <TableCell className="hidden sm:table-cell text-sm font-mono whitespace-nowrap">{rec.checkOut || '—'}</TableCell>
+  1062→                            <TableCell className="text-sm font-medium whitespace-nowrap">{rec.totalHours > 0 ? `${formatHours(rec.totalHours)}h` : '—'}</TableCell>
+  1063→                            <TableCell><StatusBadge status={rec.status} /></TableCell>
+  1064→                            <TableCell className="hidden lg:table-cell text-sm whitespace-nowrap">
+  1065→                              {rec.overtimeHours > 0 ? (
+  1066→                                <span className="text-cyan-600 dark:text-cyan-400 font-medium">{formatOT(rec.overtimeHours)}</span>
+  1067→                              ) : '—'}
+  1068→                            </TableCell>
+  1069→                            <TableCell className="sticky right-0 bg-card">
+  1070→                              <div className="flex items-center gap-1">
+  1071→                                <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => handleEdit(rec)} title="Edit">
+  1072→                                  <Pencil className="w-3 h-3" />
+  1073→                                </Button>
+  1074→                                <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-destructive hover:text-destructive" onClick={() => handleDelete(rec.id)} title="Delete">
+  1075→                                  <Trash2 className="w-3 h-3" />
+  1076→                                </Button>
+  1077→                              </div>
+  1078→                            </TableCell>
+  1079→                          </TableRow>
+  1080→                        ))
+  1081→                      )}
+  1082→                    </TableBody>
+  1083→                  </Table>
+  1084→                </div>
+  1085→              </CardContent>
+  1086→            </Card>
+  1087→          </motion.div>
+  1088→        </TabsContent>
+  1089→
+  1090→        {/* ══════════════════════════════════════════════════
+  1091→            MONTHLY ATTENDANCE TAB
+  1092→            ══════════════════════════════════════════════════ */}
+  1093→        <TabsContent value="monthly" className="space-y-4">
+  1094→          {/* ── Employee Selector ── */}
+  1095→          <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-3">
+  1096→            <div className="flex flex-col sm:flex-row gap-3 flex-wrap items-end">
+  1097→              <div className="flex-1 min-w-[200px]">
+  1098→                <Label className="text-xs text-muted-foreground mb-1 block">Select Employee</Label>
+  1099→                <Select value={monthlyEmpId} onValueChange={setMonthlyEmpId}>
+  1100→                  <SelectTrigger className="w-full h-9">
+  1101→                    <Search className="w-3.5 h-3.5 mr-1.5 text-muted-foreground" />
+  1102→                    <SelectValue placeholder="Select Employee..." />
+  1103→                  </SelectTrigger>
+  1104→                  <SelectContent>
+  1105→                    {employees.sort((a, b) => a.fullName.localeCompare(b.fullName)).map(e => (
+  1106→                      <SelectItem key={e.employeeId} value={e.employeeId}>
+  1107→                        {e.fullName} ({e.employeeId})
+  1108→                      </SelectItem>
+  1109→                    ))}
+  1110→                  </SelectContent>
+  1111→                </Select>
+  1112→              </div>
+  1113→              <Select value={filterMonth} onValueChange={setFilterMonth}>
+  1114→                <SelectTrigger className="w-full sm:w-36 h-9"><SelectValue /></SelectTrigger>
+  1115→                <SelectContent>
+  1116→                  {MONTHS.map((m, i) => (<SelectItem key={i + 1} value={String(i + 1)}>{m}</SelectItem>))}
+  1117→                </SelectContent>
+  1118→              </Select>
+  1119→              <Select value={filterYear} onValueChange={setFilterYear}>
+  1120→                <SelectTrigger className="w-full sm:w-24 h-9"><SelectValue /></SelectTrigger>
+  1121→                <SelectContent>
+  1122→                  {[2024, 2025, 2026, 2027].map(y => (<SelectItem key={y} value={String(y)}>{y}</SelectItem>))}
+  1123→                </SelectContent>
+  1124→              </Select>
+  1125→              {monthlySummary && (
+  1126→                <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={handleExportExcel}>
+  1127→                  <FileDown className="w-3.5 h-3.5" /> Export Excel
+  1128→                </Button>
+  1129→              )}
+  1130→            </div>
+  1131→          </motion.div>
+  1132→
+  1133→          {/* ── Monthly Summary Card — Spreadsheet Format ── */}
+  1134→          {monthlyLoading ? (
+  1135→            <Card className="glass-card card-gold-hover border-0">
+  1136→              <CardContent className="p-8 text-center text-muted-foreground">
+  1137→                <div className="animate-spin w-8 h-8 border-2 border-gold border-t-transparent rounded-full mx-auto mb-3" />
+  1138→                <p>Loading monthly summary...</p>
+  1139→              </CardContent>
+  1140→            </Card>
+  1141→          ) : monthlySummary ? (
+  1142→            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+  1143→              <Card className="glass-card card-gold-hover border-0">
+  1144→                <CardContent className="p-4 md:p-6 space-y-4">
+  1145→                  {/* Employee Info Header */}
+  1146→                  <div className="flex items-center gap-3 pb-3 border-b border-border/50">
+  1147→                    {(() => {
+  1148→                      const firmCode = getFirmFromEmployeeId(monthlySummary.employee.employeeId) || monthlySummary.employee.firm || monthlySummary.employee.department;
+  1149→                      const logoSrc = FIRM_LOGOS[firmCode];
+  1150→                      return logoSrc ? (
+  1151→                        <div className="w-14 h-14 rounded-xl overflow-hidden border-2 border-gold/30 shrink-0 bg-white p-1">
+  1152→                          <Image src={logoSrc} alt={firmCode} width={48} height={48} className="w-full h-full object-contain" />
+  1153→                        </div>
+  1154→                      ) : (
+  1155→                        <div className="w-14 h-14 rounded-xl gradient-laxree flex items-center justify-center text-white text-lg font-bold shrink-0">
+  1156→                          {monthlySummary.employee.fullName.charAt(0)}
+  1157→                        </div>
+  1158→                      );
+  1159→                    })()}
+  1160→                    <div className="min-w-0">
+  1161→                      <h3 className="font-bold text-lg">{monthlySummary.employee.fullName}</h3>
+  1162→                      <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
+  1163→                        <span className="font-mono">{monthlySummary.employee.employeeId}</span>
+  1164→                        <span>•</span>
+  1165→                        <FirmBadge firm={getFirmFromEmployeeId(monthlySummary.employee.employeeId) || monthlySummary.employee.firm || monthlySummary.employee.department} />
+  1166→                        <span>•</span>
+  1167→                        <span>{monthlySummary.employee.location}</span>
+  1168→                        <span>•</span>
+  1169→                        <span>{monthlySummary.monthName} {monthlySummary.year}</span>
+  1170→                      </div>
+  1171→                    </div>
+  1172→                  </div>
+  1173→
+  1174→                  {/* ── Spreadsheet-style Summary Table ── */}
+  1175→                  <div className="overflow-x-auto rounded-lg border border-border/50">
+  1176→                    <table className="w-full text-sm border-collapse">
+  1177→                      <thead>
+  1178→                        <tr className="bg-emerald-700 dark:bg-emerald-900 text-white">
+  1179→                          <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider border-r border-emerald-600/30">Days Present</th>
+  1180→                          <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider border-r border-emerald-600/30">Days Absent</th>
+  1181→                          <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider border-r border-emerald-600/30">Half Days</th>
+  1182→                          <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider border-r border-emerald-600/30">AL</th>
+  1183→                          <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider border-r border-emerald-600/30">UL</th>
+  1184→                          <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider border-r border-emerald-600/30">Total Hrs Worked</th>
+  1185→                          <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider border-r border-emerald-600/30">OT Hrs</th>
+  1186→                          <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider border-r border-emerald-600/30">Sunday Hrs</th>
+  1187→                          <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider">Total Hrs (incl. Sunday)</th>
+  1188→                        </tr>
+  1189→                      </thead>
+  1190→                      <tbody>
+  1191→                        <tr className="bg-muted/30 hover:bg-muted/50 transition-colors">
+  1192→                          <td className="px-3 py-3 font-bold text-emerald-600 dark:text-emerald-400 border-r border-border/30">{monthlySummary.presentDays}</td>
+  1193→                          <td className="px-3 py-3 font-bold text-red-500 border-r border-border/30">{monthlySummary.absentDays}</td>
+  1194→                          <td className="px-3 py-3 font-bold text-orange-500 border-r border-border/30">{monthlySummary.halfDays}</td>
+  1195→                          <td className="px-3 py-3 text-blue-500 border-r border-border/30">{monthlySummary.annualLeaves || 0}</td>
+  1196→                          <td className="px-3 py-3 text-amber-600 dark:text-amber-400 border-r border-border/30">{monthlySummary.unpaidLeaves || 0}</td>
+  1197→                          <td className="px-3 py-3 font-bold text-cyan-600 dark:text-cyan-400 border-r border-border/30">{displayHHMM(monthlySummary.totalWorkHours)}</td>
+  1198→                          <td className="px-3 py-3 font-bold text-yellow-600 dark:text-yellow-400 border-r border-border/30">{formatOT(monthlySummary.totalOvertimeHours)}</td>
+  1199→                          <td className="px-3 py-3 text-blue-600 dark:text-blue-400 border-r border-border/30">{displayHHMM(monthlySummary.totalSundayHours)}</td>
+  1200→                          <td className="px-3 py-3 font-bold text-gold">{displayHHMM(monthlySummary.totalHrsInclSunday || (monthlySummary.totalWorkHours || 0))}</td>
+  1201→                        </tr>
+  1202→                      </tbody>
+  1203→                    </table>
+  1204→                  </div>
+  1205→
+  1206→                  {/* Additional Info Row */}
+  1207→                  <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+  1208→                    {[
+  1209→                      { label: 'Working Days', value: monthlySummary.totalWorkingDays, color: 'text-foreground' },
+  1210→                      { label: 'Weekly Offs', value: monthlySummary.weeklyOffs, color: 'text-sky-500' },
+  1211→                      { label: 'Sundays', value: monthlySummary.sundays, color: 'text-blue-500' },
+  1212→                      { label: 'Late Entries', value: monthlySummary.lateEntries, color: 'text-amber-500' },
+  1213→                      { label: 'Early Outs', value: monthlySummary.earlyOuts || 0, color: 'text-rose-500' },
+  1214→                      { label: 'Shift Hrs', value: `${displayHHMM(monthlySummary.employee.shiftHours)}h`, color: 'text-muted-foreground' },
+  1215→                    ].map(item => (
+  1216→                      <div key={item.label} className="p-2 rounded-lg bg-muted/20 text-center">
+  1217→                        <p className="text-[9px] text-muted-foreground font-medium uppercase tracking-wider">{item.label}</p>
+  1218→                        <p className={`text-sm font-bold ${item.color}`}>{item.value}</p>
+  1219→                      </div>
+  1220→                    ))}
+  1221→                  </div>
+  1222→
+  1223→                  <Separator />
+  1224→
+  1225→                  {/* Daily Records Table — Full scrollable */}
+  1226→                  <div>
+  1227→                    <h4 className="text-sm font-semibold mb-2 flex items-center gap-1.5">
+  1228→                      <ChevronRight className="w-4 h-4 text-gold" />
+  1229→                      Daily Attendance Breakdown ({monthlySummary.records.length} days)
+  1230→                    </h4>
+  1231→                    <div
+  1232→                      className="rounded-lg border border-border/50"
+  1233→                      style={{
+  1234→                        maxHeight: '60vh',
+  1235→                        overflowY: 'auto',
+  1236→                        WebkitOverflowScrolling: 'touch',
+  1237→                        scrollBehavior: 'smooth',
+  1238→                      }}
+  1239→                    >
+  1240→                      <Table>
+  1241→                        <TableHeader>
+  1242→                          <TableRow className="hover:bg-transparent sticky top-0 bg-card z-10">
+  1243→                            <TableHead className="text-xs">Date</TableHead>
+  1244→                            <TableHead className="text-xs">Day</TableHead>
+  1245→                            <TableHead className="text-xs">In</TableHead>
+  1246→                            <TableHead className="text-xs">Out</TableHead>
+  1247→                            <TableHead className="text-xs">Hrs</TableHead>
+  1248→                            <TableHead className="text-xs">Status</TableHead>
+  1249→                            <TableHead className="text-xs">OT</TableHead>
+  1250→                          </TableRow>
+  1251→                        </TableHeader>
+  1252→                        <TableBody>
+  1253→                          {(() => {
+  1254→                            const daysInMonth = new Date(monthlySummary.year, monthlySummary.month, 0).getDate();
+  1255→                            const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  1256→                            const rows = [];
+  1257→                            for (let day = 1; day <= daysInMonth; day++) {
+  1258→                              const dateStr = `${monthlySummary.year}-${String(monthlySummary.month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  1259→                              const dateObj = new Date(dateStr + 'T00:00:00');
+  1260→                              const dayName = dayNames[dateObj.getDay()];
+  1261→                              const rec = monthlySummary.records.find((r: any) => {
+  1262→                                const rDate = new Date(r.date);
+  1263→                                return rDate.getFullYear() === monthlySummary.year && rDate.getMonth() + 1 === monthlySummary.month && rDate.getDate() === day;
+  1264→                              });
+  1265→                              const isSunday = dateObj.getDay() === 0;
+  1266→                              rows.push(
+  1267→                                <TableRow
+  1268→                                  key={day}
+  1269→                                  className={`${isSunday ? 'bg-blue-500/5' : 'hover:bg-muted/30'} transition-colors`}
+  1270→                                >
+  1271→                                  <TableCell className="text-xs whitespace-nowrap font-medium">
+  1272→                                    {dateObj.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+  1273→                                  </TableCell>
+  1274→                                  <TableCell className={`text-xs ${isSunday ? 'text-blue-500 font-bold' : ''}`}>{dayName}</TableCell>
+  1275→                                  <TableCell className="text-xs font-mono">{rec?.checkIn || '—'}</TableCell>
+  1276→                                  <TableCell className="text-xs font-mono">{rec?.checkOut || '—'}</TableCell>
+  1277→                                  <TableCell className="text-xs font-medium">{rec && rec.totalHours > 0 ? `${formatHours(rec.totalHours)}h` : '—'}</TableCell>
+  1278→                                  <TableCell>
+  1279→                                    {rec ? (
+  1280→                                      <StatusBadge status={rec.status} />
+  1281→                                    ) : isSunday ? (
+  1282→                                      <StatusBadge status="weekly-off" />
+  1283→                                    ) : (
+  1284→                                      <span className="text-xs text-muted-foreground italic">No Record</span>
+  1285→                                    )}
+  1286→                                  </TableCell>
+  1287→                                  <TableCell className="text-xs">{rec && rec.overtimeHours > 0 ? formatOT(rec.overtimeHours) : '—'}</TableCell>
+  1288→                                </TableRow>
+  1289→                              );
+  1290→                            }
+  1291→                            return rows;
+  1292→                          })()}
+  1293→                        </TableBody>
+  1294→                      </Table>
+  1295→                    </div>
+  1296→                  </div>
+  1297→                </CardContent>
+  1298→              </Card>
+  1299→            </motion.div>
+  1300→          ) : (
+  1301→            <Card className="glass-card card-gold-hover border-0">
+  1302→              <CardContent className="p-8 text-center text-muted-foreground">
+  1303→                <CalendarDays className="w-12 h-12 mx-auto mb-3 opacity-30" />
+  1304→                <p>Select an employee to view monthly attendance summary</p>
+  1305→              </CardContent>
+  1306→            </Card>
+  1307→          )}
+  1308→
+  1309→          {/* ── Master Excel Sheet Export Section ── */}
+  1310→          <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-3 border border-gold/20">
+  1311→            <div className="flex items-center gap-2 mb-2">
+  1312→              <FileSpreadsheet className="w-4 h-4 text-gold" />
+  1313→              <h3 className="text-sm font-semibold">Master Excel Sheet</h3>
+  1314→              <span className="text-[10px] text-muted-foreground">— Firm-wise monthly attendance with calendar format</span>
+  1315→            </div>
+  1316→            <div className="flex flex-col sm:flex-row gap-3 flex-wrap items-end">
+  1317→              <div className="min-w-[140px]">
+  1318→                <Label className="text-xs text-muted-foreground mb-1 block">Select Firm</Label>
+  1319→                <Select value={masterFirm} onValueChange={setMasterFirm}>
+  1320→                  <SelectTrigger className="w-full h-9">
+  1321→                    <Building2 className="w-3.5 h-3.5 mr-1 text-muted-foreground" />
+  1322→                    <SelectValue placeholder="All Firms" />
+  1323→                  </SelectTrigger>
+  1324→                  <SelectContent>
+  1325→                    <SelectItem value="all">All Firms (Separate Sheets)</SelectItem>
+  1326→                    {FIRMS.map((f) => (<SelectItem key={f} value={f}>{f} — {FIRM_NAMES[f]}</SelectItem>))}
+  1327→                  </SelectContent>
+  1328→                </Select>
+  1329→              </div>
+  1330→              <Select value={filterMonth} onValueChange={setFilterMonth} disabled>
+  1331→                <SelectTrigger className="w-full sm:w-36 h-9"><SelectValue /></SelectTrigger>
+  1332→                <SelectContent>
+  1333→                  {MONTHS.map((m, i) => (<SelectItem key={i + 1} value={String(i + 1)}>{m}</SelectItem>))}
+  1334→                </SelectContent>
+  1335→              </Select>
+  1336→              <Select value={filterYear} onValueChange={setFilterYear} disabled>
+  1337→                <SelectTrigger className="w-full sm:w-24 h-9"><SelectValue /></SelectTrigger>
+  1338→                <SelectContent>
+  1339→                  {[2024, 2025, 2026, 2027].map(y => (<SelectItem key={y} value={String(y)}>{y}</SelectItem>))}
+  1340→                </SelectContent>
+  1341→              </Select>
+  1342→              <Button
+  1343→                variant="outline"
+  1344→                size="sm"
+  1345→                className="h-9 gap-1.5 border-gold/30 hover:border-gold/60 hover:bg-gold/5 text-gold"
+  1346→                onClick={handleExportMasterSheet}
+  1347→                disabled={masterExporting}
+  1348→              >
+  1349→                {masterExporting ? (
+  1350→                  <>
+  1351→                    <div className="w-3.5 h-3.5 border-2 border-gold border-t-transparent rounded-full animate-spin" />
+  1352→                    Generating...
+  1353→                  </>
+  1354→                ) : (
+  1355→                  <>
+  1356→                    <FileDown className="w-3.5 h-3.5" /> Download Master Sheet
+  1357→                  </>
+  1358→                )}
+  1359→              </Button>
+  1360→            </div>
+  1361→          </motion.div>
+  1362→        </TabsContent>
+  1363→
+  1364→        {/* ══════════════════════════════════════════════════
+  1365→            DAILY ATTENDANCE IMPORT TAB
+  1366→            ══════════════════════════════════════════════════ */}
+  1367→        <TabsContent value="import" className="space-y-4">
+  1368→          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+  1369→            <Card className="glass-card card-gold-hover border-0">
+  1370→              <CardContent className="p-6 space-y-6">
+  1371→                {/* Upload Section */}
+  1372→                <div>
+  1373→                  <div className="flex items-center justify-between mb-3">
+  1374→                    <h3 className="text-sm font-semibold flex items-center gap-2">
+  1375→                      <Upload className="w-4 h-4 text-gold" />
+  1376→                      Upload Attendance Sheet
+  1377→                    </h3>
+  1378→                    <Button
+  1379→                      variant="outline"
+  1380→                      size="sm"
+  1381→                      className="h-8 gap-1.5 text-xs border-gold/30 hover:border-gold/60 hover:bg-gold/5"
+  1382→                      onClick={handleDownloadTemplate}
+  1383→                    >
+  1384→                      <Download className="w-3.5 h-3.5" /> Download Template
+  1385→                    </Button>
+  1386→                  </div>
+  1387→
+  1388→                  {/* Attendance Date Picker */}
+  1389→                  <div className="mb-4">
+  1390→                    <Label htmlFor="importDate" className="text-xs font-semibold flex items-center gap-1.5 mb-1.5">
+  1391→                      <CalendarDays className="w-3.5 h-3.5 text-gold" />
+  1392→                      Attendance Date
+  1393→                    </Label>
+  1394→                    <Input
+  1395→                      id="importDate"
+  1396→                      type="date"
+  1397→                      value={importDate}
+  1398→                      onChange={(e) => setImportDate(e.target.value)}
+  1399→                      className="w-full sm:w-56 h-9 text-sm font-medium input-premium rounded-lg"
+  1400→                    />
+  1401→                    <p className="text-[10px] text-muted-foreground mt-1">
+  1402→                      This date will be used for all rows in the uploaded file (daily template has no Date column per row).
+  1403→                    </p>
+  1404→                  </div>
+  1405→
+  1406→                  <div className="border-2 border-dashed border-border rounded-xl p-8 text-center hover:border-gold/50 transition-colors">
+  1407→                    <input
+  1408→                      ref={fileInputRef}
+  1409→                      type="file"
+  1410→                      accept=".xlsx,.xls,.csv"
+  1411→                      onChange={handleFileUpload}
+  1412→                      className="hidden"
+  1413→                    />
+  1414→                    <FileSpreadsheet className="w-12 h-12 mx-auto mb-3 text-muted-foreground/50" />
+  1415→                    <p className="text-sm text-muted-foreground mb-3">
+  1416→                      Upload Excel (.xlsx, .xls) or CSV file with attendance data
+  1417→                    </p>
+  1418→                    <Button
+  1419→                      variant="outline"
+  1420→                      onClick={() => fileInputRef.current?.click()}
+  1421→                      className="gap-1.5"
+  1422→                    >
+  1423→                      <Upload className="w-4 h-4" /> Choose File
+  1424→                    </Button>
+  1425→                    {importFile && (
+  1426→                      <p className="text-xs text-muted-foreground mt-2">
+  1427→                        Selected: {importFile.name} ({(importFile.size / 1024).toFixed(1)} KB)
+  1428→                      </p>
+  1429→                    )}
+  1430→                  </div>
+  1431→                  <div className="mt-3 p-3 rounded-lg bg-gold/5 border border-gold/10">
+  1432→                    <Info className="w-4 h-4 text-gold inline mr-1.5 -mt-0.5" />
+  1433→                    <span className="text-xs text-muted-foreground">
+  1434→                      <strong>Template format:</strong> SNo, E. Code, Name, Shift, InTime, OutTime, Work Dur., OT, Tot. Dur., Status, Remarks. 
+  1435→                      The daily template has no Date column — set the <strong>Attendance Date</strong> above before uploading.
+  1436→                      Click <strong>"Download Template"</strong> to get the correct format with all employees pre-filled. 
+  1437→                      The system auto-converts Excel dates/times and matches employees by E. Code or Name.
+  1438→                      Also supports the old format (Employee ID, Employee Name, Date, In Time, Out Time, Status).
+  1439→                    </span>
+  1440→                  </div>
+  1441→                </div>
+  1442→
+  1443→                {/* Preview Section */}
+  1444→                {importPreview.length > 0 && (
+  1445→                  <div>
+  1446→                    <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+  1447→                      <Search className="w-4 h-4 text-gold" />
+  1448→                      Preview ({importPreview.length} records found)
+  1449→                      {!importPreview.some(r => r.date) && importDate && (
+  1450→                        <span className="text-[10px] text-muted-foreground font-normal ml-1">
+  1451→                          — using date: {importDate}
+  1452→                        </span>
+  1453→                      )}
+  1454→                    </h3>
+  1455→                    <div className="max-h-[40vh] overflow-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
+  1456→                      <Table>
+  1457→                        <TableHeader>
+  1458→                          <TableRow className="hover:bg-transparent">
+  1459→                            <TableHead className="text-xs">E. Code</TableHead>
+  1460→                            <TableHead className="text-xs">Name</TableHead>
+  1461→                            <TableHead className="text-xs">Shift</TableHead>
+  1462→                            <TableHead className="text-xs">InTime</TableHead>
+  1463→                            <TableHead className="text-xs">OutTime</TableHead>
+  1464→                            <TableHead className="text-xs">Status</TableHead>
+  1465→                            <TableHead className="text-xs">Remarks</TableHead>
+  1466→                          </TableRow>
+  1467→                        </TableHeader>
+  1468→                        <TableBody>
+  1469→                          {importPreview.slice(0, 100).map((row, i) => (
+  1470→                            <TableRow key={i} className="hover:bg-muted/30">
+  1471→                              <TableCell className="text-xs font-mono">{row.employeeId || '—'}</TableCell>
+  1472→                              <TableCell className="text-xs">{row.employeeName || '—'}</TableCell>
+  1473→                              <TableCell className="text-xs">{row.shift || '—'}</TableCell>
+  1474→                              <TableCell className="text-xs font-mono">{row.checkIn || '—'}</TableCell>
+  1475→                              <TableCell className="text-xs font-mono">{row.checkOut || '—'}</TableCell>
+  1476→                              <TableCell className="text-xs">{row.status || '—'}</TableCell>
+  1477→                              <TableCell className="text-xs">{row.remarks || '—'}</TableCell>
+  1478→                            </TableRow>
+  1479→                          ))}
+  1480→                        </TableBody>
+  1481→                      </Table>
+  1482→                    </div>
+  1483→
+  1484→                    {/* Process Button */}
+  1485→                    <div className="flex items-center gap-3 mt-4 pt-4 border-t relative z-10 bg-background">
+  1486→                      <Button
+  1487→                        className="gradient-laxree text-white gap-1.5 shrink-0"
+  1488→                        onClick={handleProcessImport}
+  1489→                        disabled={importing}
+  1490→                      >
+  1491→                        {importing ? (
+  1492→                          <>
+  1493→                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+  1494→                            Processing...
+  1495→                          </>
+  1496→                        ) : (
+  1497→                          <>
+  1498→                            <CheckCircle className="w-4 h-4" /> Process Attendance
+  1499→                          </>
+  1500→                        )}
+  1501→                      </Button>
+  1502→                      <Button
+  1503→                        variant="outline"
+  1504→                        className="shrink-0"
+  1505→                        onClick={() => {
+  1506→                          setImportPreview([]);
+  1507→                          setImportFile(null);
+  1508→                          setImportResult(null);
+  1509→                          if (fileInputRef.current) fileInputRef.current.value = '';
+  1510→                        }}
+  1511→                      >
+  1512→                        Clear
+  1513→                      </Button>
+  1514→                      <span className="text-xs text-muted-foreground ml-auto">{importPreview.length} records ready to process</span>
+  1515→                    </div>
+  1516→                  </div>
+  1517→                )}
+  1518→
+  1519→                {/* Import Result */}
+  1520→                {importResult && (
+  1521→                  <div className="p-4 rounded-lg bg-muted/30 border">
+  1522→                    <h4 className="text-sm font-semibold mb-2">Import Results</h4>
+  1523→                    <div className="flex gap-4 text-sm">
+  1524→                      <span className="text-emerald-500 font-medium">Success: {importResult.successCount}</span>
+  1525→                      {importResult.errorCount > 0 && (
+  1526→                        <span className="text-red-500 font-medium">Errors: {importResult.errorCount}</span>
+  1527→                      )}
+  1528→                    </div>
+  1529→                    {importResult.results?.filter((r: any) => r.error).length > 0 && (
+  1530→                      <div className="mt-2 text-xs text-red-500">
+  1531→                        {importResult.results.filter((r: any) => r.error).map((r: any, i: number) => (
+  1532→                          <p key={i}>{r.employeeId} ({r.date}): {r.error}</p>
+  1533→                        ))}
+  1534→                      </div>
+  1535→                    )}
+  1536→                  </div>
+  1537→                )}
+  1538→              </CardContent>
+  1539→            </Card>
+  1540→          </motion.div>
+  1541→        </TabsContent>
+  1542→      </Tabs>
+  1543→
+  1544→      {/* ── Mark Attendance Dialog ── */}
+  1545→      <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setForm({ employeeId: '', date: '', checkIn: '', checkOut: '' }); setEmployeeSearch(''); } }}>
+  1546→        <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto z-[100]">
+  1547→          <DialogHeader>
+  1548→            <DialogTitle className="flex items-center gap-2">
+  1549→              <Clock className="w-5 h-5 text-gold" />
+  1550→              Mark Attendance
+  1551→            </DialogTitle>
+  1552→            <DialogDescription>Select an employee and enter attendance details</DialogDescription>
+  1553→          </DialogHeader>
+  1554→          <div className="space-y-4 py-2">
+  1555→            {/* Employee Selection */}
+  1556→            <div className="space-y-2">
+  1557→              <Label className="text-sm font-medium">Employee *</Label>
+  1558→              {!form.employeeId ? (
+  1559→                <div className="space-y-2">
+  1560→                  <div className="relative">
+  1561→                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+  1562→                    <Input
+  1563→                      className="pl-9"
+  1564→                      placeholder="Search employee by name or ID..."
+  1565→                      value={employeeSearch}
+  1566→                      onChange={(e) => setEmployeeSearch(e.target.value)}
+  1567→                      autoFocus
+  1568→                    />
+  1569→                  </div>
+  1570→                  <div className="border rounded-lg max-h-48 overflow-y-auto">
+  1571→                    {filteredEmployees.length === 0 ? (
+  1572→                      <p className="text-sm text-muted-foreground text-center py-4">No employees found</p>
+  1573→                    ) : (
+  1574→                      filteredEmployees.slice(0, 20).map((e) => (
+  1575→                        <button
+  1576→                          key={e.employeeId}
+  1577→                          className="w-full text-left px-3 py-2.5 hover:bg-muted/80 text-sm flex items-center justify-between transition-colors border-b border-border/50 last:border-0 gap-2"
+  1578→                          onClick={() => { setForm({ ...form, employeeId: e.employeeId }); setEmployeeSearch(''); }}
+  1579→                        >
+  1580→                          <div className="flex items-center gap-2 min-w-0 overflow-hidden">
+  1581→                            <FirmBadge firm={e.department} />
+  1582→                            <span className="truncate-fix">{e.fullName}</span>
+  1583→                          </div>
+  1584→                          <span className="text-xs text-muted-foreground font-mono shrink-0">{e.employeeId}</span>
+  1585→                        </button>
+  1586→                      ))
+  1587→                    )}
+  1588→                  </div>
+  1589→                </div>
+  1590→              ) : (
+  1591→                <div className="flex items-center justify-between px-3 py-2.5 bg-muted/50 rounded-lg gap-2">
+  1592→                  <div className="flex items-center gap-2 min-w-0 overflow-hidden">
+  1593→                    <div className="w-7 h-7 rounded-full gradient-laxree flex items-center justify-center text-white text-[10px] font-bold shrink-0">
+  1594→                      {selectedEmployee?.fullName?.charAt(0) || '?'}
+  1595→                    </div>
+  1596→                    <span className="text-sm font-medium truncate-fix">{selectedEmployee?.fullName}</span>
+  1597→                    <FirmBadge firm={selectedEmployee?.department || ''} />
+  1598→                  </div>
+  1599→                  <Button variant="ghost" size="sm" className="h-7 text-xs shrink-0 px-2" onClick={() => setForm({ ...form, employeeId: '' })}>
+  1600→                    <X className="w-3 h-3 mr-1" /> Change
+  1601→                  </Button>
+  1602→                </div>
+  1603→              )}
+  1604→            </div>
+  1605→
+  1606→            <div className="space-y-2">
+  1607→              <Label className="text-sm font-medium">Date *</Label>
+  1608→              <Input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} className="w-full" />
+  1609→            </div>
+  1610→            <div className="grid grid-cols-2 gap-3">
+  1611→              <div className="space-y-2">
+  1612→                <Label className="text-sm font-medium">Check-In Time</Label>
+  1613→                <Input type="time" value={form.checkIn} onChange={(e) => setForm({ ...form, checkIn: e.target.value })} className="w-full" />
+  1614→              </div>
+  1615→              <div className="space-y-2">
+  1616→                <Label className="text-sm font-medium">Check-Out Time</Label>
+  1617→                <Input type="time" value={form.checkOut} onChange={(e) => setForm({ ...form, checkOut: e.target.value })} className="w-full" />
+  1618→              </div>
+  1619→            </div>
+  1620→
+  1621→            <div className="flex items-start gap-2 p-3 rounded-lg bg-gold/5 border border-gold/10">
+  1622→              <Info className="w-4 h-4 text-gold shrink-0 mt-0.5" />
+  1623→              <p className="text-xs text-muted-foreground leading-relaxed">
+  1624→                System auto-calculates working hours, late entry detection, overtime, Sunday hours, and public holiday tracking.
+  1625→              </p>
+  1626→            </div>
+  1627→
+  1628→            <Button className="w-full gradient-laxree text-white h-10" onClick={handleSubmit}>
+  1629→              Save Attendance
+  1630→            </Button>
+  1631→          </div>
+  1632→        </DialogContent>
+  1633→      </Dialog>
+  1634→
+  1635→      {/* ── Edit Attendance Dialog ── */}
+  1636→      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+  1637→        <DialogContent className="sm:max-w-md z-[100]">
+  1638→          <DialogHeader>
+  1639→            <DialogTitle className="flex items-center gap-2">
+  1640→              <Pencil className="w-5 h-5 text-gold" />
+  1641→              Edit Attendance
+  1642→            </DialogTitle>
+  1643→            <DialogDescription>Update check-in and check-out times for this attendance record</DialogDescription>
+  1644→          </DialogHeader>
+  1645→          {editRecord && (
+  1646→            <div className="space-y-4 py-2">
+  1647→              <div className="px-3 py-2.5 bg-muted/50 rounded-lg flex items-center gap-2">
+  1648→                <div className="w-8 h-8 rounded-full gradient-laxree flex items-center justify-center text-white text-xs font-bold shrink-0">
+  1649→                  {editRecord.employee?.fullName?.charAt(0) || '?'}
+  1650→                </div>
+  1651→                <div>
+  1652→                  <p className="text-sm font-medium">{editRecord.employee?.fullName || editRecord.employeeId}</p>
+  1653→                  <p className="text-xs text-muted-foreground">
+  1654→                    {editRecord.employeeId} • {new Date(editRecord.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+  1655→                  </p>
+  1656→                </div>
+  1657→                <StatusBadge status={editRecord.status} />
+  1658→              </div>
+  1659→              <div className="grid grid-cols-2 gap-3">
+  1660→                <div className="space-y-2">
+  1661→                  <Label className="text-sm font-medium">Check-In Time</Label>
+  1662→                  <Input type="time" value={editForm.checkIn} onChange={(e) => setEditForm({ ...editForm, checkIn: e.target.value })} className="w-full" />
+  1663→                </div>
+  1664→                <div className="space-y-2">
+  1665→                  <Label className="text-sm font-medium">Check-Out Time</Label>
+  1666→                  <Input type="time" value={editForm.checkOut} onChange={(e) => setEditForm({ ...editForm, checkOut: e.target.value })} className="w-full" />
+  1667→                </div>
+  1668→              </div>
+  1669→              <div className="flex items-start gap-2 p-3 rounded-lg bg-gold/5 border border-gold/10">
+  1670→                <Info className="w-4 h-4 text-gold shrink-0 mt-0.5" />
+  1671→                <p className="text-xs text-muted-foreground leading-relaxed">
+  1672→                  Hours, OT, late entry, and status will be auto-recalculated when you save.
+  1673→                </p>
+  1674→              </div>
+  1675→              <Button className="w-full gradient-laxree text-white h-10" onClick={handleEditSubmit}>
+  1676→                Update Attendance
+  1677→              </Button>
+  1678→            </div>
+  1679→          )}
+  1680→        </DialogContent>
+  1681→      </Dialog>
+  1682→    </div>
+  1683→  );
+  1684→}
+  1685→

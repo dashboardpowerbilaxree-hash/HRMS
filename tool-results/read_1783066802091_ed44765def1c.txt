@@ -1,0 +1,1654 @@
+     1→'use client';
+     2→
+     3→import { useEffect, useState, useCallback, useMemo } from 'react';
+     4→import { motion } from 'framer-motion';
+     5→import {
+     6→  IndianRupee, Zap, DollarSign, Users, Info,
+     7→  CalendarDays, Building2, Search, FileText, TrendingDown, Clock,
+     8→  Download, Loader2,
+     9→} from 'lucide-react';
+    10→import * as XLSX from 'xlsx-js-style';
+    11→import { Card, CardContent } from '@/components/ui/card';
+    12→import { Button } from '@/components/ui/button';
+    13→import { Input } from '@/components/ui/input';
+    14→import { Label } from '@/components/ui/label';
+    15→import { Badge } from '@/components/ui/badge';
+    16→import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+    17→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+    18→import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+    19→import { ScrollArea } from '@/components/ui/scroll-area';
+    20→import { useHRMSStore } from '@/lib/store';
+    21→import { toast } from 'sonner';
+    22→
+    23→// ── Constants ──
+    24→const FIRM_BADGE_CLASS: Record<string, string> = {
+    25→  LAPL: 'firm-badge-lapl',
+    26→  LRSL: 'firm-badge-lrsl',
+    27→  SI: 'firm-badge-si',
+    28→  SDF: 'firm-badge-sdf',
+    29→  Roofing: 'firm-badge-roofing',
+    30→};
+    31→
+    32→// ── Convert decimal hours to HH.MM display format ──
+    33→function formatHours(decimal: number): string {
+    34→  if (!decimal || decimal === 0) return '0:00';
+    35→  const hours = Math.floor(decimal);
+    36→  const minutes = Math.round((decimal - hours) * 60);
+    37→  if (minutes >= 60) return `${hours + 1}:00`;
+    38→  return `${hours}:${String(minutes).padStart(2, '0')}`;
+    39→}
+    40→
+    41→// ── Format overtime in clear human-readable format ──
+    42→function formatOT(decimal: number): string {
+    43→  if (!decimal || decimal === 0) return '0m';
+    44→  const totalMinutes = Math.round(decimal * 60);
+    45→  if (totalMinutes < 60) return `${totalMinutes}m`;
+    46→  const hours = Math.floor(totalMinutes / 60);
+    47→  const minutes = totalMinutes % 60;
+    48→  if (minutes === 0) return `${hours}h`;
+    49→  return `${hours}h ${minutes}m`;
+    50→}
+    51→
+    52→// ── Display a value that's already in HH:MM format ──
+    53→function displayHHMM(value: number | undefined | null): string {
+    54→  if (!value && value !== 0) return '0:00';
+    55→  return formatHours(value);
+    56→}
+    57→
+    58→// ── Get firm code from employee ID prefix ──
+    59→function getFirmFromEmployeeId(employeeId: string): string {
+    60→  const id = employeeId.toUpperCase();
+    61→  if (id.startsWith('LAPL')) return 'LAPL';
+    62→  if (id.startsWith('LRSL')) return 'LRSL';
+    63→  if (id.startsWith('SI-') || id.startsWith('SI0')) return 'SI';
+    64→  if (id.startsWith('SDF')) return 'SDF';
+    65→  return ''; // fallback to existing department/firm
+    66→}
+    67→
+    68→const FIRMS = ['LAPL', 'LRSL', 'SI', 'SDF'];
+    69→const MONTHS = [
+    70→  'January', 'February', 'March', 'April', 'May', 'June',
+    71→  'July', 'August', 'September', 'October', 'November', 'December',
+    72→];
+    73→
+    74→// ── Payroll Record Type ──
+    75→interface PayrollRecord {
+    76→  id: string;
+    77→  employeeId: string;
+    78→  month: number;
+    79→  year: number;
+    80→  monthlySalary: number;
+    81→  hourlyRate: number;
+    82→  totalWorkedHrs: number;
+    83→  otHours: number;
+    84→  otRate: number;
+    85→  otAmount: number;
+    86→  sundayHrs: number;
+    87→  sundayCount: number;
+    88→  sundayEarnings: number;
+    89→  earnedSundayHrs: number;
+    90→  totalHrs: number;
+    91→  presentDays: number;
+    92→  absentDays: number;
+    93→  holidayDays: number;
+    94→  grossSalary: number;
+    95→  tdsDeduction: number;
+    96→  loanDeduction: number;
+    97→  advanceDeduction: number;
+    98→  securityDeposit: number;
+    99→  otherDeductions: number;
+   100→  totalDeductions: number;
+   101→  arrear: number;
+   102→  netSalary: number;
+   103→  status: string;
+   104→  employee?: {
+   105→    fullName: string;
+   106→    employeeId: string;
+   107→    department: string;
+   108→    designation: string;
+   109→    location: string;
+   110→    salaryType: string;
+   111→  };
+   112→  // Compat fields
+   113→  baseSalary?: number;
+   114→  perDaySalary?: number;
+   115→  perDayRate?: number;
+   116→  daysInMonth?: number;
+   117→  basicSalary: number;
+   118→  totalWorkHours: number;
+   119→  salaryPerHour: number;
+   120→  sundayDays: number;
+   121→  phDays: number;
+   122→  sundayAmount: number;
+   123→  phAmount: number;
+   124→  bonus: number;
+   125→  incentive: number;
+   126→  pfDeduction: number;
+   127→  esiDeduction: number;
+   128→}
+   129→
+   130→// ── Animated Counter ──
+   131→function AnimatedCounter({ value, prefix = '', suffix = '', decimals = 0 }: {
+   132→  value: number; prefix?: string; suffix?: string; decimals?: number;
+   133→}) {
+   134→  const [display, setDisplay] = useState(0);
+   135→  useEffect(() => {
+   136→    const duration = 1000;
+   137→    const startTime = Date.now();
+   138→    const step = () => {
+   139→      const elapsed = Date.now() - startTime;
+   140→      const progress = Math.min(elapsed / duration, 1);
+   141→      const eased = 1 - Math.pow(1 - progress, 3);
+   142→      setDisplay(value * eased);
+   143→      if (progress < 1) requestAnimationFrame(step);
+   144→    };
+   145→    requestAnimationFrame(step);
+   146→  }, [value]);
+   147→
+   148→  if (decimals > 0) {
+   149→    return <span>{prefix}{display.toFixed(decimals)}{suffix}</span>;
+   150→  }
+   151→  return <span>{prefix}{Math.round(display).toLocaleString('en-IN')}{suffix}</span>;
+   152→}
+   153→
+   154→// ── Status Badge ──
+   155→function PayrollStatusBadge({ status }: { status: string }) {
+   156→  const config: Record<string, { bg: string; text: string; label: string }> = {
+   157→    generated: { bg: 'bg-cyan-500/15 border-cyan-500/20', text: 'text-cyan-600 dark:text-cyan-400', label: 'Generated' },
+   158→    approved: { bg: 'bg-emerald-500/15 border-emerald-500/20', text: 'text-emerald-600 dark:text-emerald-400', label: 'Approved' },
+   159→    paid: { bg: 'bg-green-500/15 border-green-500/20', text: 'text-green-600 dark:text-green-400', label: 'Paid' },
+   160→  };
+   161→  const s = config[status] || { bg: 'bg-muted border-border', text: 'text-muted-foreground', label: status };
+   162→  return (
+   163→    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border whitespace-nowrap shrink-0 ${s.bg} ${s.text}`}>
+   164→      {s.label}
+   165→    </span>
+   166→  );
+   167→}
+   168→
+   169→// ── Firm Badge ──
+   170→function FirmBadge({ firm }: { firm: string }) {
+   171→  return <span className={`${FIRM_BADGE_CLASS[firm] || 'firm-badge-lapl'} whitespace-nowrap shrink-0`}>{firm}</span>;
+   172→}
+   173→
+   174→export function PayrollAutomation() {
+   175→  const [payrolls, setPayrolls] = useState<PayrollRecord[]>([]);
+   176→  const [employees, setEmployees] = useState<{ employeeId: string; fullName: string; department: string; salaryType: string; basicSalary: number; shiftHours: number }[]>([]);
+   177→  const [loading, setLoading] = useState(true);
+   178→  const [open, setOpen] = useState(false);
+   179→  const [generatingAll, setGeneratingAll] = useState(false);
+   180→  const [exporting, setExporting] = useState(false);
+   181→
+   182→  // ── Advance Form ──
+   183→  const [advanceOpen, setAdvanceOpen] = useState(false);
+   184→  const [advanceForm, setAdvanceForm] = useState({
+   185→    employeeId: '',
+   186→    amount: '',
+   187→    reason: '',
+   188→    date: new Date().toISOString().split('T')[0],
+   189→  });
+   190→  const [advanceSearch, setAdvanceSearch] = useState('');
+   191→  const [advances, setAdvances] = useState<any[]>([]);
+   192→  const [addingAdvance, setAddingAdvance] = useState(false);
+   193→
+   194→  // ── Form for Generate One ──
+   195→  const [form, setForm] = useState({
+   196→    employeeId: '',
+   197→    bonus: 0,
+   198→    incentive: 0,
+   199→    tdsDeduction: 0,
+   200→    loanDeduction: 0,
+   201→    advanceDeduction: 0,
+   202→    securityDeposit: 0,
+   203→    arrear: 0,
+   204→  });
+   205→  const [employeeSearch, setEmployeeSearch] = useState('');
+   206→
+   207→  // ── Filters ──
+   208→  const now = new Date();
+   209→  const [filterMonth, setFilterMonth] = useState(String(now.getMonth() + 1));
+   210→  const [filterYear, setFilterYear] = useState(String(now.getFullYear()));
+   211→  const [filterFirm, setFilterFirm] = useState('all');
+   212→  const [searchEmployee, setSearchEmployee] = useState('');
+   213→
+   214→  const { setCurrentPage, setSelectedEmployeeId } = useHRMSStore();
+   215→
+   216→  // ── Load data ──
+   217→  const loadData = useCallback(async () => {
+   218→    setLoading(true);
+   219→    try {
+   220→      const params = new URLSearchParams();
+   221→      params.set('month', filterMonth);
+   222→      params.set('year', filterYear);
+   223→      if (filterFirm !== 'all') params.set('firm', filterFirm);
+   224→
+   225→      const [payRes, empRes] = await Promise.all([
+   226→        fetch(`/api/payroll?${params}`),
+   227→        fetch('/api/employees?status=Yes'),
+   228→      ]);
+   229→      setPayrolls(await payRes.json());
+   230→      const empData = await empRes.json();
+   231→      setEmployees(empData.map((e: any) => ({
+   232→        employeeId: e.employeeId,
+   233→        fullName: e.fullName,
+   234→        department: e.department,
+   235→        salaryType: e.salaryType,
+   236→        basicSalary: e.basicSalary || e.monthlySalary,
+   237→        shiftHours: e.shiftHours,
+   238→      })));
+   239→    } catch {
+   240→      toast.error('Failed to load payroll data');
+   241→    }
+   242→    setLoading(false);
+   243→  }, [filterMonth, filterYear, filterFirm]);
+   244→
+   245→  useEffect(() => { loadData(); }, [loadData]);
+   246→
+   247→  // ── Summary calculations ──
+   248→  const totalGross = payrolls.reduce((s, p) => s + p.grossSalary, 0);
+   249→  const totalDeductions = payrolls.reduce((s, p) => s + p.totalDeductions, 0);
+   250→  const totalNet = payrolls.reduce((s, p) => s + p.netSalary, 0);
+   251→  const totalOTHours = payrolls.reduce((s, p) => s + (p.otHours || 0), 0);
+   252→  const totalArrears = payrolls.reduce((s, p) => s + (p.arrear || 0), 0);
+   253→
+   254→  // ── Filtered records ──
+   255→  const filteredRecords = useMemo(() => {
+   256→    if (!searchEmployee) return payrolls;
+   257→    const q = searchEmployee.toLowerCase();
+   258→    return payrolls.filter((p) =>
+   259→      p.employee?.fullName?.toLowerCase().includes(q) ||
+   260→      p.employeeId.toLowerCase().includes(q)
+   261→    );
+   262→  }, [payrolls, searchEmployee]);
+   263→
+   264→  // ── Selected employee preview ──
+   265→  const selectedEmp = useMemo(() => {
+   266→    return employees.find((e) => e.employeeId === form.employeeId);
+   267→  }, [employees, form.employeeId]);
+   268→
+   269→  // ── Salary preview calculation ──
+   270→  // Gross = baseSalary + sundayEarnings + OT
+   271→  // Net = grossSalary + bonus + incentive + arrear − totalDeductions
+   272→  const salaryPreview = useMemo(() => {
+   273→    if (!selectedEmp) return null;
+   274→    const existing = payrolls.find((p) => p.employeeId === form.employeeId);
+   275→    if (!existing) return null;
+   276→
+   277→    const daysInMonth = existing.daysInMonth || new Date(parseInt(filterYear), parseInt(filterMonth), 0).getDate();
+   278→    const perDayRate = existing.perDayRate || (existing.monthlySalary / daysInMonth);
+   279→    const earnedDays = (existing.presentDays || 0) + (existing.paidLeaves || 0);
+   280→    const baseSalary = existing.baseSalary != null
+   281→      ? existing.baseSalary
+   282→      : Math.round((perDayRate * earnedDays) * 100) / 100;
+   283→
+   284→    // Sunday Earnings (paid weekly off)
+   285→    const sundayEarnings = existing.sundayEarnings || 0;
+   286→
+   287→    // Gross includes baseSalary + sundayEarnings + OT
+   288→    const grossSalary = existing.grossSalary;
+   289→
+   290→    // Deductions
+   291→    const totalDeductions = Math.round((form.tdsDeduction + form.loanDeduction + form.advanceDeduction + form.securityDeposit) * 100) / 100;
+   292→
+   293→    // Net = grossSalary + bonus + incentive + arrear − totalDeductions
+   294→    const net = Math.round((grossSalary + form.bonus + form.incentive + form.arrear - totalDeductions) * 100) / 100;
+   295→
+   296→    return {
+   297→      baseSalary: Math.round(baseSalary * 100) / 100,
+   298→      sundayEarnings,
+   299→      grossSalary: Math.round(grossSalary * 100) / 100,
+   300→      bonus: form.bonus,
+   301→      incentive: form.incentive,
+   302→      arrear: form.arrear,
+   303→      deductions: totalDeductions,
+   304→      net,
+   305→    };
+   306→  }, [selectedEmp, form, payrolls, filterMonth, filterYear]);
+   307→
+   308→  // ── Generate One ──
+   309→  const handleGenerateOne = async () => {
+   310→    if (!form.employeeId) { toast.error('Please select an employee'); return; }
+   311→    try {
+   312→      const res = await fetch('/api/payroll', {
+   313→        method: 'POST',
+   314→        headers: { 'Content-Type': 'application/json' },
+   315→        body: JSON.stringify({
+   316→          employeeId: form.employeeId,
+   317→          month: parseInt(filterMonth),
+   318→          year: parseInt(filterYear),
+   319→          bonus: form.bonus || 0,
+   320→          incentive: form.incentive || 0,
+   321→          tdsDeduction: form.tdsDeduction || 0,
+   322→          loanDeduction: form.loanDeduction || 0,
+   323→          advanceDeduction: form.advanceDeduction || 0,
+   324→          securityDeposit: form.securityDeposit || 0,
+   325→          arrear: form.arrear || 0,
+   326→        }),
+   327→      });
+   328→      if (!res.ok) throw new Error('Failed to generate payroll');
+   329→      toast.success('Payroll generated successfully');
+   330→      setOpen(false);
+   331→      setForm({ employeeId: '', bonus: 0, incentive: 0, tdsDeduction: 0, loanDeduction: 0, advanceDeduction: 0, securityDeposit: 0, arrear: 0 });
+   332→      setEmployeeSearch('');
+   333→      loadData();
+   334→    } catch {
+   335→      toast.error('Failed to generate payroll');
+   336→    }
+   337→  };
+   338→
+   339→  // ── Generate All ──
+   340→  const handleGenerateAll = async () => {
+   341→    setGeneratingAll(true);
+   342→    try {
+   343→      const body: any = { month: parseInt(filterMonth), year: parseInt(filterYear) };
+   344→      if (filterFirm !== 'all') body.firm = filterFirm;
+   345→      const res = await fetch('/api/payroll/generate-all', {
+   346→        method: 'POST',
+   347→        headers: { 'Content-Type': 'application/json' },
+   348→        body: JSON.stringify(body),
+   349→      });
+   350→      const data = await res.json();
+   351→      toast.success(`Payroll generated for ${data.successCount || data.generated || 0} employees`);
+   352→      loadData();
+   353→    } catch {
+   354→      toast.error('Failed to generate payroll for all employees');
+   355→    }
+   356→    setGeneratingAll(false);
+   357→  };
+   358→
+   359→  // ── Filtered employees for the dialog ──
+   360→  const filteredEmployees = useMemo(() => {
+   361→    if (!employeeSearch) return employees;
+   362→    const q = employeeSearch.toLowerCase();
+   363→    return employees.filter((e) =>
+   364→      e.fullName.toLowerCase().includes(q) || e.employeeId.toLowerCase().includes(q)
+   365→    );
+   366→  }, [employees, employeeSearch]);
+   367→
+   368→  // ── Export Master Excel Sheet (Monthly Attendance Format) ──
+   369→  const handleExportSheet = async () => {
+   370→    if (filteredRecords.length === 0) {
+   371→      toast.error('No payroll records to export');
+   372→      return;
+   373→    }
+   374→    setExporting(true);
+   375→    try {
+   376→      const month = parseInt(filterMonth);
+   377→      const year = parseInt(filterYear);
+   378→      const daysInMonth = new Date(year, month, 0).getDate();
+   379→      const monthName = MONTHS[month - 1];
+   380→
+   381→      // ── Fetch attendance data ──
+   382→      const attParams = new URLSearchParams();
+   383→      attParams.set('month', filterMonth);
+   384→      attParams.set('year', filterYear);
+   385→      if (filterFirm !== 'all') attParams.set('firm', filterFirm);
+   386→      const attRes = await fetch(`/api/attendance?${attParams}`);
+   387→      const attData = await attRes.json();
+   388→      const attendanceRecords: any[] = attData.records || [];
+   389→
+   390→      // ── Fetch approved leaves for the month ──
+   391→      const leaveParams = new URLSearchParams();
+   392→      leaveParams.set('status', 'approved');
+   393→      const leaveRes = await fetch(`/api/leaves?${leaveParams}`);
+   394→      const leaveData = await leaveRes.json();
+   395→      const approvedLeaves: any[] = Array.isArray(leaveData) ? leaveData : [];
+   396→
+   397→      // Build leave map: employeeId -> Set of date strings (YYYY-MM-DD)
+   398→      const leaveMap: Record<string, Set<string>> = {};
+   399→      for (const lv of approvedLeaves) {
+   400→        if (!leaveMap[lv.employeeId]) leaveMap[lv.employeeId] = new Set();
+   401→        const start = new Date(lv.startDate);
+   402→        const end = new Date(lv.endDate);
+   403→        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+   404→          const ds = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+   405→          leaveMap[lv.employeeId].add(ds);
+   406→        }
+   407→      }
+   408→
+   409→      // Build attendance map: employeeId -> { day -> record }
+   410→      const attMap: Record<string, Record<number, any>> = {};
+   411→      for (const rec of attendanceRecords) {
+   412→        const d = new Date(rec.date);
+   413→        const day = d.getDate();
+   414→        if (!attMap[rec.employeeId]) attMap[rec.employeeId] = {};
+   415→        attMap[rec.employeeId][day] = rec;
+   416→      }
+   417→
+   418→      // Build employee list from filtered payroll records (unique by employeeId)
+   419→      const empList = filteredRecords.map(p => ({
+   420→        employeeId: p.employeeId,
+   421→        fullName: p.employee?.fullName || p.employeeId,
+   422→        payroll: p,
+   423→      }));
+   424→
+   425→      // ── Style constants ──
+   426→      const GOLD = 'D4A843';
+   427→      const DARK = '1A1A1A';
+   428→      const WHITE = 'FFFFFF';
+   429→      const DEEP_BLUE = '1E3A5F';
+   430→      const LIGHT_BG = 'FFF8E7';
+   431→      const LIGHT_GREEN = 'ECFDF5';
+   432→      const LIGHT_RED = 'FEF2F2';
+   433→      const EMP_COL = 'A';
+   434→
+   435→      const fullBorder = (color: string = 'B0B0B0', style: 'thin' | 'medium' = 'thin') => ({
+   436→        top: { style, color: { rgb: color } },
+   437→        bottom: { style, color: { rgb: color } },
+   438→        left: { style, color: { rgb: color } },
+   439→        right: { style, color: { rgb: color } },
+   440→      });
+   441→
+   442→      // Helper: format decimal hours to HH:MM
+   443→      const fmtHrs = (decimal: number): string => {
+   444→        if (!decimal || decimal === 0) return '0:00';
+   445→        const hours = Math.floor(decimal);
+   446→        const minutes = Math.round((decimal - hours) * 60);
+   447→        if (minutes >= 60) return `${hours + 1}:00`;
+   448→        return `${hours}:${String(minutes).padStart(2, '0')}`;
+   449→      };
+   450→
+   451→      // Helper: format time string from checkIn/checkOut (e.g. "10:07")
+   452→      const fmtTime = (time: string | null | undefined): string => {
+   453→        if (!time) return '';
+   454→        // Return as-is if already in HH:MM format
+   455→        return time.substring(0, 5);
+   456→      };
+   457→
+   458→      // Helper: get column letter from 0-based index
+   459→      const colLetter = (idx: number): string => {
+   460→        let result = '';
+   461→        let n = idx;
+   462→        while (n >= 0) {
+   463→          result = String.fromCharCode(65 + (n % 26)) + result;
+   464→          n = Math.floor(n / 26) - 1;
+   465→        }
+   466→        return result;
+   467→      };
+   468→
+   469→      // ═══ SECTION BUILDER ═══
+   470→      // Each section: dayStart..dayEnd, then extra columns after days
+   471→      const buildSection = (
+   472→        sectionIdx: number,
+   473→        dayStart: number,
+   474→        dayEnd: number,
+   475→        startRow: number,
+   476→        empRows: number,
+   477→        extraCols: { header: string; subHeaders: string[] }[]
+   478→      ) => {
+   479→        const numDays = dayEnd - dayStart + 1;
+   480→        const dayColCount = numDays * 3; // 3 cols per day: IN, OUT, TOTAL HRS
+   481→        const extraColCount = extraCols.reduce((s, e) => s + e.subHeaders.length, 0);
+   482→        const totalDataCols = dayColCount + extraColCount;
+   483→        const totalCols = 1 + totalDataCols; // col A = EMP + data cols
+   484→
+   485→        // ── Row 0 of section: Date header row (merged cells per day) ──
+   486→        // A-column gets "EMP" for section 1, empty for others
+   487→        const merges: XLSX.Range[] = [];
+   488→        const rowData: any[] = [];
+   489→
+   490→        // Column A
+   491→        if (sectionIdx === 0) {
+   492→          rowData.push('EMP');
+   493→        } else {
+   494→          rowData.push('');
+   495→        }
+   496→
+   497→        // Day merged headers
+   498→        for (let d = dayStart; d <= dayEnd; d++) {
+   499→          const colOffset = 1 + (d - dayStart) * 3;
+   500→          // Merge B:D, E:G, etc. for each day
+   501→          merges.push({
+   502→            s: { r: startRow - 1, c: colOffset },
+   503→            e: { r: startRow - 1, c: colOffset + 2 },
+   504→          });
+   505→          rowData.push(`Date [${d}]`);
+   506→          rowData.push('');
+   507→          rowData.push('');
+   508→        }
+   509→
+   510→        // Extra column merged headers
+   511→        let extraOffset = 1 + dayColCount;
+   512→        for (const extra of extraCols) {
+   513→          if (extra.subHeaders.length > 1) {
+   514→            merges.push({
+   515→              s: { r: startRow - 1, c: extraOffset },
+   516→              e: { r: startRow - 1, c: extraOffset + extra.subHeaders.length - 1 },
+   517→            });
+   518→          }
+   519→          rowData.push(extra.header);
+   520→          for (let i = 1; i < extra.subHeaders.length; i++) rowData.push('');
+   521→          extraOffset += extra.subHeaders.length;
+   522→        }
+   523→
+   524→        aoa.push(rowData);
+   525→
+   526→        // ── Row 1 of section: IN / OUT / TOTAL HRS sub-headers ──
+   527→        const subRow: any[] = [sectionIdx === 0 ? '' : ''];
+   528→        for (let d = dayStart; d <= dayEnd; d++) {
+   529→          subRow.push('IN');
+   530→          subRow.push('OUT');
+   531→          subRow.push('TOTAL HRS');
+   532→        }
+   533→        let extraSubOffset = 1 + dayColCount;
+   534→        for (const extra of extraCols) {
+   535→          for (const sh of extra.subHeaders) {
+   536→            subRow.push(sh);
+   537→            extraSubOffset++;
+   538→          }
+   539→        }
+   540→        aoa.push(subRow);
+   541→
+   542→        // ── Employee data rows ──
+   543→        for (let eIdx = 0; eIdx < empRows; eIdx++) {
+   544→          const emp = eIdx < empList.length ? empList[eIdx] : null;
+   545→          const empRow: any[] = [];
+   546→
+   547→          // Column A: Employee Name
+   548→          empRow.push(emp ? emp.fullName : '');
+   549→
+   550→          // Day data
+   551→          for (let d = dayStart; d <= dayEnd; d++) {
+   552→            if (!emp) {
+   553→              empRow.push('', '', '');
+   554→              continue;
+   555→            }
+   556→            if (d > daysInMonth) {
+   557→              empRow.push('', '', '');
+   558→              continue;
+   559→            }
+   560→            const rec = attMap[emp.employeeId]?.[d];
+   561→            const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+   562→            const isOnLeave = leaveMap[emp.employeeId]?.has(dateStr);
+   563→
+   564→            if (rec) {
+   565→              // Has attendance record
+   566→              if (rec.status === 'absent') {
+   567→                empRow.push('A', '', '');
+   568→              } else if (rec.status === 'weekly-off') {
+   569→                if (rec.checkIn && rec.totalHours > 0) {
+   570→                  empRow.push(fmtTime(rec.checkIn), fmtTime(rec.checkOut), fmtHrs(rec.totalHours));
+   571→                } else {
+   572→                  empRow.push('WO', '', '');
+   573→                }
+   574→              } else if (rec.status === 'holiday') {
+   575→                if (rec.checkIn && rec.totalHours > 0) {
+   576→                  empRow.push(fmtTime(rec.checkIn), fmtTime(rec.checkOut), fmtHrs(rec.totalHours));
+   577→                } else {
+   578→                  empRow.push('H', '', '');
+   579→                }
+   580→              } else if (rec.halfDay) {
+   581→                empRow.push(fmtTime(rec.checkIn) || 'HD', fmtTime(rec.checkOut) || '', fmtHrs(rec.totalHours));
+   582→              } else {
+   583→                empRow.push(fmtTime(rec.checkIn) || '', fmtTime(rec.checkOut) || '', fmtHrs(rec.totalHours));
+   584→              }
+   585→            } else if (isOnLeave) {
+   586→              empRow.push('L', '', '');
+   587→            } else if (d > daysInMonth) {
+   588→              empRow.push('', '', '');
+   589→            } else {
+   590→              // No record - check if it's a future date or Sunday
+   591→              const dayOfWeek = new Date(year, month - 1, d).getDay();
+   592→              if (dayOfWeek === 0) {
+   593→                empRow.push('WO', '', '');
+   594→              } else {
+   595→                empRow.push('A', '', '');
+   596→              }
+   597→            }
+   598→          }
+   599→
+   600→          // Extra columns data
+   601→          let extraDataOffset = 1 + dayColCount;
+   602→          for (const extra of extraCols) {
+   603→            for (const sh of extra.subHeaders) {
+   604→              if (!emp) {
+   605→                empRow.push('');
+   606→                continue;
+   607→              }
+   608→              if (sh === 'Total Working Hours' || sh === 'Total Hrs') {
+   609→                empRow.push(fmtHrs(emp.payroll.totalWorkedHrs || emp.payroll.totalWorkHours || 0));
+   610→              } else if (sh === 'Leave') {
+   611→                empRow.push(emp.payroll.absentDays || 0);
+   612→              } else {
+   613→                empRow.push('');
+   614→              }
+   615→              extraDataOffset++;
+   616→            }
+   617→          }
+   618→
+   619→          aoa.push(empRow);
+   620→        }
+   621→
+   622→        return { merges, totalCols };
+   623→      };
+   624→
+   625→      // ═══ BUILD THE FULL SHEET ═══
+   626→      const aoa: any[][] = [];
+   627→
+   628→      // ── Row 1: Title row ──
+   629→      // A1 = "ATTENDENCE - 2026"
+   630→      // B1:AH1 merged = "SALARY SHEET OF LAXREE OF THE MONTH OF [Month] [Year]"
+   631→      // We need to know max columns. Section 3 has the most: 1(EMP) + 9*3(days23-31) + 2(Total+Leave) = 30 columns
+   632→      const maxCols = 34; // A + 11*3 = 34 for section 1 which is the widest in pure day columns
+   633→      const titleRow: any[] = ['ATTENDENCE - ' + year];
+   634→      for (let i = 1; i < maxCols; i++) titleRow.push('');
+   635→      titleRow[1] = `SALARY SHEET OF LAXREE OF THE MONTH OF ${monthName} ${year}`;
+   636→      aoa.push(titleRow);
+   637→
+   638→      // ── SECTION 1: Days 1–11 ──
+   639→      const s1 = buildSection(0, 1, 11, 2, empList.length, []);
+   640→
+   641→      // ── SECTION 2: Days 12–22 ──
+   642→      const s2 = buildSection(1, 12, 22, 2 + 2 + empList.length, empList.length, []);
+   643→
+   644→      // ── SECTION 3: Days 23–31 + Total Working Hours + Leave ──
+   645→      const s3 = buildSection(2, 23, 31, 2 + 2 * (2 + empList.length), empList.length, [
+   646→        { header: '', subHeaders: ['Total Working Hours', 'Leave'] },
+   647→      ]);
+   648→
+   649→      // Determine actual max columns used
+   650→      const s1Cols = 1 + 11 * 3; // 34
+   651→      const s2Cols = 1 + 11 * 3; // 34
+   652→      const s3Cols = 1 + 9 * 3 + 2; // 30
+   653→      const actualMaxCols = Math.max(s1Cols, s2Cols, s3Cols);
+   654→
+   655→      const ws = XLSX.utils.aoa_to_sheet(aoa);
+   656→
+   657→      // ── MERGES ──
+   658→      const allMerges: XLSX.Range[] = [];
+   659→
+   660→      // Title row merge: A1 stays, B1:{lastCol}1 merged
+   661→      allMerges.push({ s: { r: 0, c: 1 }, e: { r: 0, c: actualMaxCols - 1 } });
+   662→
+   663→      // Section merges
+   664→      allMerges.push(...s1.merges);
+   665→      allMerges.push(...s2.merges);
+   666→      allMerges.push(...s3.merges);
+   667→
+   668→      ws['!merges'] = allMerges;
+   669→
+   670→      // ── STYLES ──
+   671→      // Row 1: Title row - Gold background
+   672→      for (let c = 0; c < actualMaxCols; c++) {
+   673→        const addr = `${colLetter(c)}1`;
+   674→        const cell = ws[addr];
+   675→        if (cell) {
+   676→          cell.s = {
+   677→            font: { bold: true, color: { rgb: WHITE }, sz: 14 },
+   678→            fill: { fgColor: { rgb: GOLD } },
+   679→            alignment: { horizontal: 'center' as const, vertical: 'center' as const },
+   680→            border: fullBorder(GOLD, 'medium'),
+   681→          };
+   682→        }
+   683→      }
+   684→      // Make sure empty cells in row 1 also get styled
+   685→      for (let c = 0; c < actualMaxCols; c++) {
+   686→        const addr = `${colLetter(c)}1`;
+   687→        if (!ws[addr]) {
+   688→          ws[addr] = { t: 's', v: '', s: {
+   689→            font: { bold: true, color: { rgb: WHITE }, sz: 14 },
+   690→            fill: { fgColor: { rgb: GOLD } },
+   691→            alignment: { horizontal: 'center' as const, vertical: 'center' as const },
+   692→            border: fullBorder(GOLD, 'medium'),
+   693→          }};
+   694→        } else {
+   695→          ws[addr].s = {
+   696→            font: { bold: true, color: { rgb: WHITE }, sz: 14 },
+   697→            fill: { fgColor: { rgb: GOLD } },
+   698→            alignment: { horizontal: 'center' as const, vertical: 'center' as const },
+   699→            border: fullBorder(GOLD, 'medium'),
+   700→          };
+   701→        }
+   702→      }
+   703→
+   704→      // Style section date header rows, sub-header rows, and data rows
+   705→      const styleSection = (
+   706→        sectionIdx: number,
+   707→        dayStart: number,
+   708→        dayEnd: number,
+   709→        dateHeaderRow: number,
+   710→        empCount: number,
+   711→        extraCols: { header: string; subHeaders: string[] }[]
+   712→      ) => {
+   713→        const numDays = dayEnd - dayStart + 1;
+   714→        const dayColCount = numDays * 3;
+   715→        const extraColCount = extraCols.reduce((s, e) => s + e.subHeaders.length, 0);
+   716→
+   717→        // ── Date header row ── Dark background, white text
+   718→        for (let c = 0; c < actualMaxCols; c++) {
+   719→          const addr = `${colLetter(c)}${dateHeaderRow}`;
+   720→          if (!ws[addr]) {
+   721→            ws[addr] = { t: 's', v: '', s: {} };
+   722→          }
+   723→          ws[addr].s = {
+   724→            font: { bold: true, color: { rgb: WHITE }, sz: 11 },
+   725→            fill: { fgColor: { rgb: DARK } },
+   726→            alignment: { horizontal: 'center' as const, vertical: 'center' as const },
+   727→            border: fullBorder(DARK, 'medium'),
+   728→          };
+   729→        }
+   730→
+   731→        // ── Sub-header row (IN/OUT/TOTAL HRS) ── Deep blue
+   732→        const subHeaderRow = dateHeaderRow + 1;
+   733→        for (let c = 0; c < actualMaxCols; c++) {
+   734→          const addr = `${colLetter(c)}${subHeaderRow}`;
+   735→          if (!ws[addr]) {
+   736→            ws[addr] = { t: 's', v: '', s: {} };
+   737→          }
+   738→          ws[addr].s = {
+   739→            font: { bold: true, color: { rgb: WHITE }, sz: 9 },
+   740→            fill: { fgColor: { rgb: DEEP_BLUE } },
+   741→            alignment: { horizontal: 'center' as const, vertical: 'center' as const },
+   742→            border: fullBorder(DEEP_BLUE),
+   743→          };
+   744→        }
+   745→
+   746→        // ── Employee data rows ──
+   747→        for (let eIdx = 0; eIdx < empCount; eIdx++) {
+   748→          const dataRow = dateHeaderRow + 2 + eIdx;
+   749→          const isEven = eIdx % 2 === 0;
+   750→          for (let c = 0; c < actualMaxCols; c++) {
+   751→            const addr = `${colLetter(c)}${dataRow}`;
+   752→            const cell = ws[addr];
+   753→            if (cell) {
+   754→              const bg = isEven ? LIGHT_BG : WHITE;
+   755→              cell.s = {
+   756→                font: { sz: 9 },
+   757→                fill: { fgColor: { rgb: bg } },
+   758→                alignment: { horizontal: c === 0 ? ('left' as const) : ('center' as const), vertical: 'center' as const },
+   759→                border: fullBorder('D0D0D0'),
+   760→              };
+   761→
+   762→              // Highlight 'A' cells in red
+   763→              if (cell.v === 'A') {
+   764→                cell.s = {
+   765→                  ...cell.s,
+   766→                  font: { bold: true, sz: 9, color: { rgb: 'DC2626' } },
+   767→                  fill: { fgColor: { rgb: LIGHT_RED } },
+   768→                };
+   769→              }
+   770→              // Highlight 'L' cells
+   771→              if (cell.v === 'L') {
+   772→                cell.s = {
+   773→                  ...cell.s,
+   774→                  font: { bold: true, sz: 9, color: { rgb: 'D97706' } },
+   775→                  fill: { fgColor: { rgb: 'FEF3C7' } },
+   776→                };
+   777→              }
+   778→              // Highlight 'WO' cells
+   779→              if (cell.v === 'WO') {
+   780→                cell.s = {
+   781→                  ...cell.s,
+   782→                  font: { bold: true, sz: 9, color: { rgb: '059669' } },
+   783→                  fill: { fgColor: { rgb: LIGHT_GREEN } },
+   784→                };
+   785→              }
+   786→              // Highlight 'H' cells
+   787→              if (cell.v === 'H') {
+   788→                cell.s = {
+   789→                  ...cell.s,
+   790→                  font: { bold: true, sz: 9, color: { rgb: '7C3AED' } },
+   791→                  fill: { fgColor: { rgb: 'EDE9FE' } },
+   792→                };
+   793→              }
+   794→            }
+   795→          }
+   796→        }
+   797→      };
+   798→
+   799→      // Style section 1: date header row = 2, sub-header = 3, data starts at 4
+   800→      styleSection(0, 1, 11, 2, empList.length, []);
+   801→
+   802→      // Style section 2
+   803→      const s2StartRow = 2 + 2 + empList.length;
+   804→      styleSection(1, 12, 22, s2StartRow, empList.length, []);
+   805→
+   806→      // Style section 3
+   807→      const s3StartRow = s2StartRow + 2 + empList.length;
+   808→      styleSection(2, 23, 31, s3StartRow, empList.length, [
+   809→        { header: '', subHeaders: ['Total Working Hours', 'Leave'] },
+   810→      ]);
+   811→
+   812→      // ── Column widths ──
+   813→      const colWidths: { wch: number }[] = [{ wch: 22 }]; // Column A = employee name
+   814→      // Each day: IN(8), OUT(8), TOTAL HRS(12)
+   815→      for (let s = 0; s < 3; s++) {
+   816→        const dayStart = s === 0 ? 1 : s === 1 ? 12 : 23;
+   817→        const dayEnd = s === 0 ? 11 : s === 1 ? 22 : 31;
+   818→        for (let d = dayStart; d <= dayEnd; d++) {
+   819→          colWidths.push({ wch: 8 });  // IN
+   820→          colWidths.push({ wch: 8 });  // OUT
+   821→          colWidths.push({ wch: 12 }); // TOTAL HRS
+   822→        }
+   823→        if (s === 2) {
+   824→          colWidths.push({ wch: 16 }); // Total Working Hours
+   825→          colWidths.push({ wch: 8 });  // Leave
+   826→        }
+   827→      }
+   828→      // Pad to actualMaxCols
+   829→      while (colWidths.length < actualMaxCols) colWidths.push({ wch: 8 });
+   830→      ws['!cols'] = colWidths;
+   831→
+   832→      // ── Create workbook and download ──
+   833→      const wb = XLSX.utils.book_new();
+   834→      XLSX.utils.book_append_sheet(wb, ws, 'Master Sheet');
+   835→
+   836→      XLSX.writeFile(wb, `Master_Sheet_${monthName}_${year}.xlsx`);
+   837→
+   838→      toast.success('Master Excel Sheet downloaded successfully!');
+   839→    } catch (err) {
+   840→      console.error('Master sheet export error:', err);
+   841→      toast.error('Export failed. Please try again.');
+   842→    }
+   843→    setExporting(false);
+   844→  };
+   845→
+   846→  // ── Load advances ──
+   847→  const loadAdvances = useCallback(async () => {
+   848→    try {
+   849→      const params = new URLSearchParams();
+   850→      params.set('month', filterMonth);
+   851→      params.set('year', filterYear);
+   852→      const res = await fetch(`/api/advances?${params}`);
+   853→      if (res.ok) {
+   854→        const data = await res.json();
+   855→        setAdvances(data);
+   856→      }
+   857→    } catch {}
+   858→  }, [filterMonth, filterYear]);
+   859→
+   860→  useEffect(() => { loadAdvances(); }, [loadAdvances]);
+   861→
+   862→  // ── Add Advance ──
+   863→  const handleAddAdvance = async () => {
+   864→    if (!advanceForm.employeeId || !advanceForm.amount || !advanceForm.reason) {
+   865→      toast.error('Please fill employee, amount, and reason');
+   866→      return;
+   867→    }
+   868→    setAddingAdvance(true);
+   869→    try {
+   870→      const res = await fetch('/api/advances', {
+   871→        method: 'POST',
+   872→        headers: { 'Content-Type': 'application/json' },
+   873→        body: JSON.stringify({
+   874→          employeeId: advanceForm.employeeId,
+   875→          amount: advanceForm.amount,
+   876→          reason: advanceForm.reason,
+   877→          date: advanceForm.date,
+   878→          month: parseInt(filterMonth),
+   879→          year: parseInt(filterYear),
+   880→        }),
+   881→      });
+   882→      if (!res.ok) throw new Error('Failed to add advance');
+   883→      toast.success('Advance added successfully! It will reflect in payroll.');
+   884→      setAdvanceOpen(false);
+   885→      setAdvanceForm({ employeeId: '', amount: '', reason: '', date: new Date().toISOString().split('T')[0] });
+   886→      setAdvanceSearch('');
+   887→      loadAdvances();
+   888→      loadData();
+   889→    } catch {
+   890→      toast.error('Failed to add advance');
+   891→    }
+   892→    setAddingAdvance(false);
+   893→  };
+   894→
+   895→  // ── Delete Advance ──
+   896→  const handleDeleteAdvance = async (id: string) => {
+   897→    try {
+   898→      const res = await fetch(`/api/advances/${id}`, { method: 'DELETE' });
+   899→      if (!res.ok) throw new Error('Failed');
+   900→      toast.success('Advance deleted');
+   901→      loadAdvances();
+   902→      loadData();
+   903→    } catch {
+   904→      toast.error('Failed to delete advance');
+   905→    }
+   906→  };
+   907→
+   908→  // ── Selected advance employee ──
+   909→  const selectedAdvEmp = useMemo(() => {
+   910→    return employees.find((e) => e.employeeId === advanceForm.employeeId);
+   911→  }, [employees, advanceForm.employeeId]);
+   912→
+   913→  // ── Filtered employees for advance dialog ──
+   914→  const filteredAdvEmployees = useMemo(() => {
+   915→    if (!advanceSearch) return employees;
+   916→    const q = advanceSearch.toLowerCase();
+   917→    return employees.filter((e) =>
+   918→      e.fullName.toLowerCase().includes(q) || e.employeeId.toLowerCase().includes(q)
+   919→    );
+   920→  }, [employees, advanceSearch]);
+   921→
+   922→  // ── Summary cards ──
+   923→  const statCards = [
+   924→    {
+   925→      title: 'Total Gross Salary',
+   926→      value: totalGross,
+   927→      icon: IndianRupee,
+   928→      gradient: 'gradient-info',
+   929→      color: 'text-cyan-500',
+   930→      prefix: '₹',
+   931→      format: 'currency',
+   932→    },
+   933→    {
+   934→      title: 'Total OT Hours',
+   935→      value: totalOTHours,
+   936→      icon: Clock,
+   937→      gradient: 'gradient-warning',
+   938→      color: 'text-cyan-500',
+   939→      isHours: true,
+   940→    },
+   941→    {
+   942→      title: 'Total Deductions',
+   943→      value: totalDeductions,
+   944→      icon: TrendingDown,
+   945→      gradient: 'gradient-danger',
+   946→      color: 'text-red-500',
+   947→      prefix: '₹',
+   948→      format: 'currency',
+   949→    },
+   950→    {
+   951→      title: 'Net Payroll',
+   952→      value: totalNet,
+   953→      icon: DollarSign,
+   954→      gradient: 'gradient-success',
+   955→      color: 'text-gold',
+   956→      prefix: '₹',
+   957→      format: 'currency',
+   958→    },
+   959→    {
+   960→      title: 'Employees Processed',
+   961→      value: payrolls.length,
+   962→      icon: Users,
+   963→      gradient: 'gradient-warning',
+   964→      color: 'text-amber-500',
+   965→    },
+   966→  ];
+   967→
+   968→  return (
+   969→    <div className="space-y-4">
+   970→      {/* ── Header ── */}
+   971→      <motion.div
+   972→        initial={{ opacity: 0, y: -10 }}
+   973→        animate={{ opacity: 1, y: 0 }}
+   974→        className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3"
+   975→      >
+   976→        <div>
+   977→          <h2 className="text-xl font-bold flex items-center gap-2">
+   978→            <IndianRupee className="w-5 h-5 text-gold" />
+   979→            Payroll Automation
+   980→          </h2>
+   981→          <p className="text-sm text-muted-foreground">
+   982→            Hourly Rate = Monthly Salary ÷ (Days in Month × 9) | Sundays are paid weekly off
+   983→          </p>
+   984→        </div>
+   985→        <div className="flex gap-2 flex-wrap">
+   986→          <Button
+   987→            variant="outline"
+   988→            size="sm"
+   989→            className="gap-1.5"
+   990→            onClick={() => setOpen(true)}
+   991→          >
+   992→            <DollarSign className="w-4 h-4" /> Generate One
+   993→          </Button>
+   994→          <Button
+   995→            className="gradient-laxree text-white gap-1.5"
+   996→            size="sm"
+   997→            onClick={handleGenerateAll}
+   998→            disabled={generatingAll}
+   999→          >
+  1000→            <Zap className="w-4 h-4" /> {generatingAll ? 'Generating...' : 'Generate All'}
+  1001→          </Button>
+  1002→          <Button
+  1003→            variant="outline"
+  1004→            size="sm"
+  1005→            className="gap-1.5"
+  1006→            onClick={handleExportSheet}
+  1007→            disabled={exporting || filteredRecords.length === 0}
+  1008→          >
+  1009→            {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
+  1010→            {exporting ? 'Exporting...' : 'Master Excel Sheet'}
+  1011→          </Button>
+  1012→          <Button
+  1013→            variant="outline"
+  1014→            size="sm"
+  1015→            className="gap-1.5 border-amber-500/30 text-amber-600 hover:bg-amber-500/10"
+  1016→            onClick={() => setAdvanceOpen(true)}
+  1017→          >
+  1018→            <IndianRupee className="w-4 h-4" /> Add Advance
+  1019→          </Button>
+  1020→        </div>
+  1021→      </motion.div>
+  1022→
+  1023→      {/* ── Month/Year Selector + Firm Filter ── */}
+  1024→      <motion.div
+  1025→        initial={{ opacity: 0, y: -5 }}
+  1026→        animate={{ opacity: 1, y: 0 }}
+  1027→        transition={{ delay: 0.1 }}
+  1028→        className="glass-card p-3"
+  1029→      >
+  1030→        <div className="flex flex-col sm:flex-row gap-3 flex-wrap">
+  1031→          <Select value={filterMonth} onValueChange={setFilterMonth}>
+  1032→            <SelectTrigger className="w-full sm:w-36 h-9">
+  1033→              <CalendarDays className="w-3.5 h-3.5 mr-1.5 text-muted-foreground" />
+  1034→              <SelectValue />
+  1035→            </SelectTrigger>
+  1036→            <SelectContent>
+  1037→              {MONTHS.map((m, i) => (
+  1038→                <SelectItem key={i + 1} value={String(i + 1)}>{m}</SelectItem>
+  1039→              ))}
+  1040→            </SelectContent>
+  1041→          </Select>
+  1042→          <Select value={filterYear} onValueChange={setFilterYear}>
+  1043→            <SelectTrigger className="w-full sm:w-24 h-9">
+  1044→              <SelectValue />
+  1045→            </SelectTrigger>
+  1046→            <SelectContent>
+  1047→              {[2024, 2025, 2026, 2027].map((y) => (
+  1048→                <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+  1049→              ))}
+  1050→            </SelectContent>
+  1051→          </Select>
+  1052→          <Select value={filterFirm} onValueChange={setFilterFirm}>
+  1053→            <SelectTrigger className="w-full sm:w-36 h-9">
+  1054→              <Building2 className="w-3.5 h-3.5 mr-1.5 text-muted-foreground" />
+  1055→              <SelectValue placeholder="All Firms" />
+  1056→            </SelectTrigger>
+  1057→            <SelectContent>
+  1058→              <SelectItem value="all">All Firms</SelectItem>
+  1059→              {FIRMS.map((f) => (
+  1060→                <SelectItem key={f} value={f}>{f}</SelectItem>
+  1061→              ))}
+  1062→            </SelectContent>
+  1063→          </Select>
+  1064→          <div className="relative flex-1">
+  1065→            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+  1066→            <Input
+  1067→              className="pl-9 h-9"
+  1068→              placeholder="Search employee..."
+  1069→              value={searchEmployee}
+  1070→              onChange={(e) => setSearchEmployee(e.target.value)}
+  1071→            />
+  1072→          </div>
+  1073→        </div>
+  1074→      </motion.div>
+  1075→
+  1076→      {/* ── Summary Cards ── */}
+  1077→      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+  1078→        {statCards.map((card, i) => {
+  1079→          const Icon = card.icon;
+  1080→          return (
+  1081→            <motion.div
+  1082→              key={card.title}
+  1083→              initial={{ opacity: 0, y: 10 }}
+  1084→              animate={{ opacity: 1, y: 0 }}
+  1085→              transition={{ delay: i * 0.05 }}
+  1086→              className="kpi-card"
+  1087→            >
+  1088→              <Card className="border-0 shadow-none bg-transparent">
+  1089→                <CardContent className="p-4 flex items-center gap-3">
+  1090→                  <div className={`w-10 h-10 rounded-xl ${card.gradient} flex items-center justify-center shrink-0 shadow-lg`}>
+  1091→                    <Icon className="w-5 h-5 text-white" />
+  1092→                  </div>
+  1093→                  <div>
+  1094→                    <p className="text-xs text-muted-foreground font-medium truncate">{card.title}</p>
+  1095→                    <p className="text-xl font-bold">
+  1096→                      {card.format === 'currency' ? (
+  1097→                        <AnimatedCounter value={card.value} prefix="₹" decimals={0} />
+  1098→                      ) : card.isHours ? (
+  1099→                        <span>{formatOT(card.value)}</span>
+  1100→                      ) : (
+  1101→                        <AnimatedCounter value={card.value} suffix={'suffix' in card ? (card as any).suffix : ''} decimals={'decimals' in card ? (card as any).decimals : 0} />
+  1102→                      )}
+  1103→                    </p>
+  1104→                  </div>
+  1105→                </CardContent>
+  1106→              </Card>
+  1107→            </motion.div>
+  1108→          );
+  1109→        })}
+  1110→      </div>
+  1111→
+  1112→      {/* ── Salary Breakdown Info Card ── */}
+  1113→      <motion.div
+  1114→        initial={{ opacity: 0, y: 5 }}
+  1115→        animate={{ opacity: 1, y: 0 }}
+  1116→        transition={{ delay: 0.2 }}
+  1117→        className="glass-card p-4"
+  1118→      >
+  1119→        <div className="flex items-start gap-3">
+  1120→          <div className="w-9 h-9 rounded-lg bg-gold/10 flex items-center justify-center shrink-0">
+  1121→            <Info className="w-4.5 h-4.5 text-gold" />
+  1122→          </div>
+  1123→          <div className="space-y-1.5">
+  1124→            <p className="text-sm font-semibold">Laxree Payroll Formula</p>
+  1125→            <div className="space-y-1 text-xs text-muted-foreground">
+  1126→              <p className="flex items-center gap-2">
+  1127→                <Badge variant="outline" className="text-[9px] h-4 px-1.5">Rate</Badge>
+  1128→                <span>Per Day Rate = Monthly Salary ÷ Days in Month (31, 30, or 28)</span>
+  1129→              </p>
+  1130→              <p className="flex items-center gap-2">
+  1131→                <Badge variant="outline" className="text-[9px] h-4 px-1.5">Hourly</Badge>
+  1132→                <span>Hourly Rate = Monthly Salary ÷ (Days in Month × 9)</span>
+  1133→              </p>
+  1134→              <p className="flex items-center gap-2">
+  1135→                <Badge variant="outline" className="text-[9px] h-4 px-1.5">Base</Badge>
+  1136→                <span>Base Salary = Per Day Rate × Earned Days (Late/Early-Out deducted by actual hours)</span>
+  1137→              </p>
+  1138→              <p className="flex items-center gap-2">
+  1139→                <Badge variant="outline" className="text-[9px] h-4 px-1.5">Sunday</Badge>
+  1140→                <span>Sunday Earnings = Per Day Rate × Sunday Count (e.g., 5 Sun × 9 = 45 hrs earned)</span>
+  1141→              </p>
+  1142→              <p className="flex items-center gap-2">
+  1143→                <Badge variant="outline" className="text-[9px] h-4 px-1.5">OT</Badge>
+  1144→                <span>OT Amount = OT Hours × Hourly Rate (1x normal rate, NOT 1.5x)</span>
+  1145→              </p>
+  1146→              <p className="flex items-center gap-2">
+  1147→                <Badge variant="outline" className="text-[9px] h-4 px-1.5">Gross</Badge>
+  1148→                <span>Gross = Base Salary + Sunday Earnings + OT Amount</span>
+  1149→              </p>
+  1150→              <p className="flex items-center gap-2">
+  1151→                <Badge variant="outline" className="text-[9px] h-4 px-1.5">Net</Badge>
+  1152→                <span>Net = Gross + Bonus + Incentive + Arrear − Total Deductions</span>
+  1153→              </p>
+  1154→            </div>
+  1155→            <p className="text-[10px] text-muted-foreground">
+  1156→              Full attendance = Full monthly salary + OT &nbsp;|&nbsp; Sundays are paid weekly off &nbsp;|&nbsp; Late/Early-Out: pay deducted based on actual hours worked
+  1157→            </p>
+  1158→          </div>
+  1159→        </div>
+  1160→      </motion.div>
+  1161→
+  1162→      {/* ── Payroll Table ── */}
+  1163→      <motion.div
+  1164→        initial={{ opacity: 0, y: 10 }}
+  1165→        animate={{ opacity: 1, y: 0 }}
+  1166→        transition={{ delay: 0.25 }}
+  1167→      >
+  1168→        <Card className="glass-card card-gold-hover border-0">
+  1169→          <CardContent className="p-0">
+  1170→            <div className="overflow-auto max-h-[65vh]" style={{ WebkitOverflowScrolling: 'touch' }}>
+  1171→              <Table>
+  1172→                <TableHeader>
+  1173→                  <TableRow className="hover:bg-transparent">
+  1174→                    <TableHead>Employee</TableHead>
+  1175→                    <TableHead className="hidden md:table-cell">Firm</TableHead>
+  1176→                    <TableHead className="hidden lg:table-cell">Worked Hrs</TableHead>
+  1177→                    <TableHead className="hidden xl:table-cell">Hourly Rate</TableHead>
+  1178→                    <TableHead className="hidden lg:table-cell">OT Hrs</TableHead>
+  1179→                    <TableHead className="hidden sm:table-cell">OT Amount</TableHead>
+  1180→                    <TableHead className="hidden lg:table-cell">Earn Sunday</TableHead>
+  1181→
+  1182→                    <TableHead>Gross</TableHead>
+  1183→                    <TableHead className="hidden md:table-cell">Deductions</TableHead>
+  1184→                    <TableHead className="hidden xl:table-cell">Arrear</TableHead>
+  1185→                    <TableHead>Net Salary</TableHead>
+  1186→                    <TableHead>Status</TableHead>
+  1187→                  </TableRow>
+  1188→                </TableHeader>
+  1189→                <TableBody>
+  1190→                  {loading ? (
+  1191→                    Array.from({ length: 5 }).map((_, i) => (
+  1192→                      <TableRow key={i}>
+  1193→                        {Array.from({ length: 12 }).map((_, j) => (
+  1194→                          <TableCell key={j}>
+  1195→                            <div className="h-4 bg-muted/50 rounded animate-pulse" />
+  1196→                          </TableCell>
+  1197→                        ))}
+  1198→                      </TableRow>
+  1199→                    ))
+  1200→                  ) : filteredRecords.length === 0 ? (
+  1201→                    <TableRow>
+  1202→                      <TableCell colSpan={12} className="text-center py-12 text-muted-foreground">
+  1203→                        <FileText className="w-8 h-8 mx-auto mb-2 opacity-30" />
+  1204→                        <p>No payroll records for this period.</p>
+  1205→                        <p className="text-xs mt-1">Click &quot;Generate All&quot; to create payroll records.</p>
+  1206→                      </TableCell>
+  1207→                    </TableRow>
+  1208→                  ) : (
+  1209→                    filteredRecords.map((p, idx) => (
+  1210→                      <TableRow
+  1211→                        key={p.id}
+  1212→                        className="hover:bg-muted/30 cursor-pointer transition-colors"
+  1213→                        onClick={() => {
+  1214→                          setSelectedEmployeeId(p.employeeId);
+  1215→                          setCurrentPage('salary-slip');
+  1216→                        }}
+  1217→                      >
+  1218→                        <TableCell>
+  1219→                          <motion.div
+  1220→                            className="flex items-center gap-2"
+  1221→                            initial={{ opacity: 0, x: -8 }}
+  1222→                            animate={{ opacity: 1, x: 0 }}
+  1223→                            transition={{ delay: idx * 0.02 }}
+  1224→                          >
+  1225→                            <div className="w-7 h-7 rounded-full gradient-laxree flex items-center justify-center text-white text-[10px] font-bold shrink-0">
+  1226→                              {p.employee?.fullName?.charAt(0) || '?'}
+  1227→                            </div>
+  1228→                            <div className="min-w-0 overflow-hidden">
+  1229→                              <p className="text-sm font-medium truncate">{p.employee?.fullName || p.employeeId}</p>
+  1230→                              <p className="text-[10px] text-muted-foreground font-mono whitespace-nowrap">{p.employeeId}</p>
+  1231→                            </div>
+  1232→                          </motion.div>
+  1233→                        </TableCell>
+  1234→                        <TableCell className="hidden md:table-cell">
+  1235→                          <FirmBadge firm={getFirmFromEmployeeId(p.employeeId) || p.employee?.department || ''} />
+  1236→                        </TableCell>
+  1237→                        <TableCell className="hidden lg:table-cell text-sm whitespace-nowrap">
+  1238→                          {(p.totalWorkedHrs || p.totalWorkHours || 0) > 0 ? `${displayHHMM(p.totalWorkedHrs || p.totalWorkHours || 0)}h` : '—'}
+  1239→                        </TableCell>
+  1240→                        <TableCell className="hidden xl:table-cell text-sm font-mono whitespace-nowrap">
+  1241→                          {(p.hourlyRate || p.salaryPerHour || 0) > 0 ? `₹${p.hourlyRate || p.salaryPerHour}` : '—'}
+  1242→                        </TableCell>
+  1243→                        <TableCell className="hidden lg:table-cell text-sm whitespace-nowrap">
+  1244→                          {(p.otHours || 0) > 0 ? (
+  1245→                            <span className="text-cyan-600 dark:text-cyan-400 font-medium">{displayHHMM(p.otHours)}h</span>
+  1246→                          ) : '—'}
+  1247→                        </TableCell>
+  1248→                        <TableCell className="hidden sm:table-cell text-sm whitespace-nowrap">
+  1249→                          {(p.otAmount || 0) > 0 ? (
+  1250→                            <span className="text-cyan-600 dark:text-cyan-400">₹{p.otAmount.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
+  1251→                          ) : '—'}
+  1252→                        </TableCell>
+  1253→                        <TableCell className="hidden lg:table-cell text-sm whitespace-nowrap">
+  1254→                          {(p.sundayCount || 0) > 0 ? (
+  1255→                            <div className="flex flex-col">
+  1256→                              <span className="text-blue-600 dark:text-blue-400 font-medium">{p.sundayCount} Sun × 9 = {p.earnedSundayHrs || p.sundayCount * 9}h</span>
+  1257→                              <span className="text-[10px] text-muted-foreground">₹{(p.sundayEarnings || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
+  1258→                            </div>
+  1259→                          ) : '—'}
+  1260→                        </TableCell>
+  1261→
+  1262→                        <TableCell className="text-sm whitespace-nowrap">
+  1263→                          ₹{p.grossSalary.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+  1264→                        </TableCell>
+  1265→                        <TableCell className="hidden md:table-cell text-sm text-red-500 whitespace-nowrap">
+  1266→                          ₹{p.totalDeductions.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+  1267→                        </TableCell>
+  1268→                        <TableCell className="hidden xl:table-cell text-sm whitespace-nowrap">
+  1269→                          {(p.arrear || 0) > 0 ? (
+  1270→                            <span className="text-amber-600 dark:text-amber-400">₹{p.arrear.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
+  1271→                          ) : '—'}
+  1272→                        </TableCell>
+  1273→                        <TableCell className="text-sm font-bold text-gold whitespace-nowrap">
+  1274→                          ₹{p.netSalary.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+  1275→                        </TableCell>
+  1276→                        <TableCell>
+  1277→                          <PayrollStatusBadge status={p.status} />
+  1278→                        </TableCell>
+  1279→                      </TableRow>
+  1280→                    ))
+  1281→                  )}
+  1282→                </TableBody>
+  1283→              </Table>
+  1284→            </div>
+  1285→          </CardContent>
+  1286→        </Card>
+  1287→      </motion.div>
+  1288→
+  1289→      {/* ── Generate One Dialog ── */}
+  1290→      <Dialog open={open} onOpenChange={(v) => {
+  1291→        setOpen(v);
+  1292→        if (!v) {
+  1293→          setForm({ employeeId: '', bonus: 0, incentive: 0, tdsDeduction: 0, loanDeduction: 0, advanceDeduction: 0, securityDeposit: 0, arrear: 0 });
+  1294→          setEmployeeSearch('');
+  1295→        }
+  1296→      }}>
+  1297→        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+  1298→          <DialogHeader>
+  1299→            <DialogTitle className="flex items-center gap-2">
+  1300→              <DollarSign className="w-5 h-5 text-gold" />
+  1301→              Generate Payroll
+  1302→            </DialogTitle>
+  1303→          </DialogHeader>
+  1304→          <div className="space-y-4 py-4">
+  1305→            {/* Employee Search */}
+  1306→            <div>
+  1307→              <Label>Employee *</Label>
+  1308→              <div className="space-y-2">
+  1309→                <div className="relative">
+  1310→                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+  1311→                  <Input
+  1312→                    className="pl-9"
+  1313→                    placeholder="Search employee..."
+  1314→                    value={employeeSearch}
+  1315→                    onChange={(e) => setEmployeeSearch(e.target.value)}
+  1316→                  />
+  1317→                </div>
+  1318→                {!form.employeeId ? (
+  1319→                  <div className="max-h-40 border rounded-lg overflow-y-auto">
+  1320→                    <div className="p-1">
+  1321→                      {filteredEmployees.slice(0, 20).map((e) => (
+  1322→                        <button
+  1323→                          key={e.employeeId}
+  1324→                          className="w-full text-left px-3 py-2 rounded-md hover:bg-muted/80 text-sm flex items-center justify-between transition-colors gap-2"
+  1325→                          onClick={() => { setForm({ ...form, employeeId: e.employeeId }); setEmployeeSearch(''); }}
+  1326→                        >
+  1327→                          <div className="flex items-center gap-2 min-w-0 overflow-hidden">
+  1328→                            <FirmBadge firm={e.department} />
+  1329→                            <span className="truncate">{e.fullName}</span>
+  1330→                          </div>
+  1331→                          <span className="text-xs text-muted-foreground font-mono whitespace-nowrap shrink-0">{e.employeeId}</span>
+  1332→                        </button>
+  1333→                      ))}
+  1334→                    </div>
+  1335→                  </div>
+  1336→                ) : (
+  1337→                  <div className="flex items-center justify-between px-3 py-2 bg-muted/50 rounded-lg">
+  1338→                    <div className="flex items-center gap-2 min-w-0 overflow-hidden">
+  1339→                      <FirmBadge firm={selectedEmp?.department || ''} />
+  1340→                      <span className="text-sm font-medium truncate">{selectedEmp?.fullName}</span>
+  1341→                    </div>
+  1342→                    <div className="flex items-center gap-2">
+  1343→                      <span className="text-xs font-mono text-muted-foreground">{form.employeeId}</span>
+  1344→                      <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => setForm({ ...form, employeeId: '' })}>
+  1345→                        Change
+  1346→                      </Button>
+  1347→                    </div>
+  1348→                  </div>
+  1349→                )}
+  1350→              </div>
+  1351→            </div>
+  1352→
+  1353→            {/* Salary info for selected employee */}
+  1354→            {selectedEmp && (
+  1355→              <div className="flex items-center gap-2 p-2.5 rounded-lg bg-gold/5 border border-gold/10 text-xs">
+  1356→                <Info className="w-3.5 h-3.5 text-gold shrink-0" />
+  1357→                <span>
+  1358→                  <strong>{selectedEmp.salaryType}</strong> worker &middot; Monthly: ₹{selectedEmp.basicSalary.toLocaleString('en-IN')}
+  1359→                  {selectedEmp.salaryType === 'Hourly' && ` · Shift: ${displayHHMM(selectedEmp.shiftHours)}h`}
+  1360→                </span>
+  1361→              </div>
+  1362→            )}
+  1363→
+  1364→            {/* Earnings & Deductions */}
+  1365→            <div className="grid grid-cols-2 gap-3">
+  1366→              <div>
+  1367→                <Label className="text-xs">Bonus (₹)</Label>
+  1368→                <Input
+  1369→                  type="number"
+  1370→                  value={form.bonus || ''}
+  1371→                  onChange={(e) => setForm({ ...form, bonus: Number(e.target.value) || 0 })}
+  1372→                  placeholder="0"
+  1373→                />
+  1374→              </div>
+  1375→              <div>
+  1376→                <Label className="text-xs">Incentive (₹)</Label>
+  1377→                <Input
+  1378→                  type="number"
+  1379→                  value={form.incentive || ''}
+  1380→                  onChange={(e) => setForm({ ...form, incentive: Number(e.target.value) || 0 })}
+  1381→                  placeholder="0"
+  1382→                />
+  1383→              </div>
+  1384→              <div>
+  1385→                <Label className="text-xs">Arrear (₹)</Label>
+  1386→                <Input
+  1387→                  type="number"
+  1388→                  value={form.arrear || ''}
+  1389→                  onChange={(e) => setForm({ ...form, arrear: Number(e.target.value) || 0 })}
+  1390→                  placeholder="0"
+  1391→                />
+  1392→              </div>
+  1393→              <div>
+  1394→                <Label className="text-xs">TDS (₹)</Label>
+  1395→                <Input
+  1396→                  type="number"
+  1397→                  value={form.tdsDeduction || ''}
+  1398→                  onChange={(e) => setForm({ ...form, tdsDeduction: Number(e.target.value) || 0 })}
+  1399→                  placeholder="0"
+  1400→                />
+  1401→              </div>
+  1402→              <div>
+  1403→                <Label className="text-xs">Loan (₹)</Label>
+  1404→                <Input
+  1405→                  type="number"
+  1406→                  value={form.loanDeduction || ''}
+  1407→                  onChange={(e) => setForm({ ...form, loanDeduction: Number(e.target.value) || 0 })}
+  1408→                  placeholder="0"
+  1409→                />
+  1410→              </div>
+  1411→              <div>
+  1412→                <Label className="text-xs">Advance (₹)</Label>
+  1413→                <Input
+  1414→                  type="number"
+  1415→                  value={form.advanceDeduction || ''}
+  1416→                  onChange={(e) => setForm({ ...form, advanceDeduction: Number(e.target.value) || 0 })}
+  1417→                  placeholder="0"
+  1418→                />
+  1419→              </div>
+  1420→              <div>
+  1421→                <Label className="text-xs">Security Deposit (₹)</Label>
+  1422→                <Input
+  1423→                  type="number"
+  1424→                  value={form.securityDeposit || ''}
+  1425→                  onChange={(e) => setForm({ ...form, securityDeposit: Number(e.target.value) || 0 })}
+  1426→                  placeholder="0"
+  1427→                />
+  1428→              </div>
+  1429→            </div>
+  1430→
+  1431→            {/* Salary Preview */}
+  1432→            {salaryPreview && (
+  1433→              <div className="p-3 rounded-lg bg-muted/50 border space-y-1.5">
+  1434→                <p className="text-xs font-semibold text-muted-foreground">Calculated Salary Preview</p>
+  1435→                <div className="grid grid-cols-4 sm:grid-cols-7 gap-2 text-center">
+  1436→                  <div>
+  1437→                    <p className="text-[10px] text-muted-foreground">Base Salary</p>
+  1438→                    <p className="text-sm font-bold text-cyan-600 dark:text-cyan-400">₹{salaryPreview.baseSalary.toLocaleString('en-IN')}</p>
+  1439→                  </div>
+  1440→                  <div>
+  1441→                    <p className="text-[10px] text-muted-foreground">Gross</p>
+  1442→                    <p className="text-sm font-bold text-cyan-600 dark:text-cyan-400">₹{salaryPreview.grossSalary.toLocaleString('en-IN')}</p>
+  1443→                  </div>
+  1444→                  <div>
+  1445→                    <p className="text-[10px] text-muted-foreground">Bonus</p>
+  1446→                    <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400">₹{salaryPreview.bonus.toLocaleString('en-IN')}</p>
+  1447→                  </div>
+  1448→                  <div>
+  1449→                    <p className="text-[10px] text-muted-foreground">Incentive</p>
+  1450→                    <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400">₹{salaryPreview.incentive.toLocaleString('en-IN')}</p>
+  1451→                  </div>
+  1452→                  <div>
+  1453→                    <p className="text-[10px] text-muted-foreground">Arrear</p>
+  1454→                    <p className="text-sm font-bold text-amber-600 dark:text-amber-400">₹{salaryPreview.arrear.toLocaleString('en-IN')}</p>
+  1455→                  </div>
+  1456→                  <div>
+  1457→                    <p className="text-[10px] text-muted-foreground">Deductions</p>
+  1458→                    <p className="text-sm font-bold text-red-500">₹{salaryPreview.deductions.toLocaleString('en-IN')}</p>
+  1459→                  </div>
+  1460→                  <div>
+  1461→                    <p className="text-[10px] text-muted-foreground">Net Salary</p>
+  1462→                    <p className="text-sm font-bold text-gold">₹{salaryPreview.net.toLocaleString('en-IN')}</p>
+  1463→                  </div>
+  1464→                </div>
+  1465→                <p className="text-[9px] text-muted-foreground text-center">Base = Monthly − (PerDay × Absent) | PerDay = Monthly ÷ Days in Month | OT = OT Hrs × Hourly Rate (1x) | Net = Gross + Bonus + Incentive + Arrear − Deductions</p>
+  1466→              </div>
+  1467→            )}
+  1468→
+  1469→            <Button className="w-full gradient-laxree text-white" onClick={handleGenerateOne}>
+  1470→              Generate Payroll
+  1471→            </Button>
+  1472→          </div>
+  1473→        </DialogContent>
+  1474→      </Dialog>
+  1475→
+  1476→      {/* ── Add Advance Dialog ── */}
+  1477→      <Dialog open={advanceOpen} onOpenChange={(v) => {
+  1478→        setAdvanceOpen(v);
+  1479→        if (!v) {
+  1480→          setAdvanceForm({ employeeId: '', amount: '', reason: '', date: new Date().toISOString().split('T')[0] });
+  1481→          setAdvanceSearch('');
+  1482→        }
+  1483→      }}>
+  1484→        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+  1485→          <DialogHeader>
+  1486→            <DialogTitle className="flex items-center gap-2">
+  1487→              <IndianRupee className="w-5 h-5 text-amber-500" />
+  1488→              Add Advance
+  1489→            </DialogTitle>
+  1490→          </DialogHeader>
+  1491→          <div className="space-y-4 py-4">
+  1492→            {/* Employee Search */}
+  1493→            <div>
+  1494→              <Label>Select Employee *</Label>
+  1495→              <div className="space-y-2">
+  1496→                <div className="relative">
+  1497→                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+  1498→                  <Input
+  1499→                    className="pl-9"
+  1500→                    placeholder="Search employee..."
+  1501→                    value={advanceSearch}
+  1502→                    onChange={(e) => setAdvanceSearch(e.target.value)}
+  1503→                  />
+  1504→                </div>
+  1505→                {!advanceForm.employeeId ? (
+  1506→                  <div className="max-h-40 border rounded-lg overflow-y-auto">
+  1507→                    <div className="p-1">
+  1508→                      {filteredAdvEmployees.slice(0, 20).map((e) => (
+  1509→                        <button
+  1510→                          key={e.employeeId}
+  1511→                          className="w-full text-left px-3 py-2 rounded-md hover:bg-muted/80 text-sm flex items-center justify-between transition-colors gap-2"
+  1512→                          onClick={() => { setAdvanceForm({ ...advanceForm, employeeId: e.employeeId }); setAdvanceSearch(''); }}
+  1513→                        >
+  1514→                          <div className="flex items-center gap-2 min-w-0 overflow-hidden">
+  1515→                            <FirmBadge firm={e.department} />
+  1516→                            <span className="truncate">{e.fullName}</span>
+  1517→                          </div>
+  1518→                          <span className="text-xs text-muted-foreground font-mono whitespace-nowrap shrink-0">{e.employeeId}</span>
+  1519→                        </button>
+  1520→                      ))}
+  1521→                    </div>
+  1522→                  </div>
+  1523→                ) : (
+  1524→                  <div className="flex items-center justify-between px-3 py-2 bg-muted/50 rounded-lg">
+  1525→                    <div className="flex items-center gap-2 min-w-0 overflow-hidden">
+  1526→                      <FirmBadge firm={selectedAdvEmp?.department || ''} />
+  1527→                      <span className="text-sm font-medium truncate">{selectedAdvEmp?.fullName}</span>
+  1528→                    </div>
+  1529→                    <div className="flex items-center gap-2">
+  1530→                      <span className="text-xs font-mono text-muted-foreground">{advanceForm.employeeId}</span>
+  1531→                      <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => setAdvanceForm({ ...advanceForm, employeeId: '' })}>
+  1532→                        Change
+  1533→                      </Button>
+  1534→                    </div>
+  1535→                  </div>
+  1536→                )}
+  1537→              </div>
+  1538→            </div>
+  1539→
+  1540→            {/* Amount */}
+  1541→            <div>
+  1542→              <Label>Advance Amount (₹) *</Label>
+  1543→              <Input
+  1544→                type="number"
+  1545→                value={advanceForm.amount}
+  1546→                onChange={(e) => setAdvanceForm({ ...advanceForm, amount: e.target.value })}
+  1547→                placeholder="Enter amount"
+  1548→              />
+  1549→            </div>
+  1550→
+  1551→            {/* Reason */}
+  1552→            <div>
+  1553→              <Label>Reason *</Label>
+  1554→              <Input
+  1555→                value={advanceForm.reason}
+  1556→                onChange={(e) => setAdvanceForm({ ...advanceForm, reason: e.target.value })}
+  1557→                placeholder="Reason for advance"
+  1558→              />
+  1559→            </div>
+  1560→
+  1561→            {/* Date */}
+  1562→            <div>
+  1563→              <Label>Date</Label>
+  1564→              <Input
+  1565→                type="date"
+  1566→                value={advanceForm.date}
+  1567→                onChange={(e) => setAdvanceForm({ ...advanceForm, date: e.target.value })}
+  1568→              />
+  1569→            </div>
+  1570→
+  1571→            <Button
+  1572→              className="w-full gradient-laxree text-white"
+  1573→              onClick={handleAddAdvance}
+  1574→              disabled={addingAdvance}
+  1575→            >
+  1576→              {addingAdvance ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+  1577→              {addingAdvance ? 'Adding...' : 'Add Advance'}
+  1578→            </Button>
+  1579→          </div>
+  1580→        </DialogContent>
+  1581→      </Dialog>
+  1582→
+  1583→      {/* ── Advances List ── */}
+  1584→      {advances.length > 0 && (
+  1585→        <motion.div
+  1586→          initial={{ opacity: 0, y: 10 }}
+  1587→          animate={{ opacity: 1, y: 0 }}
+  1588→          transition={{ delay: 0.3 }}
+  1589→        >
+  1590→          <Card className="glass-card border-0">
+  1591→            <CardContent className="p-0">
+  1592→              <div className="px-4 py-3 border-b border-amber-500/10 bg-amber-500/5">
+  1593→                <h3 className="text-sm font-bold flex items-center gap-2 text-amber-600">
+  1594→                  <IndianRupee className="w-4 h-4" />
+  1595→                  Advances Taken — {MONTHS[parseInt(filterMonth) - 1]} {filterYear}
+  1596→                </h3>
+  1597→              </div>
+  1598→              <ScrollArea className="max-h-[30vh]">
+  1599→                <Table>
+  1600→                  <TableHeader>
+  1601→                    <TableRow className="hover:bg-transparent">
+  1602→                      <TableHead>Employee</TableHead>
+  1603→                      <TableHead>Amount</TableHead>
+  1604→                      <TableHead>Reason</TableHead>
+  1605→                      <TableHead>Date</TableHead>
+  1606→                      <TableHead className="w-10"></TableHead>
+  1607→                    </TableRow>
+  1608→                  </TableHeader>
+  1609→                  <TableBody>
+  1610→                    {advances.map((adv: any) => (
+  1611→                      <TableRow key={adv.id} className="hover:bg-muted/30">
+  1612→                        <TableCell>
+  1613→                          <div className="flex items-center gap-2">
+  1614→                            <div className="w-6 h-6 rounded-full gradient-laxree flex items-center justify-center text-white text-[9px] font-bold shrink-0">
+  1615→                              {adv.employee?.fullName?.charAt(0) || '?'}
+  1616→                            </div>
+  1617→                            <div className="min-w-0">
+  1618→                              <p className="text-sm font-medium truncate">{adv.employee?.fullName || adv.employeeId}</p>
+  1619→                              <p className="text-[10px] text-muted-foreground font-mono">{adv.employeeId}</p>
+  1620→                            </div>
+  1621→                          </div>
+  1622→                        </TableCell>
+  1623→                        <TableCell className="text-sm font-bold text-amber-600 whitespace-nowrap">
+  1624→                          ₹{Number(adv.amount).toLocaleString('en-IN')}
+  1625→                        </TableCell>
+  1626→                        <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate">
+  1627→                          {adv.reason}
+  1628→                        </TableCell>
+  1629→                        <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+  1630→                          {new Date(adv.date).toLocaleDateString('en-IN')}
+  1631→                        </TableCell>
+  1632→                        <TableCell>
+  1633→                          <Button
+  1634→                            variant="ghost"
+  1635→                            size="sm"
+  1636→                            className="h-7 w-7 p-0 text-red-500 hover:text-red-700 hover:bg-red-500/10"
+  1637→                            onClick={() => handleDeleteAdvance(adv.id)}
+  1638→                          >
+  1639→                            ×
+  1640→                          </Button>
+  1641→                        </TableCell>
+  1642→                      </TableRow>
+  1643→                    ))}
+  1644→                  </TableBody>
+  1645→                </Table>
+  1646→              </ScrollArea>
+  1647→            </CardContent>
+  1648→          </Card>
+  1649→        </motion.div>
+  1650→      )}
+  1651→    </div>
+  1652→  );
+  1653→}
+  1654→
