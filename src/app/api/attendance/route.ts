@@ -16,6 +16,7 @@ export async function GET(request: NextRequest) {
     const date = searchParams.get('date') || '';
     const department = searchParams.get('department') || '';
     const location = searchParams.get('location') || '';
+    const firm = searchParams.get('firm') || '';
 
     const where: any = {};
     if (employeeId) where.employeeId = employeeId;
@@ -32,10 +33,11 @@ export async function GET(request: NextRequest) {
       where.date = { gte: start, lt: end };
     }
 
-    // Filter by department/location via employee relation
+    // Filter by department/location/firm via employee relation
     const employeeFilter: any = {};
     if (department) employeeFilter.department = department;
     if (location) employeeFilter.location = location;
+    if (firm) employeeFilter.firm = firm;
     if (Object.keys(employeeFilter).length > 0) {
       where.employee = employeeFilter;
     }
