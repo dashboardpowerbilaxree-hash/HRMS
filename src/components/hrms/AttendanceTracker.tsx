@@ -262,6 +262,10 @@ export function AttendanceTracker() {
   });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // ── Master Excel Sheet state ──
+  const [masterFirm, setMasterFirm] = useState('all');
+  const [masterExporting, setMasterExporting] = useState(false);
+
   // ── Load data ──
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -653,15 +657,22 @@ export function AttendanceTracker() {
   };
 
   // ── Download Excel Template ──
-  // Downloads the pre-built template file from /public/Laxree_Attendance_Template.xlsx
+  // Server-side generated blank template with selected date
   const handleDownloadTemplate = async () => {
     try {
-      const link = document.createElement('a');
-      link.href = '/Laxree_Attendance_Template.xlsx';
-      link.download = 'Laxree_Attendance_Template.xlsx';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      const params = new URLSearchParams();
+      if (importDate) params.set('date', importDate);
+      const res = await fetch(`/api/attendance/template?${params}`);
+      if (!res.ok) { toast.error('Template download failed'); return; }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Daily_Attendance_Template.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
       toast.success('Template downloaded! Fill it and upload.');
     } catch {
       toast.error('Failed to download template.');
@@ -711,6 +722,39 @@ export function AttendanceTracker() {
       toast.error('Import failed: ' + err.message);
     }
     setImporting(false);
+  };
+
+  // ── Export Master Excel Sheet (firm-wise sheets) ──
+  const handleExportMasterSheet = async () => {
+    setMasterExporting(true);
+    try {
+      const params = new URLSearchParams({
+        firm: masterFirm,
+        month: filterMonth,
+        year: filterYear,
+      });
+      const res = await fetch(`/api/attendance/export-master?${params}`);
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        toast.error(errData.error || 'Master sheet export failed');
+        setMasterExporting(false);
+        return;
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Master_Sheet_${MONTHS[parseInt(filterMonth) - 1]}_${filterYear}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      toast.success('Master Excel Sheet downloaded successfully!');
+    } catch (err) {
+      console.error('Master export error:', err);
+      toast.error('Master sheet export failed. Please try again.');
+    }
+    setMasterExporting(false);
   };
 
   // ── Summary cards config — clickable for daily tab ──
@@ -1261,6 +1305,60 @@ export function AttendanceTracker() {
               </CardContent>
             </Card>
           )}
+
+          {/* ── Master Excel Sheet Export Section ── */}
+          <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-3 border border-gold/20">
+            <div className="flex items-center gap-2 mb-2">
+              <FileSpreadsheet className="w-4 h-4 text-gold" />
+              <h3 className="text-sm font-semibold">Master Excel Sheet</h3>
+              <span className="text-[10px] text-muted-foreground">— Firm-wise monthly attendance with calendar format</span>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-3 flex-wrap items-end">
+              <div className="min-w-[140px]">
+                <Label className="text-xs text-muted-foreground mb-1 block">Select Firm</Label>
+                <Select value={masterFirm} onValueChange={setMasterFirm}>
+                  <SelectTrigger className="w-full h-9">
+                    <Building2 className="w-3.5 h-3.5 mr-1 text-muted-foreground" />
+                    <SelectValue placeholder="All Firms" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Firms (Separate Sheets)</SelectItem>
+                    {FIRMS.map((f) => (<SelectItem key={f} value={f}>{f} — {FIRM_NAMES[f]}</SelectItem>))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Select value={filterMonth} onValueChange={setFilterMonth} disabled>
+                <SelectTrigger className="w-full sm:w-36 h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {MONTHS.map((m, i) => (<SelectItem key={i + 1} value={String(i + 1)}>{m}</SelectItem>))}
+                </SelectContent>
+              </Select>
+              <Select value={filterYear} onValueChange={setFilterYear} disabled>
+                <SelectTrigger className="w-full sm:w-24 h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {[2024, 2025, 2026, 2027].map(y => (<SelectItem key={y} value={String(y)}>{y}</SelectItem>))}
+                </SelectContent>
+              </Select>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-9 gap-1.5 border-gold/30 hover:border-gold/60 hover:bg-gold/5 text-gold"
+                onClick={handleExportMasterSheet}
+                disabled={masterExporting}
+              >
+                {masterExporting ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-gold border-t-transparent rounded-full animate-spin" />
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <FileDown className="w-3.5 h-3.5" /> Download Master Sheet
+                  </>
+                )}
+              </Button>
+            </div>
+          </motion.div>
         </TabsContent>
 
         {/* ══════════════════════════════════════════════════
