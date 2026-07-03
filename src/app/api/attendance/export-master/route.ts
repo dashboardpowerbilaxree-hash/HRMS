@@ -5,10 +5,13 @@ import * as XLSXStyle from 'xlsx-js-style';
 // Master Excel Sheet Export
 // Generates a single Excel file with firm-wise sheets
 // Each sheet matches the "Laxree Group Monthly Excel Formate.xlsx" template:
-// - 3 sections: Days 1-11, Days 12-22, Days 23-31
+// - 3 sections: Days 1-11, Days 12-22, Days 23-lastDayOfMonth
 // - Each day has 3 columns: IN, OUT, TOTAL HRS
 // - Section 3 ends with Total Working Hours + Leave columns
-// - Date headers show actual dates like "1/06/2026" instead of "Date"
+// - Date headers show actual dates like "1/06/2026"
+// - Sections dynamically adjust for month length (28/29/30/31 days)
+// - Future dates in current month are left blank (not counted as absent)
+// - Total Working Hours & Leave are FULL-MONTH cumulative values (not just section 3)
 
 const FIRM_NAMES: Record<string, string> = {
   LAPL: 'LAXREE AMENITIES PVT LTD',
@@ -21,8 +24,6 @@ const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
-
-const DAY_ABBR = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 function getFirmFromEmployeeId(employeeId: string): string {
   const id = employeeId.toUpperCase();
@@ -83,6 +84,9 @@ export async function GET(request: NextRequest) {
 
     const daysInMonth = new Date(year, month, 0).getDate();
     const monthName = MONTHS[month - 1];
+    const today = new Date();
+    const isCurrentMonth = (today.getFullYear() === year && today.getMonth() + 1 === month);
+    const effectiveCutoffDay = isCurrentMonth ? today.getDate() : daysInMonth;
 
     // Determine which firms to include
     const firms = firm && firm !== 'all' ? [firm] : ['LAPL', 'LRSL', 'SI', 'SDF'];
@@ -129,18 +133,79 @@ export async function GET(request: NextRequest) {
       }
 
       // ═══════════════════════════════════════════════════════════
-      // BUILD THE SHEET matching template format:
-      // Row 1: ATTENDENCE - 2026 | SALARY SHEET OF [FIRM] OF THE MONTH OF [MONTH] [YEAR]
-      // Then 3 sections, each with:
-      //   - Date header row (merged 3-col per day showing "1/06/2026" etc.)
-      //   - IN/OUT/TOTAL HRS sub-header row
-      //   - Employee data rows (one per employee)
-      // Section 1: Days 1-11 (11 days × 3 cols = 33 data cols)
-      // Section 2: Days 12-22 (11 days × 3 cols = 33 data cols)
-      // Section 3: Days 23-31 (9 days × 3 cols + Total Working Hours + Leave = 29 data cols)
+      // PRE-COMPUTE full-month totals per employee
+      // This ensures Total Working Hours & Leave are correct
+      // regardless of which section they appear in
       // ═══════════════════════════════════════════════════════════
+      const empTotals = new Map<string, { totalWorkMin: number; absentDays: number; presentDays: number }>();
 
-      const maxDataCols = 34; // 1 (EMP) + 11×3 = 34 max columns for sections 1&2
+      for (const emp of employees) {
+        const empAttendance = attendanceByEmp.get(emp.employeeId);
+        let totalWorkMin = 0;
+        let absentDays = 0;
+        let presentDays = 0;
+
+        for (let d = 1; d <= daysInMonth; d++) {
+          const dateObj = new Date(year, month - 1, d);
+          const isSunday = dateObj.getDay() === 0;
+
+          // Skip future dates for current month
+          if (isCurrentMonth && d > effectiveCutoffDay) continue;
+
+          const rec = empAttendance?.get(d);
+
+          if (rec) {
+            if (rec.status === 'absent') {
+              absentDays++;
+            } else if (rec.status === 'weekly-off') {
+              if (rec.checkIn && rec.totalHours > 0) {
+                totalWorkMin += rec.totalHours * 60;
+                presentDays++;
+              }
+              // WO without checkIn doesn't count as absent
+            } else if (rec.status === 'holiday') {
+              if (rec.checkIn && rec.totalHours > 0) {
+                totalWorkMin += rec.totalHours * 60;
+                presentDays++;
+              }
+              // Holiday without checkIn doesn't count as absent
+            } else if (rec.halfDay) {
+              totalWorkMin += rec.totalHours * 60;
+              presentDays += 0.5;
+              absentDays += 0.5;
+            } else {
+              // present, late, early-out
+              totalWorkMin += rec.totalHours * 60;
+              presentDays++;
+            }
+          } else {
+            // No record
+            if (!isSunday) {
+              absentDays++;
+            }
+            // Sundays without record = WO, not absent
+          }
+        }
+
+        empTotals.set(emp.employeeId, { totalWorkMin, absentDays, presentDays });
+      }
+
+      // ═══════════════════════════════════════════════════════════
+      // DYNAMIC SECTION BOUNDARIES based on daysInMonth
+      // Section 1: Days 1-11 (always same)
+      // Section 2: Days 12-22 (always same)
+      // Section 3: Days 23-lastDay (varies: 28/29/30/31)
+      // ═══════════════════════════════════════════════════════════
+      const section1End = 11;
+      const section2End = 22;
+      const section3End = daysInMonth; // 28, 29, 30, or 31
+
+      // Max columns: Section 1 & 2 have 11 days × 3 = 33 data cols
+      // Section 3 has (daysInMonth - 22) days × 3 + 2 extra = varies
+      const s3DayCount = section3End - 22;
+      const s3DataCols = s3DayCount * 3 + 2; // +2 for Total Working Hours + Leave
+      const maxDataCols = Math.max(1 + 11 * 3, 1 + s3DataCols) + 2; // +2 buffer
+
       const aoa: any[][] = [];
       const allMerges: XLSXStyle.Range[] = [];
 
@@ -149,7 +214,6 @@ export async function GET(request: NextRequest) {
       for (let i = 1; i < maxDataCols; i++) titleRow.push('');
       titleRow[1] = `SALARY SHEET OF ${firmName} OF THE MONTH OF ${monthName.toUpperCase()} ${year}`;
       aoa.push(titleRow);
-      // Merge B1 to last col
       allMerges.push({ s: { r: 0, c: 1 }, e: { r: 0, c: maxDataCols - 1 } });
 
       // ── Helper to format date like "1/06/2026" ──
@@ -158,16 +222,15 @@ export async function GET(request: NextRequest) {
       };
 
       // ── Build section function ──
+      // Returns the row data and merges for a section
       const buildSection = (
         sectionIdx: number,
         dayStart: number,
         dayEnd: number,
-        extraCols: string[]  // e.g. ['Total Working Hours', 'Leave']
+        extraCols: string[]
       ) => {
         const numDays = dayEnd - dayStart + 1;
         const dayColCount = numDays * 3;
-        const totalDataCols = dayColCount + extraCols.length;
-        const totalCols = 1 + totalDataCols;
 
         // ── Date header row ──
         const dateRow: any[] = [sectionIdx === 0 ? 'EMP' : ''];
@@ -175,7 +238,6 @@ export async function GET(request: NextRequest) {
 
         for (let d = dayStart; d <= dayEnd; d++) {
           const colOffset = 1 + (d - dayStart) * 3;
-          // Merge 3 cells for the date header
           merges.push({
             s: { r: aoa.length, c: colOffset },
             e: { r: aoa.length, c: colOffset + 2 },
@@ -185,16 +247,12 @@ export async function GET(request: NextRequest) {
           dateRow.push('');
         }
 
-        // Extra column headers (merged if needed)
-        let extraOffset = 1 + dayColCount;
+        // Extra column headers
         for (const extraCol of extraCols) {
           dateRow.push(extraCol);
-          // No merge needed for single extra columns
         }
 
-        // Pad row to maxDataCols
         while (dateRow.length < maxDataCols) dateRow.push('');
-
         aoa.push(dateRow);
         allMerges.push(...merges);
 
@@ -206,7 +264,7 @@ export async function GET(request: NextRequest) {
           subRow.push('TOTAL HRS');
         }
         for (const extraCol of extraCols) {
-          subRow.push('');  // Extra column sub-header (already in date header)
+          subRow.push('');
         }
         while (subRow.length < maxDataCols) subRow.push('');
         aoa.push(subRow);
@@ -215,9 +273,6 @@ export async function GET(request: NextRequest) {
         for (const emp of employees) {
           const empAttendance = attendanceByEmp.get(emp.employeeId);
           const empRow: any[] = [emp.fullName];
-
-          let totalWorkMin = 0;
-          let absentDays = 0;
 
           for (let d = dayStart; d <= dayEnd; d++) {
             if (d > daysInMonth) {
@@ -229,40 +284,36 @@ export async function GET(request: NextRequest) {
             const dateObj = new Date(year, month - 1, d);
             const isSunday = dateObj.getDay() === 0;
 
+            // Future dates in current month = leave blank
+            if (isCurrentMonth && d > effectiveCutoffDay) {
+              if (isSunday) {
+                empRow.push('WO', '', '');
+              } else {
+                empRow.push('', '', '');
+              }
+              continue;
+            }
+
             if (rec) {
               if (rec.status === 'absent') {
                 empRow.push('A', '', '');
-                absentDays++;
               } else if (rec.status === 'weekly-off') {
                 if (rec.checkIn && rec.totalHours > 0) {
-                  const inTime = rec.checkIn || '';
-                  const outTime = rec.checkOut || '';
-                  empRow.push(inTime, outTime, formatHours(rec.totalHours));
-                  totalWorkMin += rec.totalHours * 60;
+                  empRow.push(rec.checkIn || '', rec.checkOut || '', formatHours(rec.totalHours));
                 } else {
                   empRow.push('WO', '', '');
                 }
               } else if (rec.status === 'holiday') {
                 if (rec.checkIn && rec.totalHours > 0) {
-                  const inTime = rec.checkIn || '';
-                  const outTime = rec.checkOut || '';
-                  empRow.push(inTime, outTime, formatHours(rec.totalHours));
-                  totalWorkMin += rec.totalHours * 60;
+                  empRow.push(rec.checkIn || '', rec.checkOut || '', formatHours(rec.totalHours));
                 } else {
                   empRow.push('H', '', '');
                 }
               } else if (rec.halfDay) {
-                const inTime = rec.checkIn || 'HD';
-                const outTime = rec.checkOut || '';
-                empRow.push(inTime, outTime, formatHours(rec.totalHours));
-                totalWorkMin += rec.totalHours * 60;
-                absentDays += 0.5;
+                empRow.push(rec.checkIn || 'HD', rec.checkOut || '', formatHours(rec.totalHours));
               } else {
                 // present, late, early-out
-                const inTime = rec.checkIn || '';
-                const outTime = rec.checkOut || '';
-                empRow.push(inTime, outTime, formatHours(rec.totalHours));
-                totalWorkMin += rec.totalHours * 60;
+                empRow.push(rec.checkIn || '', rec.checkOut || '', formatHours(rec.totalHours));
               }
             } else {
               // No record
@@ -270,36 +321,35 @@ export async function GET(request: NextRequest) {
                 empRow.push('WO', '', '');
               } else {
                 empRow.push('A', '', '');
-                absentDays++;
               }
             }
           }
 
-          // Extra columns data
+          // Extra columns data - use FULL-MONTH pre-computed totals
+          const totals = empTotals.get(emp.employeeId);
           for (const extraCol of extraCols) {
             if (extraCol === 'Total Working Hours') {
-              empRow.push(formatHours(totalWorkMin / 60));
+              empRow.push(formatHours((totals?.totalWorkMin || 0) / 60));
             } else if (extraCol === 'Leave') {
-              empRow.push(Math.round(absentDays));
+              empRow.push(Math.round(totals?.absentDays || 0));
             } else {
               empRow.push('');
             }
           }
 
-          // Pad to maxDataCols
           while (empRow.length < maxDataCols) empRow.push('');
           aoa.push(empRow);
         }
       };
 
       // ── SECTION 1: Days 1-11 ──
-      buildSection(0, 1, 11, []);
+      buildSection(0, 1, section1End, []);
 
       // ── SECTION 2: Days 12-22 ──
-      buildSection(1, 12, 22, []);
+      buildSection(1, 12, section2End, []);
 
-      // ── SECTION 3: Days 23-31 + Total Working Hours + Leave ──
-      buildSection(2, 23, 31, ['Total Working Hours', 'Leave']);
+      // ── SECTION 3: Days 23-lastDay + Total Working Hours + Leave ──
+      buildSection(2, 23, section3End, ['Total Working Hours', 'Leave']);
 
       // ── Create worksheet ──
       const ws = XLSXStyle.utils.aoa_to_sheet(aoa);
@@ -322,7 +372,7 @@ export async function GET(request: NextRequest) {
       }
 
       // Style each section
-      let currentRow = 2; // Start after title
+      let currentRow = 2;
 
       const styleSectionRows = (
         dayStart: number,
@@ -331,17 +381,17 @@ export async function GET(request: NextRequest) {
         extraCols: string[]
       ) => {
         const numDays = dayEnd - dayStart + 1;
+        const dayColCount = numDays * 3;
 
-        // ── Date header row ── Dark background, white text, bold date
+        // ── Date header row ── Dark background, white text
         for (let c = 0; c < maxDataCols; c++) {
           const addr = `${colLetter(c)}${currentRow}`;
           if (!ws[addr]) {
             ws[addr] = { t: 's', v: '', s: {} };
           }
 
-          // Check if this column is a Sunday
-          const isSunday = (c > 0 && c <= numDays * 3) ? 
-            new Date(year, month - 1, dayStart + Math.floor((c - 1) / 3)).getDay() === 0 : false;
+          const dayIdx = (c > 0 && c <= dayColCount) ? dayStart + Math.floor((c - 1) / 3) : -1;
+          const isSunday = dayIdx > 0 && dayIdx <= daysInMonth && new Date(year, month - 1, dayIdx).getDay() === 0;
 
           ws[addr].s = {
             font: { bold: true, color: { rgb: isSunday ? AMBER_HIGHLIGHT : WHITE }, sz: 11 },
@@ -359,8 +409,8 @@ export async function GET(request: NextRequest) {
             ws[addr] = { t: 's', v: '', s: {} };
           }
 
-          const isSunday = (c > 0 && c <= numDays * 3) ?
-            new Date(year, month - 1, dayStart + Math.floor((c - 1) / 3)).getDay() === 0 : false;
+          const dayIdx = (c > 0 && c <= dayColCount) ? dayStart + Math.floor((c - 1) / 3) : -1;
+          const isSunday = dayIdx > 0 && dayIdx <= daysInMonth && new Date(year, month - 1, dayIdx).getDay() === 0;
 
           ws[addr].s = {
             font: { bold: true, color: { rgb: isSunday ? AMBER_HIGHLIGHT : WHITE }, sz: 9 },
@@ -382,6 +432,8 @@ export async function GET(request: NextRequest) {
             if (!cell) continue;
 
             const val = String(cell.v || '');
+            const dayIdx = (c > 0 && c <= dayColCount) ? dayStart + Math.floor((c - 1) / 3) : -1;
+            const isSundayCol = dayIdx > 0 && dayIdx <= daysInMonth && new Date(year, month - 1, dayIdx).getDay() === 0;
 
             if (c === 0) {
               // Employee name column
@@ -426,27 +478,20 @@ export async function GET(request: NextRequest) {
                 alignment: { horizontal: 'center' as const, vertical: 'center' as const },
                 border: fullBorder('D0D0D0'),
               };
+            } else if (isSundayCol && val) {
+              cell.s = {
+                font: { sz: 9, color: { rgb: '059669' } },
+                fill: { fgColor: { rgb: LIGHT_GREEN } },
+                alignment: { horizontal: 'center' as const, vertical: 'center' as const },
+                border: fullBorder('D0D0D0'),
+              };
             } else {
-              // Default data cell
-              // Check if this is a Sunday column - highlight with amber
-              const dayIdx = (c > 0 && c <= numDays * 3) ? dayStart + Math.floor((c - 1) / 3) : -1;
-              const isSundayCol = dayIdx > 0 && new Date(year, month - 1, dayIdx).getDay() === 0;
-
-              if (isSundayCol && val) {
-                cell.s = {
-                  font: { sz: 9, color: { rgb: '059669' } },
-                  fill: { fgColor: { rgb: LIGHT_GREEN } },
-                  alignment: { horizontal: 'center' as const, vertical: 'center' as const },
-                  border: fullBorder('D0D0D0'),
-                };
-              } else {
-                cell.s = {
-                  font: { sz: 9, color: { rgb: '333333' } },
-                  fill: { fgColor: { rgb: bg } },
-                  alignment: { horizontal: 'center' as const, vertical: 'center' as const },
-                  border: fullBorder('D0D0D0'),
-                };
-              }
+              cell.s = {
+                font: { sz: 9, color: { rgb: '333333' } },
+                fill: { fgColor: { rgb: bg } },
+                alignment: { horizontal: 'center' as const, vertical: 'center' as const },
+                border: fullBorder('D0D0D0'),
+              };
             }
           }
           currentRow++;
@@ -454,29 +499,31 @@ export async function GET(request: NextRequest) {
       };
 
       // Style section 1
-      styleSectionRows(1, 11, employees.length, []);
+      styleSectionRows(1, section1End, employees.length, []);
       // Style section 2
-      styleSectionRows(12, 22, employees.length, []);
+      styleSectionRows(12, section2End, employees.length, []);
       // Style section 3
-      styleSectionRows(23, 31, employees.length, ['Total Working Hours', 'Leave']);
+      styleSectionRows(23, section3End, employees.length, ['Total Working Hours', 'Leave']);
 
       // ── Column widths ──
-      const colWidths: { wch: number }[] = [{ wch: 22 }]; // Column A = employee name
-      // Each day: IN(8), OUT(8), TOTAL HRS(12)
-      for (let s = 0; s < 3; s++) {
-        const dayStart = s === 0 ? 1 : s === 1 ? 12 : 23;
-        const dayEnd = s === 0 ? 11 : s === 1 ? 22 : 31;
-        for (let d = dayStart; d <= dayEnd; d++) {
+      const colWidths: { wch: number }[] = [{ wch: 22 }];
+      const sectionBoundaries = [
+        { start: 1, end: section1End, extras: [] },
+        { start: 12, end: section2End, extras: [] },
+        { start: 23, end: section3End, extras: ['Total Working Hours', 'Leave'] },
+      ];
+
+      for (const sec of sectionBoundaries) {
+        for (let d = sec.start; d <= sec.end; d++) {
           colWidths.push({ wch: 8 });  // IN
           colWidths.push({ wch: 8 });  // OUT
           colWidths.push({ wch: 12 }); // TOTAL HRS
         }
-        if (s === 2) {
-          colWidths.push({ wch: 16 }); // Total Working Hours
-          colWidths.push({ wch: 8 });  // Leave
+        for (const extra of sec.extras) {
+          colWidths.push({ wch: extra === 'Total Working Hours' ? 16 : 8 });
         }
       }
-      // Pad to maxDataCols
+
       while (colWidths.length < maxDataCols) colWidths.push({ wch: 8 });
       ws['!cols'] = colWidths;
 
