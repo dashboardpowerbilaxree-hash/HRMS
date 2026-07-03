@@ -60,14 +60,6 @@ const styleHeader = (rgb: string = DARK) => ({
   border: fullBorder('B0B0B0', 'thin'),
 });
 
-const styleDateHeader = () => ({
-  font: { bold: true, color: { rgb: WHITE }, sz: 20 },
-  fill: { fgColor: { rgb: DARK } },
-  alignment: { horizontal: 'center' as const, vertical: 'center' as const },
-  border: fullBorder('B0B0B0', 'thin'),
-  numfmt: 'dddd, mmmm dd, yyyy',
-});
-
 const styleSubHeader = () => ({
   font: { bold: true, italic: true, color: { rgb: WHITE }, sz: 20 },
   fill: { fgColor: { rgb: DARK } },
@@ -226,11 +218,14 @@ export async function GET(request: NextRequest) {
     // Row 6+: Data rows
     // ═══════════════════════════════════════════════════════════
 
+    // Format attendance date for display: "1/06/2026" style
+    const attendanceDateStr = `${attendanceDate.getDate()}/${String(attendanceDate.getMonth() + 1).padStart(2, '0')}/${attendanceDate.getFullYear()}`;
+
     const headerData: any[][] = [
-      ['', 'LAXREE GROUP OF COMPANIES'],  // Row 1 - A1 empty, B1 title
-      ['', attendanceDate],                // Row 2 - A2 empty, B2 date value (with numfmt)
-      ['', 'Daily Attendance Report —'],  // Row 3 - A3 empty, B3 subtitle
-      [],                                  // Row 4 empty
+      ['', 'LAXREE GROUP OF COMPANIES'],                          // Row 1 - A1 empty, B1 title
+      ['', `Date of Attendance: ${attendanceDateStr}`],          // Row 2 - A2 empty, B2 date string
+      ['', 'Daily Attendance Report —'],                        // Row 3 - A3 empty, B3 subtitle
+      [],                                                       // Row 4 empty
     ];
     const ws = XLSXStyle.utils.aoa_to_sheet(headerData);
 
@@ -241,10 +236,15 @@ export async function GET(request: NextRequest) {
       safeStyle(ws, `${c}1`, styleHeader());
     });
 
-    // Row 2: Date of Attendance - use actual date with formatting
+    // Row 2: Date of Attendance - actual date displayed as text
     safeStyle(ws, 'A2', { fill: { fgColor: { rgb: DARK } }, border: fullBorder('B0B0B0', 'thin') });
     cols10.slice(1).forEach(c => {
-      safeStyle(ws, `${c}2`, styleDateHeader());
+      safeStyle(ws, `${c}2`, {
+        font: { bold: true, color: { rgb: WHITE }, sz: 20 },
+        fill: { fgColor: { rgb: DARK } },
+        alignment: { horizontal: 'center' as const, vertical: 'center' as const },
+        border: fullBorder('B0B0B0', 'thin'),
+      });
     });
 
     // Row 3: Daily Attendance Report —

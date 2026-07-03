@@ -178,6 +178,7 @@ export function PayrollAutomation() {
   const [open, setOpen] = useState(false);
   const [generatingAll, setGeneratingAll] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [masterFirm, setMasterFirm] = useState('all');
 
   // ── Advance Form ──
   const [advanceOpen, setAdvanceOpen] = useState(false);
@@ -365,476 +366,31 @@ export function PayrollAutomation() {
     );
   }, [employees, employeeSearch]);
 
-  // ── Export Master Excel Sheet (Monthly Attendance Format) ──
+  // ── Export Master Excel Sheet — via server-side API with firm-wise sheets ──
   const handleExportSheet = async () => {
-    if (filteredRecords.length === 0) {
-      toast.error('No payroll records to export');
-      return;
-    }
     setExporting(true);
     try {
-      const month = parseInt(filterMonth);
-      const year = parseInt(filterYear);
-      const daysInMonth = new Date(year, month, 0).getDate();
-      const monthName = MONTHS[month - 1];
+      const params = new URLSearchParams();
+      params.set('month', filterMonth);
+      params.set('year', filterYear);
+      if (masterFirm && masterFirm !== 'all') params.set('firm', masterFirm);
 
-      // ── Fetch attendance data ──
-      const attParams = new URLSearchParams();
-      attParams.set('month', filterMonth);
-      attParams.set('year', filterYear);
-      if (filterFirm !== 'all') attParams.set('firm', filterFirm);
-      const attRes = await fetch(`/api/attendance?${attParams}`);
-      const attData = await attRes.json();
-      const attendanceRecords: any[] = attData.records || [];
-
-      // ── Fetch approved leaves for the month ──
-      const leaveParams = new URLSearchParams();
-      leaveParams.set('status', 'approved');
-      const leaveRes = await fetch(`/api/leaves?${leaveParams}`);
-      const leaveData = await leaveRes.json();
-      const approvedLeaves: any[] = Array.isArray(leaveData) ? leaveData : [];
-
-      // Build leave map: employeeId -> Set of date strings (YYYY-MM-DD)
-      const leaveMap: Record<string, Set<string>> = {};
-      for (const lv of approvedLeaves) {
-        if (!leaveMap[lv.employeeId]) leaveMap[lv.employeeId] = new Set();
-        const start = new Date(lv.startDate);
-        const end = new Date(lv.endDate);
-        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-          const ds = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-          leaveMap[lv.employeeId].add(ds);
-        }
+      const res = await fetch(`/api/attendance/export-master?${params}`);
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        toast.error(errData.error || 'Master sheet export failed');
+        setExporting(false);
+        return;
       }
-
-      // Build attendance map: employeeId -> { day -> record }
-      const attMap: Record<string, Record<number, any>> = {};
-      for (const rec of attendanceRecords) {
-        const d = new Date(rec.date);
-        const day = d.getDate();
-        if (!attMap[rec.employeeId]) attMap[rec.employeeId] = {};
-        attMap[rec.employeeId][day] = rec;
-      }
-
-      // Build employee list from filtered payroll records (unique by employeeId)
-      const empList = filteredRecords.map(p => ({
-        employeeId: p.employeeId,
-        fullName: p.employee?.fullName || p.employeeId,
-        payroll: p,
-      }));
-
-      // ── Style constants ──
-      const GOLD = 'D4A843';
-      const DARK = '1A1A1A';
-      const WHITE = 'FFFFFF';
-      const DEEP_BLUE = '1E3A5F';
-      const LIGHT_BG = 'FFF8E7';
-      const LIGHT_GREEN = 'ECFDF5';
-      const LIGHT_RED = 'FEF2F2';
-      const EMP_COL = 'A';
-
-      const fullBorder = (color: string = 'B0B0B0', style: 'thin' | 'medium' = 'thin') => ({
-        top: { style, color: { rgb: color } },
-        bottom: { style, color: { rgb: color } },
-        left: { style, color: { rgb: color } },
-        right: { style, color: { rgb: color } },
-      });
-
-      // Helper: format decimal hours to HH:MM
-      const fmtHrs = (decimal: number): string => {
-        if (!decimal || decimal === 0) return '0:00';
-        const hours = Math.floor(decimal);
-        const minutes = Math.round((decimal - hours) * 60);
-        if (minutes >= 60) return `${hours + 1}:00`;
-        return `${hours}:${String(minutes).padStart(2, '0')}`;
-      };
-
-      // Helper: format time string from checkIn/checkOut (e.g. "10:07")
-      const fmtTime = (time: string | null | undefined): string => {
-        if (!time) return '';
-        // Return as-is if already in HH:MM format
-        return time.substring(0, 5);
-      };
-
-      // Helper: get column letter from 0-based index
-      const colLetter = (idx: number): string => {
-        let result = '';
-        let n = idx;
-        while (n >= 0) {
-          result = String.fromCharCode(65 + (n % 26)) + result;
-          n = Math.floor(n / 26) - 1;
-        }
-        return result;
-      };
-
-      // ═══ SECTION BUILDER ═══
-      // Each section: dayStart..dayEnd, then extra columns after days
-      const buildSection = (
-        sectionIdx: number,
-        dayStart: number,
-        dayEnd: number,
-        startRow: number,
-        empRows: number,
-        extraCols: { header: string; subHeaders: string[] }[]
-      ) => {
-        const numDays = dayEnd - dayStart + 1;
-        const dayColCount = numDays * 3; // 3 cols per day: IN, OUT, TOTAL HRS
-        const extraColCount = extraCols.reduce((s, e) => s + e.subHeaders.length, 0);
-        const totalDataCols = dayColCount + extraColCount;
-        const totalCols = 1 + totalDataCols; // col A = EMP + data cols
-
-        // ── Row 0 of section: Date header row (merged cells per day) ──
-        // A-column gets "EMP" for section 1, empty for others
-        const merges: XLSX.Range[] = [];
-        const rowData: any[] = [];
-
-        // Column A
-        if (sectionIdx === 0) {
-          rowData.push('EMP');
-        } else {
-          rowData.push('');
-        }
-
-        // Day merged headers
-        for (let d = dayStart; d <= dayEnd; d++) {
-          const colOffset = 1 + (d - dayStart) * 3;
-          // Merge B:D, E:G, etc. for each day
-          merges.push({
-            s: { r: startRow - 1, c: colOffset },
-            e: { r: startRow - 1, c: colOffset + 2 },
-          });
-          rowData.push(`Date [${d}]`);
-          rowData.push('');
-          rowData.push('');
-        }
-
-        // Extra column merged headers
-        let extraOffset = 1 + dayColCount;
-        for (const extra of extraCols) {
-          if (extra.subHeaders.length > 1) {
-            merges.push({
-              s: { r: startRow - 1, c: extraOffset },
-              e: { r: startRow - 1, c: extraOffset + extra.subHeaders.length - 1 },
-            });
-          }
-          rowData.push(extra.header);
-          for (let i = 1; i < extra.subHeaders.length; i++) rowData.push('');
-          extraOffset += extra.subHeaders.length;
-        }
-
-        aoa.push(rowData);
-
-        // ── Row 1 of section: IN / OUT / TOTAL HRS sub-headers ──
-        const subRow: any[] = [sectionIdx === 0 ? '' : ''];
-        for (let d = dayStart; d <= dayEnd; d++) {
-          subRow.push('IN');
-          subRow.push('OUT');
-          subRow.push('TOTAL HRS');
-        }
-        let extraSubOffset = 1 + dayColCount;
-        for (const extra of extraCols) {
-          for (const sh of extra.subHeaders) {
-            subRow.push(sh);
-            extraSubOffset++;
-          }
-        }
-        aoa.push(subRow);
-
-        // ── Employee data rows ──
-        for (let eIdx = 0; eIdx < empRows; eIdx++) {
-          const emp = eIdx < empList.length ? empList[eIdx] : null;
-          const empRow: any[] = [];
-
-          // Column A: Employee Name
-          empRow.push(emp ? emp.fullName : '');
-
-          // Day data
-          for (let d = dayStart; d <= dayEnd; d++) {
-            if (!emp) {
-              empRow.push('', '', '');
-              continue;
-            }
-            if (d > daysInMonth) {
-              empRow.push('', '', '');
-              continue;
-            }
-            const rec = attMap[emp.employeeId]?.[d];
-            const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-            const isOnLeave = leaveMap[emp.employeeId]?.has(dateStr);
-
-            if (rec) {
-              // Has attendance record
-              if (rec.status === 'absent') {
-                empRow.push('A', '', '');
-              } else if (rec.status === 'weekly-off') {
-                if (rec.checkIn && rec.totalHours > 0) {
-                  empRow.push(fmtTime(rec.checkIn), fmtTime(rec.checkOut), fmtHrs(rec.totalHours));
-                } else {
-                  empRow.push('WO', '', '');
-                }
-              } else if (rec.status === 'holiday') {
-                if (rec.checkIn && rec.totalHours > 0) {
-                  empRow.push(fmtTime(rec.checkIn), fmtTime(rec.checkOut), fmtHrs(rec.totalHours));
-                } else {
-                  empRow.push('H', '', '');
-                }
-              } else if (rec.halfDay) {
-                empRow.push(fmtTime(rec.checkIn) || 'HD', fmtTime(rec.checkOut) || '', fmtHrs(rec.totalHours));
-              } else {
-                empRow.push(fmtTime(rec.checkIn) || '', fmtTime(rec.checkOut) || '', fmtHrs(rec.totalHours));
-              }
-            } else if (isOnLeave) {
-              empRow.push('L', '', '');
-            } else if (d > daysInMonth) {
-              empRow.push('', '', '');
-            } else {
-              // No record - check if it's a future date or Sunday
-              const dayOfWeek = new Date(year, month - 1, d).getDay();
-              if (dayOfWeek === 0) {
-                empRow.push('WO', '', '');
-              } else {
-                empRow.push('A', '', '');
-              }
-            }
-          }
-
-          // Extra columns data
-          let extraDataOffset = 1 + dayColCount;
-          for (const extra of extraCols) {
-            for (const sh of extra.subHeaders) {
-              if (!emp) {
-                empRow.push('');
-                continue;
-              }
-              if (sh === 'Total Working Hours' || sh === 'Total Hrs') {
-                empRow.push(fmtHrs(emp.payroll.totalWorkedHrs || emp.payroll.totalWorkHours || 0));
-              } else if (sh === 'Leave') {
-                empRow.push(emp.payroll.absentDays || 0);
-              } else {
-                empRow.push('');
-              }
-              extraDataOffset++;
-            }
-          }
-
-          aoa.push(empRow);
-        }
-
-        return { merges, totalCols };
-      };
-
-      // ═══ BUILD THE FULL SHEET ═══
-      const aoa: any[][] = [];
-
-      // ── Row 1: Title row ──
-      // A1 = "ATTENDENCE - 2026"
-      // B1:AH1 merged = "SALARY SHEET OF LAXREE OF THE MONTH OF [Month] [Year]"
-      // We need to know max columns. Section 3 has the most: 1(EMP) + 9*3(days23-31) + 2(Total+Leave) = 30 columns
-      const maxCols = 34; // A + 11*3 = 34 for section 1 which is the widest in pure day columns
-      const titleRow: any[] = ['ATTENDENCE - ' + year];
-      for (let i = 1; i < maxCols; i++) titleRow.push('');
-      titleRow[1] = `SALARY SHEET OF LAXREE OF THE MONTH OF ${monthName} ${year}`;
-      aoa.push(titleRow);
-
-      // ── SECTION 1: Days 1–11 ──
-      const s1 = buildSection(0, 1, 11, 2, empList.length, []);
-
-      // ── SECTION 2: Days 12–22 ──
-      const s2 = buildSection(1, 12, 22, 2 + 2 + empList.length, empList.length, []);
-
-      // ── SECTION 3: Days 23–31 + Total Working Hours + Leave ──
-      const s3 = buildSection(2, 23, 31, 2 + 2 * (2 + empList.length), empList.length, [
-        { header: '', subHeaders: ['Total Working Hours', 'Leave'] },
-      ]);
-
-      // Determine actual max columns used
-      const s1Cols = 1 + 11 * 3; // 34
-      const s2Cols = 1 + 11 * 3; // 34
-      const s3Cols = 1 + 9 * 3 + 2; // 30
-      const actualMaxCols = Math.max(s1Cols, s2Cols, s3Cols);
-
-      const ws = XLSX.utils.aoa_to_sheet(aoa);
-
-      // ── MERGES ──
-      const allMerges: XLSX.Range[] = [];
-
-      // Title row merge: A1 stays, B1:{lastCol}1 merged
-      allMerges.push({ s: { r: 0, c: 1 }, e: { r: 0, c: actualMaxCols - 1 } });
-
-      // Section merges
-      allMerges.push(...s1.merges);
-      allMerges.push(...s2.merges);
-      allMerges.push(...s3.merges);
-
-      ws['!merges'] = allMerges;
-
-      // ── STYLES ──
-      // Row 1: Title row - Gold background
-      for (let c = 0; c < actualMaxCols; c++) {
-        const addr = `${colLetter(c)}1`;
-        const cell = ws[addr];
-        if (cell) {
-          cell.s = {
-            font: { bold: true, color: { rgb: WHITE }, sz: 14 },
-            fill: { fgColor: { rgb: GOLD } },
-            alignment: { horizontal: 'center' as const, vertical: 'center' as const },
-            border: fullBorder(GOLD, 'medium'),
-          };
-        }
-      }
-      // Make sure empty cells in row 1 also get styled
-      for (let c = 0; c < actualMaxCols; c++) {
-        const addr = `${colLetter(c)}1`;
-        if (!ws[addr]) {
-          ws[addr] = { t: 's', v: '', s: {
-            font: { bold: true, color: { rgb: WHITE }, sz: 14 },
-            fill: { fgColor: { rgb: GOLD } },
-            alignment: { horizontal: 'center' as const, vertical: 'center' as const },
-            border: fullBorder(GOLD, 'medium'),
-          }};
-        } else {
-          ws[addr].s = {
-            font: { bold: true, color: { rgb: WHITE }, sz: 14 },
-            fill: { fgColor: { rgb: GOLD } },
-            alignment: { horizontal: 'center' as const, vertical: 'center' as const },
-            border: fullBorder(GOLD, 'medium'),
-          };
-        }
-      }
-
-      // Style section date header rows, sub-header rows, and data rows
-      const styleSection = (
-        sectionIdx: number,
-        dayStart: number,
-        dayEnd: number,
-        dateHeaderRow: number,
-        empCount: number,
-        extraCols: { header: string; subHeaders: string[] }[]
-      ) => {
-        const numDays = dayEnd - dayStart + 1;
-        const dayColCount = numDays * 3;
-        const extraColCount = extraCols.reduce((s, e) => s + e.subHeaders.length, 0);
-
-        // ── Date header row ── Dark background, white text
-        for (let c = 0; c < actualMaxCols; c++) {
-          const addr = `${colLetter(c)}${dateHeaderRow}`;
-          if (!ws[addr]) {
-            ws[addr] = { t: 's', v: '', s: {} };
-          }
-          ws[addr].s = {
-            font: { bold: true, color: { rgb: WHITE }, sz: 11 },
-            fill: { fgColor: { rgb: DARK } },
-            alignment: { horizontal: 'center' as const, vertical: 'center' as const },
-            border: fullBorder(DARK, 'medium'),
-          };
-        }
-
-        // ── Sub-header row (IN/OUT/TOTAL HRS) ── Deep blue
-        const subHeaderRow = dateHeaderRow + 1;
-        for (let c = 0; c < actualMaxCols; c++) {
-          const addr = `${colLetter(c)}${subHeaderRow}`;
-          if (!ws[addr]) {
-            ws[addr] = { t: 's', v: '', s: {} };
-          }
-          ws[addr].s = {
-            font: { bold: true, color: { rgb: WHITE }, sz: 9 },
-            fill: { fgColor: { rgb: DEEP_BLUE } },
-            alignment: { horizontal: 'center' as const, vertical: 'center' as const },
-            border: fullBorder(DEEP_BLUE),
-          };
-        }
-
-        // ── Employee data rows ──
-        for (let eIdx = 0; eIdx < empCount; eIdx++) {
-          const dataRow = dateHeaderRow + 2 + eIdx;
-          const isEven = eIdx % 2 === 0;
-          for (let c = 0; c < actualMaxCols; c++) {
-            const addr = `${colLetter(c)}${dataRow}`;
-            const cell = ws[addr];
-            if (cell) {
-              const bg = isEven ? LIGHT_BG : WHITE;
-              cell.s = {
-                font: { sz: 9 },
-                fill: { fgColor: { rgb: bg } },
-                alignment: { horizontal: c === 0 ? ('left' as const) : ('center' as const), vertical: 'center' as const },
-                border: fullBorder('D0D0D0'),
-              };
-
-              // Highlight 'A' cells in red
-              if (cell.v === 'A') {
-                cell.s = {
-                  ...cell.s,
-                  font: { bold: true, sz: 9, color: { rgb: 'DC2626' } },
-                  fill: { fgColor: { rgb: LIGHT_RED } },
-                };
-              }
-              // Highlight 'L' cells
-              if (cell.v === 'L') {
-                cell.s = {
-                  ...cell.s,
-                  font: { bold: true, sz: 9, color: { rgb: 'D97706' } },
-                  fill: { fgColor: { rgb: 'FEF3C7' } },
-                };
-              }
-              // Highlight 'WO' cells
-              if (cell.v === 'WO') {
-                cell.s = {
-                  ...cell.s,
-                  font: { bold: true, sz: 9, color: { rgb: '059669' } },
-                  fill: { fgColor: { rgb: LIGHT_GREEN } },
-                };
-              }
-              // Highlight 'H' cells
-              if (cell.v === 'H') {
-                cell.s = {
-                  ...cell.s,
-                  font: { bold: true, sz: 9, color: { rgb: '7C3AED' } },
-                  fill: { fgColor: { rgb: 'EDE9FE' } },
-                };
-              }
-            }
-          }
-        }
-      };
-
-      // Style section 1: date header row = 2, sub-header = 3, data starts at 4
-      styleSection(0, 1, 11, 2, empList.length, []);
-
-      // Style section 2
-      const s2StartRow = 2 + 2 + empList.length;
-      styleSection(1, 12, 22, s2StartRow, empList.length, []);
-
-      // Style section 3
-      const s3StartRow = s2StartRow + 2 + empList.length;
-      styleSection(2, 23, 31, s3StartRow, empList.length, [
-        { header: '', subHeaders: ['Total Working Hours', 'Leave'] },
-      ]);
-
-      // ── Column widths ──
-      const colWidths: { wch: number }[] = [{ wch: 22 }]; // Column A = employee name
-      // Each day: IN(8), OUT(8), TOTAL HRS(12)
-      for (let s = 0; s < 3; s++) {
-        const dayStart = s === 0 ? 1 : s === 1 ? 12 : 23;
-        const dayEnd = s === 0 ? 11 : s === 1 ? 22 : 31;
-        for (let d = dayStart; d <= dayEnd; d++) {
-          colWidths.push({ wch: 8 });  // IN
-          colWidths.push({ wch: 8 });  // OUT
-          colWidths.push({ wch: 12 }); // TOTAL HRS
-        }
-        if (s === 2) {
-          colWidths.push({ wch: 16 }); // Total Working Hours
-          colWidths.push({ wch: 8 });  // Leave
-        }
-      }
-      // Pad to actualMaxCols
-      while (colWidths.length < actualMaxCols) colWidths.push({ wch: 8 });
-      ws['!cols'] = colWidths;
-
-      // ── Create workbook and download ──
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Master Sheet');
-
-      XLSX.writeFile(wb, `Master_Sheet_${monthName}_${year}.xlsx`);
-
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Master_Sheet_${MONTHS[parseInt(filterMonth) - 1]}_${filterYear}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
       toast.success('Master Excel Sheet downloaded successfully!');
     } catch (err) {
       console.error('Master sheet export error:', err);
@@ -999,16 +555,30 @@ export function PayrollAutomation() {
           >
             <Zap className="w-4 h-4" /> {generatingAll ? 'Generating...' : 'Generate All'}
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-1.5"
-            onClick={handleExportSheet}
-            disabled={exporting || filteredRecords.length === 0}
-          >
-            {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
-            {exporting ? 'Exporting...' : 'Master Excel Sheet'}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Select value={masterFirm} onValueChange={setMasterFirm}>
+              <SelectTrigger className="w-36 h-9 text-xs">
+                <Building2 className="w-3.5 h-3.5 mr-1 text-muted-foreground" />
+                <SelectValue placeholder="All Firms" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Firms</SelectItem>
+                {FIRMS.map((f) => (
+                  <SelectItem key={f} value={f}>{f}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              onClick={handleExportSheet}
+              disabled={exporting}
+            >
+              {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
+              {exporting ? 'Exporting...' : 'Master Excel Sheet'}
+            </Button>
+          </div>
           <Button
             variant="outline"
             size="sm"

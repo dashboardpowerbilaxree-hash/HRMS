@@ -33,14 +33,6 @@ const styleHeader = () => ({
   border: fullBorder('B0B0B0', 'thin'),
 });
 
-const styleDateHeader = () => ({
-  font: { bold: true, color: { rgb: WHITE }, sz: 20 },
-  fill: { fgColor: { rgb: DARK } },
-  alignment: { horizontal: 'center' as const, vertical: 'center' as const },
-  border: fullBorder('B0B0B0', 'thin'),
-  numfmt: 'dddd, mmmm dd, yyyy',
-});
-
 const styleSubHeader = () => ({
   font: { bold: true, italic: true, color: { rgb: WHITE }, sz: 20 },
   fill: { fgColor: { rgb: DARK } },
@@ -86,11 +78,14 @@ export async function GET(request: NextRequest) {
     // Same format as Daily_Attendance_Formate.xlsx but EMPTY data
     // ═══════════════════════════════════════════════════════════
 
+    // Format attendance date for display
+    const attendanceDateStr = `${attendanceDate.getDate()}/${String(attendanceDate.getMonth() + 1).padStart(2, '0')}/${attendanceDate.getFullYear()}`;
+
     const headerData: any[][] = [
-      ['', 'LAXREE GROUP OF COMPANIES'],  // Row 1
-      ['', attendanceDate],                // Row 2 - date with formatting
-      ['', 'Daily Attendance Report —'],  // Row 3
-      [],                                  // Row 4 empty
+      ['', 'LAXREE GROUP OF COMPANIES'],                          // Row 1
+      ['', `Date of Attendance: ${attendanceDateStr}`],          // Row 2 - actual date string
+      ['', 'Daily Attendance Report —'],                        // Row 3
+      [],                                                       // Row 4 empty
     ];
     const ws = XLSXStyle.utils.aoa_to_sheet(headerData);
 
@@ -99,9 +94,16 @@ export async function GET(request: NextRequest) {
     // Style Row 1
     cols10.forEach(c => { safeStyle(ws, `${c}1`, styleHeader()); });
 
-    // Style Row 2
+    // Style Row 2: Date of Attendance - actual date text
     safeStyle(ws, 'A2', { fill: { fgColor: { rgb: DARK } }, border: fullBorder('B0B0B0', 'thin') });
-    cols10.slice(1).forEach(c => { safeStyle(ws, `${c}2`, styleDateHeader()); });
+    cols10.slice(1).forEach(c => {
+      safeStyle(ws, `${c}2`, {
+        font: { bold: true, color: { rgb: WHITE }, sz: 20 },
+        fill: { fgColor: { rgb: DARK } },
+        alignment: { horizontal: 'center' as const, vertical: 'center' as const },
+        border: fullBorder('B0B0B0', 'thin'),
+      });
+    });
 
     // Style Row 3
     safeStyle(ws, 'A3', { fill: { fgColor: { rgb: DARK } }, border: fullBorder('B0B0B0', 'thin') });

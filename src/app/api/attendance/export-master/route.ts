@@ -4,8 +4,11 @@ import * as XLSXStyle from 'xlsx-js-style';
 
 // Master Excel Sheet Export
 // Generates a single Excel file with firm-wise sheets
-// Each sheet has the calendar-style monthly attendance format matching
-// the "Laxree Group Monthly Excel Formate.xlsx" template
+// Each sheet matches the "Laxree Group Monthly Excel Formate.xlsx" template:
+// - 3 sections: Days 1-11, Days 12-22, Days 23-31
+// - Each day has 3 columns: IN, OUT, TOTAL HRS
+// - Section 3 ends with Total Working Hours + Leave columns
+// - Date headers show actual dates like "1/06/2026" instead of "Date"
 
 const FIRM_NAMES: Record<string, string> = {
   LAPL: 'LAXREE AMENITIES PVT LTD',
@@ -38,31 +41,16 @@ function formatHours(decimal: number): string {
   return `${hours}:${String(minutes).padStart(2, '0')}`;
 }
 
-function formatOT(decimal: number): string {
-  if (!decimal || decimal === 0) return '0m';
-  const totalMinutes = Math.round(decimal * 60);
-  if (totalMinutes < 60) return `${totalMinutes}m`;
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-  if (minutes === 0) return `${hours}h`;
-  return `${hours}h ${minutes}m`;
-}
-
 // Color constants
 const GOLD = 'D4A843';
 const DARK = '1A1A1A';
 const WHITE = 'FFFFFF';
-const EMERALD = '059669';
-const RED = 'DC2626';
-const AMBER = 'D97706';
-const CYAN = '0891B2';
-const AMBER_HIGHLIGHT = 'FFC000'; // Sunday highlight from template
+const DEEP_BLUE = '1E3A5F';
 const LIGHT_BG = 'FFF8E7';
 const LIGHT_GREEN = 'ECFDF5';
 const LIGHT_RED = 'FEF2F2';
 const LIGHT_AMBER = 'FFFBEB';
-const NAVY = '1E3A5F';
-const TEAL = '0D9488';
+const AMBER_HIGHLIGHT = 'FFC000';
 
 const fullBorder = (color: string = 'B0B0B0', style: 'thin' | 'medium' = 'thin') => ({
   top: { style, color: { rgb: color } },
@@ -71,15 +59,19 @@ const fullBorder = (color: string = 'B0B0B0', style: 'thin' | 'medium' = 'thin')
   right: { style, color: { rgb: color } },
 });
 
-const goldBorder = {
-  top: { style: 'medium' as const, color: { rgb: GOLD } },
-  bottom: { style: 'medium' as const, color: { rgb: GOLD } },
-  left: { style: 'medium' as const, color: { rgb: GOLD } },
-  right: { style: 'medium' as const, color: { rgb: GOLD } },
-};
-
 const safeStyle = (ws: any, cellRef: string, style: any) => {
   if (ws[cellRef]) ws[cellRef].s = style;
+};
+
+// Helper: get column letter from 0-based index
+const colLetter = (idx: number): string => {
+  let result = '';
+  let n = idx;
+  while (n >= 0) {
+    result = String.fromCharCode(65 + (n % 26)) + result;
+    n = Math.floor(n / 26) - 1;
+  }
+  return result;
 };
 
 export async function GET(request: NextRequest) {
@@ -125,7 +117,7 @@ export async function GET(request: NextRequest) {
         orderBy: { date: 'asc' },
       });
 
-      // Group attendance by employeeId
+      // Group attendance by employeeId -> day
       const attendanceByEmp = new Map<string, Map<number, any>>();
       for (const rec of allAttendance) {
         const recDate = new Date(rec.date);
@@ -136,268 +128,357 @@ export async function GET(request: NextRequest) {
         attendanceByEmp.get(rec.employeeId)!.set(day, rec);
       }
 
-      // ── Build the calendar-style sheet ──
-      // Layout matching Laxree Group Monthly Excel Formate:
-      // Row 1: Title (merged) - SALARY SHEET OF [FIRM] OF THE MONTH OF [MONTH] [YEAR]
-      // Row 2: Date headers (each date gets 3 columns: IN, OUT, TOTAL HRS) - we show 1-11 in first section
-      // Row 3: Sub-headers: IN | OUT | TOTAL HRS repeating
-      // Rows 4+: Employee data rows (name in col A, then attendance data)
-      // 
-      // Since xlsx-js-style doesn't support very wide sheets well with 3-col-per-day,
-      // we'll use a practical approach: each day gets 2 columns (IN, OUT) + one TOTAL HRS column
-      // But for readability, we'll use a single-column-per-day approach with status
+      // ═══════════════════════════════════════════════════════════
+      // BUILD THE SHEET matching template format:
+      // Row 1: ATTENDENCE - 2026 | SALARY SHEET OF [FIRM] OF THE MONTH OF [MONTH] [YEAR]
+      // Then 3 sections, each with:
+      //   - Date header row (merged 3-col per day showing "1/06/2026" etc.)
+      //   - IN/OUT/TOTAL HRS sub-header row
+      //   - Employee data rows (one per employee)
+      // Section 1: Days 1-11 (11 days × 3 cols = 33 data cols)
+      // Section 2: Days 12-22 (11 days × 3 cols = 33 data cols)
+      // Section 3: Days 23-31 (9 days × 3 cols + Total Working Hours + Leave = 29 data cols)
+      // ═══════════════════════════════════════════════════════════
 
-      // PRACTICAL APPROACH: Compact calendar layout
-      // Row 1: Title
-      // Row 2: Column headers - Emp Name | 1 | 2 | 3 | ... | 31 | Total Hrs | OT | Present | Absent | Status Summary
-      // Row 3: Day names - Day | Mon | Tue | Wed | ... | Thu | 
-      // Rows 4+: Employee data
+      const maxDataCols = 34; // 1 (EMP) + 11×3 = 34 max columns for sections 1&2
+      const aoa: any[][] = [];
+      const allMerges: XLSXStyle.Range[] = [];
 
-      // Actually let's match the format more closely with the user's template:
-      // The template has IN/OUT/TOTAL HRS per day across 3 columns
-      // Let's build it that way with sections of ~10 days each to fit page width
+      // ── Row 1: Title row ──
+      const titleRow: any[] = ['ATTENDENCE - ' + year];
+      for (let i = 1; i < maxDataCols; i++) titleRow.push('');
+      titleRow[1] = `SALARY SHEET OF ${firmName} OF THE MONTH OF ${monthName.toUpperCase()} ${year}`;
+      aoa.push(titleRow);
+      // Merge B1 to last col
+      allMerges.push({ s: { r: 0, c: 1 }, e: { r: 0, c: maxDataCols - 1 } });
 
-      // SECTION APPROACH: 
-      // Each section has ~10-11 days with 3 columns each (IN, OUT, TOTAL HRS)
-      // Plus employee name column (A)
-      // Section 1: Days 1-11, Section 2: Days 12-22, Section 3: Days 23-31
-
-      // But for xlsx-js-style, this is very complex. Let's use a SIMPLER but matching format:
-      // Column A: Employee Name
-      // Columns B onwards: Each day has 1 column showing "IN-OUT" or status
-      // Last columns: Total Working Hours, Leave, Present Days, Absent Days
-
-      // FINAL APPROACH - Match template closely:
-      // Row 1: Title merged across
-      // Row 2: Firm info
-      // Row 3: Column headers: EMP | 1-Jun | 2-Jun | 3-Jun | ... | 30-Jun | Total Hrs | OT | Present | Absent
-      // Row 4+: Data: Name | IN-OUT/status per day | totals
-      
-      const totalCols = 1 + daysInMonth + 4; // A (name) + days + Total Hrs + OT + Present + Absent
-
-      // Build header row 1: Title
-      const titleRow: any[] = [`SALARY SHEET OF ${firmName} OF THE MONTH OF ${monthName.toUpperCase()} ${year}`];
-      for (let i = 1; i < totalCols; i++) titleRow.push('');
-
-      // Build header row 2: Day numbers with date format like "1 Jun", "2 Jun"
-      const dayHeaderRow: any[] = ['EMPLOYEE'];
-      for (let d = 1; d <= daysInMonth; d++) {
-        const dateObj = new Date(year, month - 1, d);
-        const dayNum = dateObj.getDate();
-        const monthAbbr = monthName.substring(0, 3);
-        dayHeaderRow.push(`${dayNum} ${monthAbbr}`);
-      }
-      dayHeaderRow.push('Total Working Hours');
-      dayHeaderRow.push('OT Hours');
-      dayHeaderRow.push('Present');
-      dayHeaderRow.push('Absent');
-
-      // Build header row 3: Day names
-      const dayNameRow: any[] = [''];
-      for (let d = 1; d <= daysInMonth; d++) {
-        const dateObj = new Date(year, month - 1, d);
-        dayNameRow.push(DAY_ABBR[dateObj.getDay()]);
-      }
-      dayNameRow.push('', '', '', '');
-
-      // Build data rows
-      const dataRows: any[][] = [];
-      for (const emp of employees) {
-        const empAttendance = attendanceByEmp.get(emp.employeeId);
-        const row: any[] = [emp.fullName];
-
-        let presentDays = 0;
-        let absentDays = 0;
-        let totalWorkHrs = 0;
-        let totalOT = 0;
-
-        for (let d = 1; d <= daysInMonth; d++) {
-          const dateObj = new Date(year, month - 1, d);
-          const isSunday = dateObj.getDay() === 0;
-          const rec = empAttendance?.get(d);
-
-          if (rec) {
-            if (rec.checkIn && rec.checkOut) {
-              const [h1, m1] = rec.checkIn.split(':').map(Number);
-              const [h2, m2] = rec.checkOut.split(':').map(Number);
-              const workMin = Math.max(0, (h2 * 60 + m2) - (h1 * 60 + m1));
-              totalWorkHrs += workMin;
-            }
-            if (rec.overtimeHours > 0) {
-              totalOT += rec.overtimeHours * 60;
-            }
-
-            if (['present', 'late', 'early-out'].includes(rec.status)) {
-              presentDays++;
-              // Show IN-OUT format
-              if (rec.checkIn && rec.checkOut) {
-                row.push(`${rec.checkIn}-${rec.checkOut}`);
-              } else {
-                row.push('P');
-              }
-            } else if (rec.status === 'half-day' || rec.halfDay) {
-              presentDays += 0.5;
-              absentDays += 0.5;
-              row.push('HD');
-            } else if (rec.status === 'absent') {
-              absentDays++;
-              row.push('A');
-            } else if (rec.status === 'weekly-off' || isSunday) {
-              row.push('WO');
-            } else if (rec.status === 'holiday') {
-              row.push('PH');
-            } else {
-              row.push(rec.status.charAt(0).toUpperCase());
-            }
-          } else {
-            // No record
-            if (isSunday) {
-              row.push('WO');
-            } else {
-              row.push('');
-            }
-          }
-        }
-
-        // Summary columns
-        row.push(formatHours(totalWorkHrs / 60));
-        row.push(totalOT > 0 ? formatOT(totalOT / 60) : '0m');
-        row.push(presentDays);
-        row.push(Math.round(absentDays));
-
-        dataRows.push(row);
-      }
-
-      // Create the worksheet
-      const allRows: any[][] = [titleRow, dayHeaderRow, dayNameRow, ...dataRows];
-      const ws = XLSXStyle.utils.aoa_to_sheet(allRows);
-
-      // Build column refs properly (A-Z, then AA, AB, etc.)
-      const getColRef = (colIdx: number): string => {
-        if (colIdx < 26) return String.fromCharCode(65 + colIdx);
-        return String.fromCharCode(65 + Math.floor(colIdx / 26) - 1) + String.fromCharCode(65 + (colIdx % 26));
+      // ── Helper to format date like "1/06/2026" ──
+      const formatDateHeader = (day: number): string => {
+        return `${day}/${String(month).padStart(2, '0')}/${year}`;
       };
 
-      // Build all column refs for styling
-      const allColRefs: string[] = [];
-      for (let i = 0; i < totalCols; i++) {
-        allColRefs.push(getColRef(i));
-      }
+      // ── Build section function ──
+      const buildSection = (
+        sectionIdx: number,
+        dayStart: number,
+        dayEnd: number,
+        extraCols: string[]  // e.g. ['Total Working Hours', 'Leave']
+      ) => {
+        const numDays = dayEnd - dayStart + 1;
+        const dayColCount = numDays * 3;
+        const totalDataCols = dayColCount + extraCols.length;
+        const totalCols = 1 + totalDataCols;
 
-      // Style title row
-      for (let i = 0; i < totalCols; i++) {
-        safeStyle(ws, `${getColRef(i)}1`, {
-          font: { bold: true, color: { rgb: GOLD }, sz: 14 },
-          fill: { fgColor: { rgb: DARK } },
-          alignment: { horizontal: 'center' as const, vertical: 'center' as const },
-          border: goldBorder,
-        });
-      }
+        // ── Date header row ──
+        const dateRow: any[] = [sectionIdx === 0 ? 'EMP' : ''];
+        const merges: XLSXStyle.Range[] = [];
 
-      // Style day header row
-      for (let i = 0; i < totalCols; i++) {
-        const isSunday = (i > 0 && i <= daysInMonth) ? new Date(year, month - 1, i).getDay() === 0 : false;
-        safeStyle(ws, `${getColRef(i)}2`, {
-          font: { bold: true, color: { rgb: WHITE }, sz: 10 },
-          fill: { fgColor: { rgb: isSunday ? AMBER_HIGHLIGHT : EMERALD } },
-          alignment: { horizontal: 'center' as const, vertical: 'center' as const, wrapText: true },
-          border: fullBorder(WHITE, 'medium'),
-        });
-      }
+        for (let d = dayStart; d <= dayEnd; d++) {
+          const colOffset = 1 + (d - dayStart) * 3;
+          // Merge 3 cells for the date header
+          merges.push({
+            s: { r: aoa.length, c: colOffset },
+            e: { r: aoa.length, c: colOffset + 2 },
+          });
+          dateRow.push(formatDateHeader(d));
+          dateRow.push('');
+          dateRow.push('');
+        }
 
-      // Style day name row
-      for (let i = 0; i < totalCols; i++) {
-        const isSunday = (i > 0 && i <= daysInMonth) ? new Date(year, month - 1, i).getDay() === 0 : false;
-        safeStyle(ws, `${getColRef(i)}3`, {
-          font: { bold: true, color: { rgb: isSunday ? AMBER_HIGHLIGHT : '888888' }, sz: 8 },
-          fill: { fgColor: { rgb: '2D2D2D' } },
-          alignment: { horizontal: 'center' as const, vertical: 'center' as const },
-          border: fullBorder('444444'),
-        });
-      }
+        // Extra column headers (merged if needed)
+        let extraOffset = 1 + dayColCount;
+        for (const extraCol of extraCols) {
+          dateRow.push(extraCol);
+          // No merge needed for single extra columns
+        }
 
-      // Style data rows
-      for (let r = 0; r < dataRows.length; r++) {
-        const excelRow = r + 4; // Row 4 onwards
-        const bg = r % 2 === 0 ? LIGHT_BG : undefined;
+        // Pad row to maxDataCols
+        while (dateRow.length < maxDataCols) dateRow.push('');
 
-        for (let i = 0; i < totalCols; i++) {
-          const cellRef = `${getColRef(i)}${excelRow}`;
-          const cell = ws[cellRef];
-          if (!cell) continue;
+        aoa.push(dateRow);
+        allMerges.push(...merges);
 
-          const val = String(cell.v || '');
+        // ── IN/OUT/TOTAL HRS sub-header row ──
+        const subRow: any[] = [''];
+        for (let d = dayStart; d <= dayEnd; d++) {
+          subRow.push('IN');
+          subRow.push('OUT');
+          subRow.push('TOTAL HRS');
+        }
+        for (const extraCol of extraCols) {
+          subRow.push('');  // Extra column sub-header (already in date header)
+        }
+        while (subRow.length < maxDataCols) subRow.push('');
+        aoa.push(subRow);
 
-          if (i === 0) {
-            // Employee name column
-            cell.s = {
-              font: { bold: true, sz: 10, color: { rgb: WHITE } },
-              fill: { fgColor: { rgb: NAVY } },
-              alignment: { horizontal: 'left' as const, vertical: 'center' as const },
-              border: fullBorder('FFFFFF', 'thin'),
-            };
-          } else if (val === 'A') {
-            cell.s = {
-              font: { bold: true, sz: 10, color: { rgb: RED } },
-              fill: { fgColor: { rgb: LIGHT_RED } },
-              alignment: { horizontal: 'center' as const, vertical: 'center' as const },
-              border: fullBorder('D0D0D0'),
-            };
-          } else if (val === 'P' || val.includes('-')) {
-            cell.s = {
-              font: { sz: 9, color: { rgb: EMERALD } },
-              fill: { fgColor: { rgb: LIGHT_GREEN } },
-              alignment: { horizontal: 'center' as const, vertical: 'center' as const },
-              border: fullBorder('D0D0D0'),
-            };
-          } else if (val === 'WO') {
-            cell.s = {
-              font: { bold: true, sz: 10, color: { rgb: AMBER_HIGHLIGHT } },
-              fill: { fgColor: { rgb: '2D2D2D' } },
-              alignment: { horizontal: 'center' as const, vertical: 'center' as const },
-              border: fullBorder('D0D0D0'),
-            };
-          } else if (val === 'HD') {
-            cell.s = {
-              font: { bold: true, sz: 10, color: { rgb: AMBER } },
-              fill: { fgColor: { rgb: LIGHT_AMBER } },
-              alignment: { horizontal: 'center' as const, vertical: 'center' as const },
-              border: fullBorder('D0D0D0'),
-            };
-          } else if (val === 'PH') {
-            cell.s = {
-              font: { bold: true, sz: 10, color: { rgb: '7C3AED' } },
-              fill: { fgColor: { rgb: 'F5F3FF' } },
-              alignment: { horizontal: 'center' as const, vertical: 'center' as const },
-              border: fullBorder('D0D0D0'),
-            };
-          } else {
-            // Default data cell
-            cell.s = {
-              font: { sz: 10, color: { rgb: '333333' } },
-              fill: bg ? { fgColor: { rgb: bg } } : undefined,
-              alignment: { horizontal: 'center' as const, vertical: 'center' as const },
-              border: fullBorder('D0D0D0'),
-            };
+        // ── Employee data rows ──
+        for (const emp of employees) {
+          const empAttendance = attendanceByEmp.get(emp.employeeId);
+          const empRow: any[] = [emp.fullName];
+
+          let totalWorkMin = 0;
+          let absentDays = 0;
+
+          for (let d = dayStart; d <= dayEnd; d++) {
+            if (d > daysInMonth) {
+              empRow.push('', '', '');
+              continue;
+            }
+
+            const rec = empAttendance?.get(d);
+            const dateObj = new Date(year, month - 1, d);
+            const isSunday = dateObj.getDay() === 0;
+
+            if (rec) {
+              if (rec.status === 'absent') {
+                empRow.push('A', '', '');
+                absentDays++;
+              } else if (rec.status === 'weekly-off') {
+                if (rec.checkIn && rec.totalHours > 0) {
+                  const inTime = rec.checkIn || '';
+                  const outTime = rec.checkOut || '';
+                  empRow.push(inTime, outTime, formatHours(rec.totalHours));
+                  totalWorkMin += rec.totalHours * 60;
+                } else {
+                  empRow.push('WO', '', '');
+                }
+              } else if (rec.status === 'holiday') {
+                if (rec.checkIn && rec.totalHours > 0) {
+                  const inTime = rec.checkIn || '';
+                  const outTime = rec.checkOut || '';
+                  empRow.push(inTime, outTime, formatHours(rec.totalHours));
+                  totalWorkMin += rec.totalHours * 60;
+                } else {
+                  empRow.push('H', '', '');
+                }
+              } else if (rec.halfDay) {
+                const inTime = rec.checkIn || 'HD';
+                const outTime = rec.checkOut || '';
+                empRow.push(inTime, outTime, formatHours(rec.totalHours));
+                totalWorkMin += rec.totalHours * 60;
+                absentDays += 0.5;
+              } else {
+                // present, late, early-out
+                const inTime = rec.checkIn || '';
+                const outTime = rec.checkOut || '';
+                empRow.push(inTime, outTime, formatHours(rec.totalHours));
+                totalWorkMin += rec.totalHours * 60;
+              }
+            } else {
+              // No record
+              if (isSunday) {
+                empRow.push('WO', '', '');
+              } else {
+                empRow.push('A', '', '');
+                absentDays++;
+              }
+            }
           }
+
+          // Extra columns data
+          for (const extraCol of extraCols) {
+            if (extraCol === 'Total Working Hours') {
+              empRow.push(formatHours(totalWorkMin / 60));
+            } else if (extraCol === 'Leave') {
+              empRow.push(Math.round(absentDays));
+            } else {
+              empRow.push('');
+            }
+          }
+
+          // Pad to maxDataCols
+          while (empRow.length < maxDataCols) empRow.push('');
+          aoa.push(empRow);
+        }
+      };
+
+      // ── SECTION 1: Days 1-11 ──
+      buildSection(0, 1, 11, []);
+
+      // ── SECTION 2: Days 12-22 ──
+      buildSection(1, 12, 22, []);
+
+      // ── SECTION 3: Days 23-31 + Total Working Hours + Leave ──
+      buildSection(2, 23, 31, ['Total Working Hours', 'Leave']);
+
+      // ── Create worksheet ──
+      const ws = XLSXStyle.utils.aoa_to_sheet(aoa);
+      ws['!merges'] = allMerges;
+
+      // ── STYLES ──
+
+      // Row 1: Title row - Gold background
+      for (let c = 0; c < maxDataCols; c++) {
+        const addr = `${colLetter(c)}1`;
+        if (!ws[addr]) {
+          ws[addr] = { t: 's', v: '', s: {} };
+        }
+        ws[addr].s = {
+          font: { bold: true, color: { rgb: WHITE }, sz: 14 },
+          fill: { fgColor: { rgb: GOLD } },
+          alignment: { horizontal: 'center' as const, vertical: 'center' as const },
+          border: fullBorder(GOLD, 'medium'),
+        };
+      }
+
+      // Style each section
+      let currentRow = 2; // Start after title
+
+      const styleSectionRows = (
+        dayStart: number,
+        dayEnd: number,
+        numEmployees: number,
+        extraCols: string[]
+      ) => {
+        const numDays = dayEnd - dayStart + 1;
+
+        // ── Date header row ── Dark background, white text, bold date
+        for (let c = 0; c < maxDataCols; c++) {
+          const addr = `${colLetter(c)}${currentRow}`;
+          if (!ws[addr]) {
+            ws[addr] = { t: 's', v: '', s: {} };
+          }
+
+          // Check if this column is a Sunday
+          const isSunday = (c > 0 && c <= numDays * 3) ? 
+            new Date(year, month - 1, dayStart + Math.floor((c - 1) / 3)).getDay() === 0 : false;
+
+          ws[addr].s = {
+            font: { bold: true, color: { rgb: isSunday ? AMBER_HIGHLIGHT : WHITE }, sz: 11 },
+            fill: { fgColor: { rgb: DARK } },
+            alignment: { horizontal: 'center' as const, vertical: 'center' as const },
+            border: fullBorder(WHITE, 'medium'),
+          };
+        }
+        currentRow++;
+
+        // ── Sub-header row (IN/OUT/TOTAL HRS) ── Deep blue
+        for (let c = 0; c < maxDataCols; c++) {
+          const addr = `${colLetter(c)}${currentRow}`;
+          if (!ws[addr]) {
+            ws[addr] = { t: 's', v: '', s: {} };
+          }
+
+          const isSunday = (c > 0 && c <= numDays * 3) ?
+            new Date(year, month - 1, dayStart + Math.floor((c - 1) / 3)).getDay() === 0 : false;
+
+          ws[addr].s = {
+            font: { bold: true, color: { rgb: isSunday ? AMBER_HIGHLIGHT : WHITE }, sz: 9 },
+            fill: { fgColor: { rgb: DEEP_BLUE } },
+            alignment: { horizontal: 'center' as const, vertical: 'center' as const },
+            border: fullBorder(DEEP_BLUE),
+          };
+        }
+        currentRow++;
+
+        // ── Employee data rows ──
+        for (let eIdx = 0; eIdx < numEmployees; eIdx++) {
+          const isEven = eIdx % 2 === 0;
+          const bg = isEven ? LIGHT_BG : WHITE;
+
+          for (let c = 0; c < maxDataCols; c++) {
+            const addr = `${colLetter(c)}${currentRow}`;
+            const cell = ws[addr];
+            if (!cell) continue;
+
+            const val = String(cell.v || '');
+
+            if (c === 0) {
+              // Employee name column
+              cell.s = {
+                font: { bold: true, sz: 10, color: { rgb: WHITE } },
+                fill: { fgColor: { rgb: DEEP_BLUE } },
+                alignment: { horizontal: 'left' as const, vertical: 'center' as const },
+                border: fullBorder('FFFFFF', 'thin'),
+              };
+            } else if (val === 'A') {
+              cell.s = {
+                font: { bold: true, sz: 10, color: { rgb: 'DC2626' } },
+                fill: { fgColor: { rgb: LIGHT_RED } },
+                alignment: { horizontal: 'center' as const, vertical: 'center' as const },
+                border: fullBorder('D0D0D0'),
+              };
+            } else if (val === 'WO') {
+              cell.s = {
+                font: { bold: true, sz: 10, color: { rgb: '059669' } },
+                fill: { fgColor: { rgb: LIGHT_GREEN } },
+                alignment: { horizontal: 'center' as const, vertical: 'center' as const },
+                border: fullBorder('D0D0D0'),
+              };
+            } else if (val === 'H') {
+              cell.s = {
+                font: { bold: true, sz: 10, color: { rgb: '7C3AED' } },
+                fill: { fgColor: { rgb: 'EDE9FE' } },
+                alignment: { horizontal: 'center' as const, vertical: 'center' as const },
+                border: fullBorder('D0D0D0'),
+              };
+            } else if (val === 'HD' || val.startsWith('HD')) {
+              cell.s = {
+                font: { bold: true, sz: 10, color: { rgb: 'D97706' } },
+                fill: { fgColor: { rgb: LIGHT_AMBER } },
+                alignment: { horizontal: 'center' as const, vertical: 'center' as const },
+                border: fullBorder('D0D0D0'),
+              };
+            } else if (val === 'L') {
+              cell.s = {
+                font: { bold: true, sz: 10, color: { rgb: 'D97706' } },
+                fill: { fgColor: { rgb: 'FEF3C7' } },
+                alignment: { horizontal: 'center' as const, vertical: 'center' as const },
+                border: fullBorder('D0D0D0'),
+              };
+            } else {
+              // Default data cell
+              // Check if this is a Sunday column - highlight with amber
+              const dayIdx = (c > 0 && c <= numDays * 3) ? dayStart + Math.floor((c - 1) / 3) : -1;
+              const isSundayCol = dayIdx > 0 && new Date(year, month - 1, dayIdx).getDay() === 0;
+
+              if (isSundayCol && val) {
+                cell.s = {
+                  font: { sz: 9, color: { rgb: '059669' } },
+                  fill: { fgColor: { rgb: LIGHT_GREEN } },
+                  alignment: { horizontal: 'center' as const, vertical: 'center' as const },
+                  border: fullBorder('D0D0D0'),
+                };
+              } else {
+                cell.s = {
+                  font: { sz: 9, color: { rgb: '333333' } },
+                  fill: { fgColor: { rgb: bg } },
+                  alignment: { horizontal: 'center' as const, vertical: 'center' as const },
+                  border: fullBorder('D0D0D0'),
+                };
+              }
+            }
+          }
+          currentRow++;
+        }
+      };
+
+      // Style section 1
+      styleSectionRows(1, 11, employees.length, []);
+      // Style section 2
+      styleSectionRows(12, 22, employees.length, []);
+      // Style section 3
+      styleSectionRows(23, 31, employees.length, ['Total Working Hours', 'Leave']);
+
+      // ── Column widths ──
+      const colWidths: { wch: number }[] = [{ wch: 22 }]; // Column A = employee name
+      // Each day: IN(8), OUT(8), TOTAL HRS(12)
+      for (let s = 0; s < 3; s++) {
+        const dayStart = s === 0 ? 1 : s === 1 ? 12 : 23;
+        const dayEnd = s === 0 ? 11 : s === 1 ? 22 : 31;
+        for (let d = dayStart; d <= dayEnd; d++) {
+          colWidths.push({ wch: 8 });  // IN
+          colWidths.push({ wch: 8 });  // OUT
+          colWidths.push({ wch: 12 }); // TOTAL HRS
+        }
+        if (s === 2) {
+          colWidths.push({ wch: 16 }); // Total Working Hours
+          colWidths.push({ wch: 8 });  // Leave
         }
       }
-
-      // Column widths
-      ws['!cols'] = [];
-      ws['!cols'][0] = { wch: 30 }; // Employee name
-      for (let d = 1; d <= daysInMonth; d++) {
-        ws['!cols'][d] = { wch: 12 }; // Day columns
-      }
-      ws['!cols'][daysInMonth + 1] = { wch: 18 }; // Total Working Hours
-      ws['!cols'][daysInMonth + 2] = { wch: 12 }; // OT Hours
-      ws['!cols'][daysInMonth + 3] = { wch: 10 }; // Present
-      ws['!cols'][daysInMonth + 4] = { wch: 10 }; // Absent
-
-      // Merged cells - title row
-      ws['!merges'] = [
-        { s: { r: 0, c: 0 }, e: { r: 0, c: totalCols - 1 } },  // Title
-      ];
+      // Pad to maxDataCols
+      while (colWidths.length < maxDataCols) colWidths.push({ wch: 8 });
+      ws['!cols'] = colWidths;
 
       // Sheet name (max 31 chars for Excel)
       const sheetName = firmCode.length <= 31 ? firmCode : firmCode.substring(0, 31);
