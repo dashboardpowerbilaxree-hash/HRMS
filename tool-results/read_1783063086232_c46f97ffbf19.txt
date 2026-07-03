@@ -1,0 +1,587 @@
+  1001→                          <TableRow key={rec.id} className="hover:bg-muted/30 transition-colors">
+  1002→                            <TableCell>
+  1003→                              <div className="flex items-center gap-2">
+  1004→                                <div className="w-7 h-7 rounded-full gradient-laxree flex items-center justify-center text-white text-[10px] font-bold shrink-0">
+  1005→                                  {rec.employee?.fullName?.charAt(0) || '?'}
+  1006→                                </div>
+  1007→                                <div className="min-w-0 overflow-hidden">
+  1008→                                  <p className="text-sm font-medium truncate max-w-[120px]">{rec.employee?.fullName || rec.employeeId}</p>
+  1009→                                </div>
+  1010→                              </div>
+  1011→                            </TableCell>
+  1012→                            <TableCell className="text-xs font-mono text-muted-foreground">{rec.employeeId}</TableCell>
+  1013→                            <TableCell className="hidden md:table-cell">
+  1014→                              <FirmBadge firm={getFirmFromEmployeeId(rec.employeeId) || rec.employee?.department || ''} />
+  1015→                            </TableCell>
+  1016→                            <TableCell className="text-sm font-mono whitespace-nowrap">{rec.checkIn || '—'}</TableCell>
+  1017→                            <TableCell className="hidden sm:table-cell text-sm font-mono whitespace-nowrap">{rec.checkOut || '—'}</TableCell>
+  1018→                            <TableCell className="text-sm font-medium whitespace-nowrap">{rec.totalHours > 0 ? `${formatHours(rec.totalHours)}h` : '—'}</TableCell>
+  1019→                            <TableCell><StatusBadge status={rec.status} /></TableCell>
+  1020→                            <TableCell className="hidden lg:table-cell text-sm whitespace-nowrap">
+  1021→                              {rec.overtimeHours > 0 ? (
+  1022→                                <span className="text-cyan-600 dark:text-cyan-400 font-medium">{formatOT(rec.overtimeHours)}</span>
+  1023→                              ) : '—'}
+  1024→                            </TableCell>
+  1025→                            <TableCell className="sticky right-0 bg-card">
+  1026→                              <div className="flex items-center gap-1">
+  1027→                                <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => handleEdit(rec)} title="Edit">
+  1028→                                  <Pencil className="w-3 h-3" />
+  1029→                                </Button>
+  1030→                                <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-destructive hover:text-destructive" onClick={() => handleDelete(rec.id)} title="Delete">
+  1031→                                  <Trash2 className="w-3 h-3" />
+  1032→                                </Button>
+  1033→                              </div>
+  1034→                            </TableCell>
+  1035→                          </TableRow>
+  1036→                        ))
+  1037→                      )}
+  1038→                    </TableBody>
+  1039→                  </Table>
+  1040→                </div>
+  1041→              </CardContent>
+  1042→            </Card>
+  1043→          </motion.div>
+  1044→        </TabsContent>
+  1045→
+  1046→        {/* ══════════════════════════════════════════════════
+  1047→            MONTHLY ATTENDANCE TAB
+  1048→            ══════════════════════════════════════════════════ */}
+  1049→        <TabsContent value="monthly" className="space-y-4">
+  1050→          {/* ── Employee Selector ── */}
+  1051→          <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-3">
+  1052→            <div className="flex flex-col sm:flex-row gap-3 flex-wrap items-end">
+  1053→              <div className="flex-1 min-w-[200px]">
+  1054→                <Label className="text-xs text-muted-foreground mb-1 block">Select Employee</Label>
+  1055→                <Select value={monthlyEmpId} onValueChange={setMonthlyEmpId}>
+  1056→                  <SelectTrigger className="w-full h-9">
+  1057→                    <Search className="w-3.5 h-3.5 mr-1.5 text-muted-foreground" />
+  1058→                    <SelectValue placeholder="Select Employee..." />
+  1059→                  </SelectTrigger>
+  1060→                  <SelectContent>
+  1061→                    {employees.sort((a, b) => a.fullName.localeCompare(b.fullName)).map(e => (
+  1062→                      <SelectItem key={e.employeeId} value={e.employeeId}>
+  1063→                        {e.fullName} ({e.employeeId})
+  1064→                      </SelectItem>
+  1065→                    ))}
+  1066→                  </SelectContent>
+  1067→                </Select>
+  1068→              </div>
+  1069→              <Select value={filterMonth} onValueChange={setFilterMonth}>
+  1070→                <SelectTrigger className="w-full sm:w-36 h-9"><SelectValue /></SelectTrigger>
+  1071→                <SelectContent>
+  1072→                  {MONTHS.map((m, i) => (<SelectItem key={i + 1} value={String(i + 1)}>{m}</SelectItem>))}
+  1073→                </SelectContent>
+  1074→              </Select>
+  1075→              <Select value={filterYear} onValueChange={setFilterYear}>
+  1076→                <SelectTrigger className="w-full sm:w-24 h-9"><SelectValue /></SelectTrigger>
+  1077→                <SelectContent>
+  1078→                  {[2024, 2025, 2026, 2027].map(y => (<SelectItem key={y} value={String(y)}>{y}</SelectItem>))}
+  1079→                </SelectContent>
+  1080→              </Select>
+  1081→              {monthlySummary && (
+  1082→                <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={handleExportExcel}>
+  1083→                  <FileDown className="w-3.5 h-3.5" /> Export Excel
+  1084→                </Button>
+  1085→              )}
+  1086→            </div>
+  1087→          </motion.div>
+  1088→
+  1089→          {/* ── Monthly Summary Card — Spreadsheet Format ── */}
+  1090→          {monthlyLoading ? (
+  1091→            <Card className="glass-card card-gold-hover border-0">
+  1092→              <CardContent className="p-8 text-center text-muted-foreground">
+  1093→                <div className="animate-spin w-8 h-8 border-2 border-gold border-t-transparent rounded-full mx-auto mb-3" />
+  1094→                <p>Loading monthly summary...</p>
+  1095→              </CardContent>
+  1096→            </Card>
+  1097→          ) : monthlySummary ? (
+  1098→            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+  1099→              <Card className="glass-card card-gold-hover border-0">
+  1100→                <CardContent className="p-4 md:p-6 space-y-4">
+  1101→                  {/* Employee Info Header */}
+  1102→                  <div className="flex items-center gap-3 pb-3 border-b border-border/50">
+  1103→                    {(() => {
+  1104→                      const firmCode = getFirmFromEmployeeId(monthlySummary.employee.employeeId) || monthlySummary.employee.firm || monthlySummary.employee.department;
+  1105→                      const logoSrc = FIRM_LOGOS[firmCode];
+  1106→                      return logoSrc ? (
+  1107→                        <div className="w-14 h-14 rounded-xl overflow-hidden border-2 border-gold/30 shrink-0 bg-white p-1">
+  1108→                          <Image src={logoSrc} alt={firmCode} width={48} height={48} className="w-full h-full object-contain" />
+  1109→                        </div>
+  1110→                      ) : (
+  1111→                        <div className="w-14 h-14 rounded-xl gradient-laxree flex items-center justify-center text-white text-lg font-bold shrink-0">
+  1112→                          {monthlySummary.employee.fullName.charAt(0)}
+  1113→                        </div>
+  1114→                      );
+  1115→                    })()}
+  1116→                    <div className="min-w-0">
+  1117→                      <h3 className="font-bold text-lg">{monthlySummary.employee.fullName}</h3>
+  1118→                      <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
+  1119→                        <span className="font-mono">{monthlySummary.employee.employeeId}</span>
+  1120→                        <span>•</span>
+  1121→                        <FirmBadge firm={getFirmFromEmployeeId(monthlySummary.employee.employeeId) || monthlySummary.employee.firm || monthlySummary.employee.department} />
+  1122→                        <span>•</span>
+  1123→                        <span>{monthlySummary.employee.location}</span>
+  1124→                        <span>•</span>
+  1125→                        <span>{monthlySummary.monthName} {monthlySummary.year}</span>
+  1126→                      </div>
+  1127→                    </div>
+  1128→                  </div>
+  1129→
+  1130→                  {/* ── Spreadsheet-style Summary Table ── */}
+  1131→                  <div className="overflow-x-auto rounded-lg border border-border/50">
+  1132→                    <table className="w-full text-sm border-collapse">
+  1133→                      <thead>
+  1134→                        <tr className="bg-emerald-700 dark:bg-emerald-900 text-white">
+  1135→                          <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider border-r border-emerald-600/30">Days Present</th>
+  1136→                          <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider border-r border-emerald-600/30">Days Absent</th>
+  1137→                          <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider border-r border-emerald-600/30">Half Days</th>
+  1138→                          <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider border-r border-emerald-600/30">AL</th>
+  1139→                          <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider border-r border-emerald-600/30">UL</th>
+  1140→                          <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider border-r border-emerald-600/30">Total Hrs Worked</th>
+  1141→                          <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider border-r border-emerald-600/30">OT Hrs</th>
+  1142→                          <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider border-r border-emerald-600/30">Sunday Hrs</th>
+  1143→                          <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider">Total Hrs (incl. Sunday)</th>
+  1144→                        </tr>
+  1145→                      </thead>
+  1146→                      <tbody>
+  1147→                        <tr className="bg-muted/30 hover:bg-muted/50 transition-colors">
+  1148→                          <td className="px-3 py-3 font-bold text-emerald-600 dark:text-emerald-400 border-r border-border/30">{monthlySummary.presentDays}</td>
+  1149→                          <td className="px-3 py-3 font-bold text-red-500 border-r border-border/30">{monthlySummary.absentDays}</td>
+  1150→                          <td className="px-3 py-3 font-bold text-orange-500 border-r border-border/30">{monthlySummary.halfDays}</td>
+  1151→                          <td className="px-3 py-3 text-blue-500 border-r border-border/30">{monthlySummary.annualLeaves || 0}</td>
+  1152→                          <td className="px-3 py-3 text-amber-600 dark:text-amber-400 border-r border-border/30">{monthlySummary.unpaidLeaves || 0}</td>
+  1153→                          <td className="px-3 py-3 font-bold text-cyan-600 dark:text-cyan-400 border-r border-border/30">{displayHHMM(monthlySummary.totalWorkHours)}</td>
+  1154→                          <td className="px-3 py-3 font-bold text-yellow-600 dark:text-yellow-400 border-r border-border/30">{formatOT(monthlySummary.totalOvertimeHours)}</td>
+  1155→                          <td className="px-3 py-3 text-blue-600 dark:text-blue-400 border-r border-border/30">{displayHHMM(monthlySummary.totalSundayHours)}</td>
+  1156→                          <td className="px-3 py-3 font-bold text-gold">{displayHHMM(monthlySummary.totalHrsInclSunday || (monthlySummary.totalWorkHours || 0))}</td>
+  1157→                        </tr>
+  1158→                      </tbody>
+  1159→                    </table>
+  1160→                  </div>
+  1161→
+  1162→                  {/* Additional Info Row */}
+  1163→                  <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+  1164→                    {[
+  1165→                      { label: 'Working Days', value: monthlySummary.totalWorkingDays, color: 'text-foreground' },
+  1166→                      { label: 'Weekly Offs', value: monthlySummary.weeklyOffs, color: 'text-sky-500' },
+  1167→                      { label: 'Sundays', value: monthlySummary.sundays, color: 'text-blue-500' },
+  1168→                      { label: 'Late Entries', value: monthlySummary.lateEntries, color: 'text-amber-500' },
+  1169→                      { label: 'Early Outs', value: monthlySummary.earlyOuts || 0, color: 'text-rose-500' },
+  1170→                      { label: 'Shift Hrs', value: `${displayHHMM(monthlySummary.employee.shiftHours)}h`, color: 'text-muted-foreground' },
+  1171→                    ].map(item => (
+  1172→                      <div key={item.label} className="p-2 rounded-lg bg-muted/20 text-center">
+  1173→                        <p className="text-[9px] text-muted-foreground font-medium uppercase tracking-wider">{item.label}</p>
+  1174→                        <p className={`text-sm font-bold ${item.color}`}>{item.value}</p>
+  1175→                      </div>
+  1176→                    ))}
+  1177→                  </div>
+  1178→
+  1179→                  <Separator />
+  1180→
+  1181→                  {/* Daily Records Table — Full scrollable */}
+  1182→                  <div>
+  1183→                    <h4 className="text-sm font-semibold mb-2 flex items-center gap-1.5">
+  1184→                      <ChevronRight className="w-4 h-4 text-gold" />
+  1185→                      Daily Attendance Breakdown ({monthlySummary.records.length} days)
+  1186→                    </h4>
+  1187→                    <div
+  1188→                      className="rounded-lg border border-border/50"
+  1189→                      style={{
+  1190→                        maxHeight: '60vh',
+  1191→                        overflowY: 'auto',
+  1192→                        WebkitOverflowScrolling: 'touch',
+  1193→                        scrollBehavior: 'smooth',
+  1194→                      }}
+  1195→                    >
+  1196→                      <Table>
+  1197→                        <TableHeader>
+  1198→                          <TableRow className="hover:bg-transparent sticky top-0 bg-card z-10">
+  1199→                            <TableHead className="text-xs">Date</TableHead>
+  1200→                            <TableHead className="text-xs">Day</TableHead>
+  1201→                            <TableHead className="text-xs">In</TableHead>
+  1202→                            <TableHead className="text-xs">Out</TableHead>
+  1203→                            <TableHead className="text-xs">Hrs</TableHead>
+  1204→                            <TableHead className="text-xs">Status</TableHead>
+  1205→                            <TableHead className="text-xs">OT</TableHead>
+  1206→                          </TableRow>
+  1207→                        </TableHeader>
+  1208→                        <TableBody>
+  1209→                          {(() => {
+  1210→                            const daysInMonth = new Date(monthlySummary.year, monthlySummary.month, 0).getDate();
+  1211→                            const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  1212→                            const rows = [];
+  1213→                            for (let day = 1; day <= daysInMonth; day++) {
+  1214→                              const dateStr = `${monthlySummary.year}-${String(monthlySummary.month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  1215→                              const dateObj = new Date(dateStr + 'T00:00:00');
+  1216→                              const dayName = dayNames[dateObj.getDay()];
+  1217→                              const rec = monthlySummary.records.find((r: any) => {
+  1218→                                const rDate = new Date(r.date);
+  1219→                                return rDate.getFullYear() === monthlySummary.year && rDate.getMonth() + 1 === monthlySummary.month && rDate.getDate() === day;
+  1220→                              });
+  1221→                              const isSunday = dateObj.getDay() === 0;
+  1222→                              rows.push(
+  1223→                                <TableRow
+  1224→                                  key={day}
+  1225→                                  className={`${isSunday ? 'bg-blue-500/5' : 'hover:bg-muted/30'} transition-colors`}
+  1226→                                >
+  1227→                                  <TableCell className="text-xs whitespace-nowrap font-medium">
+  1228→                                    {dateObj.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+  1229→                                  </TableCell>
+  1230→                                  <TableCell className={`text-xs ${isSunday ? 'text-blue-500 font-bold' : ''}`}>{dayName}</TableCell>
+  1231→                                  <TableCell className="text-xs font-mono">{rec?.checkIn || '—'}</TableCell>
+  1232→                                  <TableCell className="text-xs font-mono">{rec?.checkOut || '—'}</TableCell>
+  1233→                                  <TableCell className="text-xs font-medium">{rec && rec.totalHours > 0 ? `${formatHours(rec.totalHours)}h` : '—'}</TableCell>
+  1234→                                  <TableCell>
+  1235→                                    {rec ? (
+  1236→                                      <StatusBadge status={rec.status} />
+  1237→                                    ) : isSunday ? (
+  1238→                                      <StatusBadge status="weekly-off" />
+  1239→                                    ) : (
+  1240→                                      <span className="text-xs text-muted-foreground italic">No Record</span>
+  1241→                                    )}
+  1242→                                  </TableCell>
+  1243→                                  <TableCell className="text-xs">{rec && rec.overtimeHours > 0 ? formatOT(rec.overtimeHours) : '—'}</TableCell>
+  1244→                                </TableRow>
+  1245→                              );
+  1246→                            }
+  1247→                            return rows;
+  1248→                          })()}
+  1249→                        </TableBody>
+  1250→                      </Table>
+  1251→                    </div>
+  1252→                  </div>
+  1253→                </CardContent>
+  1254→              </Card>
+  1255→            </motion.div>
+  1256→          ) : (
+  1257→            <Card className="glass-card card-gold-hover border-0">
+  1258→              <CardContent className="p-8 text-center text-muted-foreground">
+  1259→                <CalendarDays className="w-12 h-12 mx-auto mb-3 opacity-30" />
+  1260→                <p>Select an employee to view monthly attendance summary</p>
+  1261→              </CardContent>
+  1262→            </Card>
+  1263→          )}
+  1264→        </TabsContent>
+  1265→
+  1266→        {/* ══════════════════════════════════════════════════
+  1267→            DAILY ATTENDANCE IMPORT TAB
+  1268→            ══════════════════════════════════════════════════ */}
+  1269→        <TabsContent value="import" className="space-y-4">
+  1270→          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+  1271→            <Card className="glass-card card-gold-hover border-0">
+  1272→              <CardContent className="p-6 space-y-6">
+  1273→                {/* Upload Section */}
+  1274→                <div>
+  1275→                  <div className="flex items-center justify-between mb-3">
+  1276→                    <h3 className="text-sm font-semibold flex items-center gap-2">
+  1277→                      <Upload className="w-4 h-4 text-gold" />
+  1278→                      Upload Attendance Sheet
+  1279→                    </h3>
+  1280→                    <Button
+  1281→                      variant="outline"
+  1282→                      size="sm"
+  1283→                      className="h-8 gap-1.5 text-xs border-gold/30 hover:border-gold/60 hover:bg-gold/5"
+  1284→                      onClick={handleDownloadTemplate}
+  1285→                    >
+  1286→                      <Download className="w-3.5 h-3.5" /> Download Template
+  1287→                    </Button>
+  1288→                  </div>
+  1289→
+  1290→                  {/* Attendance Date Picker */}
+  1291→                  <div className="mb-4">
+  1292→                    <Label htmlFor="importDate" className="text-xs font-semibold flex items-center gap-1.5 mb-1.5">
+  1293→                      <CalendarDays className="w-3.5 h-3.5 text-gold" />
+  1294→                      Attendance Date
+  1295→                    </Label>
+  1296→                    <Input
+  1297→                      id="importDate"
+  1298→                      type="date"
+  1299→                      value={importDate}
+  1300→                      onChange={(e) => setImportDate(e.target.value)}
+  1301→                      className="w-full sm:w-56 h-9 text-sm font-medium input-premium rounded-lg"
+  1302→                    />
+  1303→                    <p className="text-[10px] text-muted-foreground mt-1">
+  1304→                      This date will be used for all rows in the uploaded file (daily template has no Date column per row).
+  1305→                    </p>
+  1306→                  </div>
+  1307→
+  1308→                  <div className="border-2 border-dashed border-border rounded-xl p-8 text-center hover:border-gold/50 transition-colors">
+  1309→                    <input
+  1310→                      ref={fileInputRef}
+  1311→                      type="file"
+  1312→                      accept=".xlsx,.xls,.csv"
+  1313→                      onChange={handleFileUpload}
+  1314→                      className="hidden"
+  1315→                    />
+  1316→                    <FileSpreadsheet className="w-12 h-12 mx-auto mb-3 text-muted-foreground/50" />
+  1317→                    <p className="text-sm text-muted-foreground mb-3">
+  1318→                      Upload Excel (.xlsx, .xls) or CSV file with attendance data
+  1319→                    </p>
+  1320→                    <Button
+  1321→                      variant="outline"
+  1322→                      onClick={() => fileInputRef.current?.click()}
+  1323→                      className="gap-1.5"
+  1324→                    >
+  1325→                      <Upload className="w-4 h-4" /> Choose File
+  1326→                    </Button>
+  1327→                    {importFile && (
+  1328→                      <p className="text-xs text-muted-foreground mt-2">
+  1329→                        Selected: {importFile.name} ({(importFile.size / 1024).toFixed(1)} KB)
+  1330→                      </p>
+  1331→                    )}
+  1332→                  </div>
+  1333→                  <div className="mt-3 p-3 rounded-lg bg-gold/5 border border-gold/10">
+  1334→                    <Info className="w-4 h-4 text-gold inline mr-1.5 -mt-0.5" />
+  1335→                    <span className="text-xs text-muted-foreground">
+  1336→                      <strong>Template format:</strong> SNo, E. Code, Name, Shift, InTime, OutTime, Work Dur., OT, Tot. Dur., Status, Remarks. 
+  1337→                      The daily template has no Date column — set the <strong>Attendance Date</strong> above before uploading.
+  1338→                      Click <strong>"Download Template"</strong> to get the correct format with all employees pre-filled. 
+  1339→                      The system auto-converts Excel dates/times and matches employees by E. Code or Name.
+  1340→                      Also supports the old format (Employee ID, Employee Name, Date, In Time, Out Time, Status).
+  1341→                    </span>
+  1342→                  </div>
+  1343→                </div>
+  1344→
+  1345→                {/* Preview Section */}
+  1346→                {importPreview.length > 0 && (
+  1347→                  <div>
+  1348→                    <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+  1349→                      <Search className="w-4 h-4 text-gold" />
+  1350→                      Preview ({importPreview.length} records found)
+  1351→                      {!importPreview.some(r => r.date) && importDate && (
+  1352→                        <span className="text-[10px] text-muted-foreground font-normal ml-1">
+  1353→                          — using date: {importDate}
+  1354→                        </span>
+  1355→                      )}
+  1356→                    </h3>
+  1357→                    <div className="max-h-[40vh] overflow-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
+  1358→                      <Table>
+  1359→                        <TableHeader>
+  1360→                          <TableRow className="hover:bg-transparent">
+  1361→                            <TableHead className="text-xs">E. Code</TableHead>
+  1362→                            <TableHead className="text-xs">Name</TableHead>
+  1363→                            <TableHead className="text-xs">Shift</TableHead>
+  1364→                            <TableHead className="text-xs">InTime</TableHead>
+  1365→                            <TableHead className="text-xs">OutTime</TableHead>
+  1366→                            <TableHead className="text-xs">Status</TableHead>
+  1367→                            <TableHead className="text-xs">Remarks</TableHead>
+  1368→                          </TableRow>
+  1369→                        </TableHeader>
+  1370→                        <TableBody>
+  1371→                          {importPreview.slice(0, 100).map((row, i) => (
+  1372→                            <TableRow key={i} className="hover:bg-muted/30">
+  1373→                              <TableCell className="text-xs font-mono">{row.employeeId || '—'}</TableCell>
+  1374→                              <TableCell className="text-xs">{row.employeeName || '—'}</TableCell>
+  1375→                              <TableCell className="text-xs">{row.shift || '—'}</TableCell>
+  1376→                              <TableCell className="text-xs font-mono">{row.checkIn || '—'}</TableCell>
+  1377→                              <TableCell className="text-xs font-mono">{row.checkOut || '—'}</TableCell>
+  1378→                              <TableCell className="text-xs">{row.status || '—'}</TableCell>
+  1379→                              <TableCell className="text-xs">{row.remarks || '—'}</TableCell>
+  1380→                            </TableRow>
+  1381→                          ))}
+  1382→                        </TableBody>
+  1383→                      </Table>
+  1384→                    </div>
+  1385→
+  1386→                    {/* Process Button */}
+  1387→                    <div className="flex items-center gap-3 mt-4 pt-4 border-t relative z-10 bg-background">
+  1388→                      <Button
+  1389→                        className="gradient-laxree text-white gap-1.5 shrink-0"
+  1390→                        onClick={handleProcessImport}
+  1391→                        disabled={importing}
+  1392→                      >
+  1393→                        {importing ? (
+  1394→                          <>
+  1395→                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+  1396→                            Processing...
+  1397→                          </>
+  1398→                        ) : (
+  1399→                          <>
+  1400→                            <CheckCircle className="w-4 h-4" /> Process Attendance
+  1401→                          </>
+  1402→                        )}
+  1403→                      </Button>
+  1404→                      <Button
+  1405→                        variant="outline"
+  1406→                        className="shrink-0"
+  1407→                        onClick={() => {
+  1408→                          setImportPreview([]);
+  1409→                          setImportFile(null);
+  1410→                          setImportResult(null);
+  1411→                          if (fileInputRef.current) fileInputRef.current.value = '';
+  1412→                        }}
+  1413→                      >
+  1414→                        Clear
+  1415→                      </Button>
+  1416→                      <span className="text-xs text-muted-foreground ml-auto">{importPreview.length} records ready to process</span>
+  1417→                    </div>
+  1418→                  </div>
+  1419→                )}
+  1420→
+  1421→                {/* Import Result */}
+  1422→                {importResult && (
+  1423→                  <div className="p-4 rounded-lg bg-muted/30 border">
+  1424→                    <h4 className="text-sm font-semibold mb-2">Import Results</h4>
+  1425→                    <div className="flex gap-4 text-sm">
+  1426→                      <span className="text-emerald-500 font-medium">Success: {importResult.successCount}</span>
+  1427→                      {importResult.errorCount > 0 && (
+  1428→                        <span className="text-red-500 font-medium">Errors: {importResult.errorCount}</span>
+  1429→                      )}
+  1430→                    </div>
+  1431→                    {importResult.results?.filter((r: any) => r.error).length > 0 && (
+  1432→                      <div className="mt-2 text-xs text-red-500">
+  1433→                        {importResult.results.filter((r: any) => r.error).map((r: any, i: number) => (
+  1434→                          <p key={i}>{r.employeeId} ({r.date}): {r.error}</p>
+  1435→                        ))}
+  1436→                      </div>
+  1437→                    )}
+  1438→                  </div>
+  1439→                )}
+  1440→              </CardContent>
+  1441→            </Card>
+  1442→          </motion.div>
+  1443→        </TabsContent>
+  1444→      </Tabs>
+  1445→
+  1446→      {/* ── Mark Attendance Dialog ── */}
+  1447→      <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setForm({ employeeId: '', date: '', checkIn: '', checkOut: '' }); setEmployeeSearch(''); } }}>
+  1448→        <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto z-[100]">
+  1449→          <DialogHeader>
+  1450→            <DialogTitle className="flex items-center gap-2">
+  1451→              <Clock className="w-5 h-5 text-gold" />
+  1452→              Mark Attendance
+  1453→            </DialogTitle>
+  1454→            <DialogDescription>Select an employee and enter attendance details</DialogDescription>
+  1455→          </DialogHeader>
+  1456→          <div className="space-y-4 py-2">
+  1457→            {/* Employee Selection */}
+  1458→            <div className="space-y-2">
+  1459→              <Label className="text-sm font-medium">Employee *</Label>
+  1460→              {!form.employeeId ? (
+  1461→                <div className="space-y-2">
+  1462→                  <div className="relative">
+  1463→                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+  1464→                    <Input
+  1465→                      className="pl-9"
+  1466→                      placeholder="Search employee by name or ID..."
+  1467→                      value={employeeSearch}
+  1468→                      onChange={(e) => setEmployeeSearch(e.target.value)}
+  1469→                      autoFocus
+  1470→                    />
+  1471→                  </div>
+  1472→                  <div className="border rounded-lg max-h-48 overflow-y-auto">
+  1473→                    {filteredEmployees.length === 0 ? (
+  1474→                      <p className="text-sm text-muted-foreground text-center py-4">No employees found</p>
+  1475→                    ) : (
+  1476→                      filteredEmployees.slice(0, 20).map((e) => (
+  1477→                        <button
+  1478→                          key={e.employeeId}
+  1479→                          className="w-full text-left px-3 py-2.5 hover:bg-muted/80 text-sm flex items-center justify-between transition-colors border-b border-border/50 last:border-0 gap-2"
+  1480→                          onClick={() => { setForm({ ...form, employeeId: e.employeeId }); setEmployeeSearch(''); }}
+  1481→                        >
+  1482→                          <div className="flex items-center gap-2 min-w-0 overflow-hidden">
+  1483→                            <FirmBadge firm={e.department} />
+  1484→                            <span className="truncate-fix">{e.fullName}</span>
+  1485→                          </div>
+  1486→                          <span className="text-xs text-muted-foreground font-mono shrink-0">{e.employeeId}</span>
+  1487→                        </button>
+  1488→                      ))
+  1489→                    )}
+  1490→                  </div>
+  1491→                </div>
+  1492→              ) : (
+  1493→                <div className="flex items-center justify-between px-3 py-2.5 bg-muted/50 rounded-lg gap-2">
+  1494→                  <div className="flex items-center gap-2 min-w-0 overflow-hidden">
+  1495→                    <div className="w-7 h-7 rounded-full gradient-laxree flex items-center justify-center text-white text-[10px] font-bold shrink-0">
+  1496→                      {selectedEmployee?.fullName?.charAt(0) || '?'}
+  1497→                    </div>
+  1498→                    <span className="text-sm font-medium truncate-fix">{selectedEmployee?.fullName}</span>
+  1499→                    <FirmBadge firm={selectedEmployee?.department || ''} />
+  1500→                  </div>
+  1501→                  <Button variant="ghost" size="sm" className="h-7 text-xs shrink-0 px-2" onClick={() => setForm({ ...form, employeeId: '' })}>
+  1502→                    <X className="w-3 h-3 mr-1" /> Change
+  1503→                  </Button>
+  1504→                </div>
+  1505→              )}
+  1506→            </div>
+  1507→
+  1508→            <div className="space-y-2">
+  1509→              <Label className="text-sm font-medium">Date *</Label>
+  1510→              <Input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} className="w-full" />
+  1511→            </div>
+  1512→            <div className="grid grid-cols-2 gap-3">
+  1513→              <div className="space-y-2">
+  1514→                <Label className="text-sm font-medium">Check-In Time</Label>
+  1515→                <Input type="time" value={form.checkIn} onChange={(e) => setForm({ ...form, checkIn: e.target.value })} className="w-full" />
+  1516→              </div>
+  1517→              <div className="space-y-2">
+  1518→                <Label className="text-sm font-medium">Check-Out Time</Label>
+  1519→                <Input type="time" value={form.checkOut} onChange={(e) => setForm({ ...form, checkOut: e.target.value })} className="w-full" />
+  1520→              </div>
+  1521→            </div>
+  1522→
+  1523→            <div className="flex items-start gap-2 p-3 rounded-lg bg-gold/5 border border-gold/10">
+  1524→              <Info className="w-4 h-4 text-gold shrink-0 mt-0.5" />
+  1525→              <p className="text-xs text-muted-foreground leading-relaxed">
+  1526→                System auto-calculates working hours, late entry detection, overtime, Sunday hours, and public holiday tracking.
+  1527→              </p>
+  1528→            </div>
+  1529→
+  1530→            <Button className="w-full gradient-laxree text-white h-10" onClick={handleSubmit}>
+  1531→              Save Attendance
+  1532→            </Button>
+  1533→          </div>
+  1534→        </DialogContent>
+  1535→      </Dialog>
+  1536→
+  1537→      {/* ── Edit Attendance Dialog ── */}
+  1538→      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+  1539→        <DialogContent className="sm:max-w-md z-[100]">
+  1540→          <DialogHeader>
+  1541→            <DialogTitle className="flex items-center gap-2">
+  1542→              <Pencil className="w-5 h-5 text-gold" />
+  1543→              Edit Attendance
+  1544→            </DialogTitle>
+  1545→            <DialogDescription>Update check-in and check-out times for this attendance record</DialogDescription>
+  1546→          </DialogHeader>
+  1547→          {editRecord && (
+  1548→            <div className="space-y-4 py-2">
+  1549→              <div className="px-3 py-2.5 bg-muted/50 rounded-lg flex items-center gap-2">
+  1550→                <div className="w-8 h-8 rounded-full gradient-laxree flex items-center justify-center text-white text-xs font-bold shrink-0">
+  1551→                  {editRecord.employee?.fullName?.charAt(0) || '?'}
+  1552→                </div>
+  1553→                <div>
+  1554→                  <p className="text-sm font-medium">{editRecord.employee?.fullName || editRecord.employeeId}</p>
+  1555→                  <p className="text-xs text-muted-foreground">
+  1556→                    {editRecord.employeeId} • {new Date(editRecord.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+  1557→                  </p>
+  1558→                </div>
+  1559→                <StatusBadge status={editRecord.status} />
+  1560→              </div>
+  1561→              <div className="grid grid-cols-2 gap-3">
+  1562→                <div className="space-y-2">
+  1563→                  <Label className="text-sm font-medium">Check-In Time</Label>
+  1564→                  <Input type="time" value={editForm.checkIn} onChange={(e) => setEditForm({ ...editForm, checkIn: e.target.value })} className="w-full" />
+  1565→                </div>
+  1566→                <div className="space-y-2">
+  1567→                  <Label className="text-sm font-medium">Check-Out Time</Label>
+  1568→                  <Input type="time" value={editForm.checkOut} onChange={(e) => setEditForm({ ...editForm, checkOut: e.target.value })} className="w-full" />
+  1569→                </div>
+  1570→              </div>
+  1571→              <div className="flex items-start gap-2 p-3 rounded-lg bg-gold/5 border border-gold/10">
+  1572→                <Info className="w-4 h-4 text-gold shrink-0 mt-0.5" />
+  1573→                <p className="text-xs text-muted-foreground leading-relaxed">
+  1574→                  Hours, OT, late entry, and status will be auto-recalculated when you save.
+  1575→                </p>
+  1576→              </div>
+  1577→              <Button className="w-full gradient-laxree text-white h-10" onClick={handleEditSubmit}>
+  1578→                Update Attendance
+  1579→              </Button>
+  1580→            </div>
+  1581→          )}
+  1582→        </DialogContent>
+  1583→      </Dialog>
+  1584→    </div>
+  1585→  );
+  1586→}
+  1587→

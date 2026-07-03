@@ -1,0 +1,1587 @@
+     1→     1→'use client';
+     2→     2→
+     3→     3→import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+     4→     4→import { motion } from 'framer-motion';
+     5→     5→import {
+     6→     6→  Clock, CheckCircle, XCircle, AlertTriangle, Timer,
+     7→     7→  CalendarDays, Search, Building2, Info, MapPin, X,
+     8→     8→  Upload, FileSpreadsheet, Pencil, Trash2,
+     9→     9→  Download, FileDown, ChevronRight, Users
+    10→    10→} from 'lucide-react';
+    11→    11→// xlsx-js-style moved to server-side API routes for reliable export
+    12→    12→import { Card, CardContent } from '@/components/ui/card';
+    13→    13→import { Button } from '@/components/ui/button';
+    14→    14→import { Input } from '@/components/ui/input';
+    15→    15→import { Label } from '@/components/ui/label';
+    16→    16→import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+    17→    17→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+    18→    18→import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+    19→    19→import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+    20→    20→import { ScrollArea } from '@/components/ui/scroll-area';
+    21→    21→import { Separator } from '@/components/ui/separator';
+    22→    22→import { toast } from 'sonner';
+    23→    23→import Image from 'next/image';
+    24→    24→
+    25→    25→// ── Firm badge class map ──
+    26→    26→const FIRM_BADGE_CLASS: Record<string, string> = {
+    27→    27→  LAPL: 'firm-badge-lapl',
+    28→    28→  LRSL: 'firm-badge-lrsl',
+    29→    29→  SI: 'firm-badge-si',
+    30→    30→  SDF: 'firm-badge-sdf',
+    31→    31→  Roofing: 'firm-badge-roofing',
+    32→    32→};
+    33→    33→
+    34→    34→const FIRM_NAMES: Record<string, string> = {
+    35→    35→  LAPL: 'LAXREE AMENITIES PVT LTD',
+    36→    36→  LRSL: 'LAXREE ROOFING SOLUTION',
+    37→    37→  SI: 'SMARTH INTERNATIONAL',
+    38→    38→  SDF: 'SANGRAH DECOR & FURNITURE',
+    39→    39→};
+    40→    40→
+    41→    41→const FIRM_LOGOS: Record<string, string> = {
+    42→    42→  LAPL: '/logos/lapl.jpg',
+    43→    43→  LRSL: '/logos/lrsl.jpg',
+    44→    44→  SI: '/logos/si.png',
+    45→    45→  SDF: '/logos/sdf.png',
+    46→    46→};
+    47→    47→
+    48→    48→// ── Convert decimal hours to HH:MM display format ──
+    49→    49→// e.g., 6.25 → "6:15", 9.5 → "9:30", 8.0 → "8:00"
+    50→    50→// Uses colon (:) separator so it's clearly hours:minutes, NOT a decimal fraction
+    51→    51→function formatHours(decimal: number): string {
+    52→    52→  if (!decimal || decimal === 0) return '0:00';
+    53→    53→  const hours = Math.floor(decimal);
+    54→    54→  const minutes = Math.round((decimal - hours) * 60);
+    55→    55→  if (minutes >= 60) return `${hours + 1}:00`;
+    56→    56→  return `${hours}:${String(minutes).padStart(2, '0')}`;
+    57→    57→}
+    58→    58→
+    59→    59→// ── Format overtime hours in clear human-readable format ──
+    60→    60→// Under 1 hour: shows minutes only (e.g., 7m, 20m)
+    61→    61→// 1+ hours: shows hours and minutes (e.g., 1h 30m, 2h 15m)
+    62→    62→// This avoids the confusing decimal display like "0.07h" which looks like 4.2 min but means 7 min
+    63→    63→function formatOT(decimal: number): string {
+    64→    64→  if (!decimal || decimal === 0) return '0m';
+    65→    65→  const totalMinutes = Math.round(decimal * 60);
+    66→    66→  if (totalMinutes < 60) {
+    67→    67→    return `${totalMinutes}m`;
+    68→    68→  }
+    69→    69→  const hours = Math.floor(totalMinutes / 60);
+    70→    70→  const minutes = totalMinutes % 60;
+    71→    71→  if (minutes === 0) return `${hours}h`;
+    72→    72→  return `${hours}h ${minutes}m`;
+    73→    73→}
+    74→    74→
+    75→    75→// ── Display a value that's already in HH:MM format ──
+    76→    76→function displayHHMM(value: number | undefined | null): string {
+    77→    77→  if (!value && value !== 0) return '0:00';
+    78→    78→  return formatHours(value);
+    79→    79→}
+    80→    80→
+    81→    81→// ── Get firm code from employee ID prefix ──
+    82→    82→function getFirmFromEmployeeId(employeeId: string): string {
+    83→    83→  const id = employeeId.toUpperCase();
+    84→    84→  if (id.startsWith('LAPL')) return 'LAPL';
+    85→    85→  if (id.startsWith('LRSL')) return 'LRSL';
+    86→    86→  if (id.startsWith('SI-') || id.startsWith('SI0')) return 'SI';
+    87→    87→  if (id.startsWith('SDF')) return 'SDF';
+    88→    88→  return ''; // fallback to existing department/firm
+    89→    89→}
+    90→    90→
+    91→    91→const FIRMS = ['LAPL', 'LRSL', 'SI', 'SDF'];
+    92→    92→const LOCATIONS = ['Ajmer', 'Gurgaon', 'Palra Warehouse', 'Jaipur', 'Roofing Factory'];
+    93→    93→const MONTHS = [
+    94→    94→  'January', 'February', 'March', 'April', 'May', 'June',
+    95→    95→  'July', 'August', 'September', 'October', 'November', 'December',
+    96→    96→];
+    97→    97→
+    98→    98→// ── Attendance Record Type ──
+    99→    99→interface AttendanceRecord {
+   100→   100→  id: string;
+   101→   101→  employeeId: string;
+   102→   102→  date: string;
+   103→   103→  checkIn: string | null;
+   104→   104→  checkOut: string | null;
+   105→   105→  totalHours: number;
+   106→   106→  status: string;
+   107→   107→  lateEntry: boolean;
+   108→   108→  earlyOut: boolean;
+   109→   109→  halfDay: boolean;
+   110→   110→  overtimeHours: number;
+   111→   111→  isSunday: boolean;
+   112→   112→  isPH: boolean;
+   113→   113→  sundayHours: number;
+   114→   114→  employee?: {
+   115→   115→    fullName: string;
+   116→   116→    employeeId: string;
+   117→   117→    department: string;
+   118→   118→    designation: string;
+   119→   119→    location: string;
+   120→   120→  };
+   121→   121→}
+   122→   122→
+   123→   123→// ── Monthly Summary Type ──
+   124→   124→interface MonthlySummary {
+   125→   125→  employee: {
+   126→   126→    fullName: string;
+   127→   127→    employeeId: string;
+   128→   128→    firm: string;
+   129→   129→    firmFullName?: string;
+   130→   130→    location: string;
+   131→   131→    department: string;
+   132→   132→    designation: string;
+   133→   133→    shiftHours: number;
+   134→   134→    employmentType?: string;
+   135→   135→    hourlyRate?: number;
+   136→   136→    monthlySalary?: number;
+   137→   137→    overtimeRate?: number;
+   138→   138→  };
+   139→   139→  month: number;
+   140→   140→  year: number;
+   141→   141→  monthName: string;
+   142→   142→  daysInMonth: number;
+   143→   143→  totalWorkingDays: number;
+   144→   144→  presentDays: number;
+   145→   145→  absentDays: number;
+   146→   146→  leaveDays: number;
+   147→   147→  paidLeaves?: number;
+   148→   148→  annualLeaves?: number;
+   149→   149→  unpaidLeaves?: number;
+   150→   150→  halfDays: number;
+   151→   151→  holidayDays: number;
+   152→   152→  weeklyOffs: number;
+   153→   153→  sundays: number;
+   154→   154→  totalAttendance: number;
+   155→   155→  totalWorkHours: number;
+   156→   156→  totalOvertimeHours: number;
+   157→   157→  totalSundayHours: number;
+   158→   158→  totalHrsInclSunday?: number;
+   159→   159→  lateEntries: number;
+   160→   160→  earlyOuts?: number;
+   161→   161→  records: AttendanceRecord[];
+   162→   162→  // Salary calculation fields (from monthly-summary API)
+   163→   163→  perDayRate?: number;
+   164→   164→  calculatedHourlyRate?: number;
+   165→   165→  calculatedBaseSalary?: number;
+   166→   166→  calculatedOtAmount?: number;
+   167→   167→  calculatedGrossSalary?: number;
+   168→   168→}
+   169→   169→
+   170→   170→// ── Animated Counter ──
+   171→   171→function AnimatedCounter({ value, prefix = '', suffix = '', decimals = 0 }: {
+   172→   172→  value: number; prefix?: string; suffix?: string; decimals?: number;
+   173→   173→}) {
+   174→   174→  const [display, setDisplay] = useState(0);
+   175→   175→  useEffect(() => {
+   176→   176→    const duration = 1000;
+   177→   177→    const startTime = Date.now();
+   178→   178→    const step = () => {
+   179→   179→      const elapsed = Date.now() - startTime;
+   180→   180→      const progress = Math.min(elapsed / duration, 1);
+   181→   181→      const eased = 1 - Math.pow(1 - progress, 3);
+   182→   182→      setDisplay(value * eased);
+   183→   183→      if (progress < 1) requestAnimationFrame(step);
+   184→   184→    };
+   185→   185→    requestAnimationFrame(step);
+   186→   186→  }, [value]);
+   187→   187→
+   188→   188→  if (decimals > 0) {
+   189→   189→    return <span>{prefix}{display.toFixed(decimals)}{suffix}</span>;
+   190→   190→  }
+   191→   191→  return <span>{prefix}{Math.round(display).toLocaleString()}{suffix}</span>;
+   192→   192→}
+   193→   193→
+   194→   194→// ── Status badge with colors ──
+   195→   195→function StatusBadge({ status }: { status: string }) {
+   196→   196→  const config: Record<string, { bg: string; text: string; label: string }> = {
+   197→   197→    present: { bg: 'bg-emerald-500/15 border-emerald-500/20', text: 'text-emerald-600 dark:text-emerald-400', label: 'Present' },
+   198→   198→    late: { bg: 'bg-yellow-500/15 border-yellow-500/20', text: 'text-yellow-600 dark:text-yellow-400', label: 'Late' },
+   199→   199→    'early-out': { bg: 'bg-rose-500/15 border-rose-500/20', text: 'text-rose-600 dark:text-rose-400', label: 'Early Out' },
+   200→   200→    absent: { bg: 'bg-red-500/15 border-red-500/20', text: 'text-red-600 dark:text-red-400', label: 'Absent' },
+   201→   201→    'half-day': { bg: 'bg-orange-500/15 border-orange-500/20', text: 'text-orange-600 dark:text-orange-400', label: 'Half-Day' },
+   202→   202→    holiday: { bg: 'bg-purple-500/15 border-purple-500/20', text: 'text-purple-600 dark:text-purple-400', label: 'Holiday' },
+   203→   203→    'weekly-off': { bg: 'bg-blue-500/15 border-blue-500/20', text: 'text-blue-600 dark:text-blue-400', label: 'Weekly Off' },
+   204→   204→  };
+   205→   205→  const s = config[status] || { bg: 'bg-muted border-border', text: 'text-muted-foreground', label: status };
+   206→   206→  return (
+   207→   207→    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border whitespace-nowrap ${s.bg} ${s.text}`}>
+   208→   208→      {s.label}
+   209→   209→    </span>
+   210→   210→  );
+   211→   211→}
+   212→   212→
+   213→   213→// ── Firm badge ──
+   214→   214→function FirmBadge({ firm }: { firm: string }) {
+   215→   215→  return <span className={`${FIRM_BADGE_CLASS[firm] || 'firm-badge-lapl'} whitespace-nowrap shrink-0`}>{firm}</span>;
+   216→   216→}
+   217→   217→
+   218→   218→export function AttendanceTracker() {
+   219→   219→  const [records, setRecords] = useState<AttendanceRecord[]>([]);
+   220→   220→  const [summary, setSummary] = useState({
+   221→   221→    present: 0, absent: 0, late: 0, earlyOut: 0, halfDay: 0, ot: 0,
+   222→   222→  });
+   223→   223→  const [employees, setEmployees] = useState<{ employeeId: string; fullName: string; department: string; location: string; firm: string; shiftStart: string; shiftEnd: string; shiftHours: number }[]>([]);
+   224→   224→  const [loading, setLoading] = useState(true);
+   225→   225→  const [open, setOpen] = useState(false);
+   226→   226→  const [form, setForm] = useState({ employeeId: '', date: '', checkIn: '', checkOut: '' });
+   227→   227→  const [employeeSearch, setEmployeeSearch] = useState('');
+   228→   228→
+   229→   229→  // ── Filters ──
+   230→   230→  const now = new Date();
+   231→   231→  const [filterMonth, setFilterMonth] = useState(String(now.getMonth() + 1));
+   232→   232→  const [filterYear, setFilterYear] = useState(String(now.getFullYear()));
+   233→   233→  const [filterFirm, setFilterFirm] = useState('all');
+   234→   234→  const [filterLocation, setFilterLocation] = useState('all');
+   235→   235→  const [searchEmployee, setSearchEmployee] = useState('');
+   236→   236→
+   237→   237→  // ── Daily tab: date filter + status filter ──
+   238→   238→  const [filterDate, setFilterDate] = useState(() => {
+   239→   239→    const d = new Date();
+   240→   240→    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+   241→   241→  });
+   242→   242→  const [statusFilter, setStatusFilter] = useState<string>('all'); // 'all' | 'present' | 'absent' | 'late' | 'early-out' | 'ot'
+   243→   243→
+   244→   244→  // ── Edit state ──
+   245→   245→  const [editOpen, setEditOpen] = useState(false);
+   246→   246→  const [editRecord, setEditRecord] = useState<AttendanceRecord | null>(null);
+   247→   247→  const [editForm, setEditForm] = useState({ checkIn: '', checkOut: '' });
+   248→   248→
+   249→   249→  // ── Monthly Summary state ──
+   250→   250→  const [monthlyEmpId, setMonthlyEmpId] = useState('');
+   251→   251→  const [monthlySummary, setMonthlySummary] = useState<MonthlySummary | null>(null);
+   252→   252→  const [monthlyLoading, setMonthlyLoading] = useState(false);
+   253→   253→
+   254→   254→  // ── Import state ──
+   255→   255→  const [importFile, setImportFile] = useState<File | null>(null);
+   256→   256→  const [importPreview, setImportPreview] = useState<any[]>([]);
+   257→   257→  const [importing, setImporting] = useState(false);
+   258→   258→  const [importResult, setImportResult] = useState<any>(null);
+   259→   259→  const [importDate, setImportDate] = useState(() => {
+   260→   260→    const d = new Date();
+   261→   261→    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+   262→   262→  });
+   263→   263→  const fileInputRef = useRef<HTMLInputElement>(null);
+   264→   264→
+   265→   265→  // ── Load data ──
+   266→   266→  const loadData = useCallback(async () => {
+   267→   267→    setLoading(true);
+   268→   268→    try {
+   269→   269→      const params = new URLSearchParams();
+   270→   270→      // If a specific date is selected, use date filter; otherwise use month/year
+   271→   271→      if (filterDate) {
+   272→   272→        params.set('date', filterDate);
+   273→   273→      } else {
+   274→   274→        params.set('month', filterMonth);
+   275→   275→        params.set('year', filterYear);
+   276→   276→      }
+   277→   277→      if (filterFirm !== 'all') params.set('department', filterFirm);
+   278→   278→      if (filterLocation !== 'all') params.set('location', filterLocation);
+   279→   279→
+   280→   280→      const [attRes, empRes] = await Promise.all([
+   281→   281→        fetch(`/api/attendance?${params}`),
+   282→   282→        fetch('/api/employees?status=Yes'),
+   283→   283→      ]);
+   284→   284→      const attData = await attRes.json();
+   285→   285→      const empData = await empRes.json();
+   286→   286→
+   287→   287→      const recs: AttendanceRecord[] = attData.records || attData;
+   288→   288→      setRecords(recs);
+   289→   289→      setEmployees(empData.map((e: any) => ({
+   290→   290→        employeeId: e.employeeId,
+   291→   291→        fullName: e.fullName,
+   292→   292→        department: e.department,
+   293→   293→        location: e.location,
+   294→   294→        firm: e.firm,
+   295→   295→        shiftStart: e.shiftStart || '10:00',
+   296→   296→        shiftEnd: e.shiftEnd || '19:00',
+   297→   297→        shiftHours: e.shiftHours || 9,
+   298→   298→      })));
+   299→   299→
+   300→   300→      const summ = attData.summary || {};
+   301→   301→      setSummary({
+   302→   302→        present: summ.present || recs.filter((a: any) => ['present', 'late', 'early-out'].includes(a.status)).length,
+   303→   303→        absent: summ.absent || recs.filter((a: any) => a.status === 'absent').length,
+   304→   304→        late: summ.late || recs.filter((a: any) => a.lateEntry).length,
+   305→   305→        earlyOut: summ.earlyOuts || recs.filter((a: any) => a.earlyOut).length,
+   306→   306→        halfDay: summ.halfDay || recs.filter((a: any) => a.halfDay).length,
+   307→   307→        ot: Math.round((summ.totalOvertimeHours || recs.reduce((s: number, a: any) => s + a.overtimeHours, 0)) * 100) / 100,
+   308→   308→      });
+   309→   309→    } catch {
+   310→   310→      toast.error('Failed to load attendance data');
+   311→   311→    }
+   312→   312→    setLoading(false);
+   313→   313→  }, [filterDate, filterMonth, filterYear, filterFirm, filterLocation]);
+   314→   314→
+   315→   315→  useEffect(() => { loadData(); }, [loadData]);
+   316→   316→
+   317→   317→  // ── Filtered records by employee search + status filter ──
+   318→   318→  const filteredRecords = useMemo(() => {
+   319→   319→    let filtered = records;
+   320→   320→    // Status filter
+   321→   321→    if (statusFilter !== 'all') {
+   322→   322→      if (statusFilter === 'present') {
+   323→   323→        filtered = filtered.filter((r) => ['present', 'late', 'early-out'].includes(r.status));
+   324→   324→      } else if (statusFilter === 'absent') {
+   325→   325→        filtered = filtered.filter((r) => r.status === 'absent');
+   326→   326→      } else if (statusFilter === 'late') {
+   327→   327→        filtered = filtered.filter((r) => r.lateEntry);
+   328→   328→      } else if (statusFilter === 'early-out') {
+   329→   329→        filtered = filtered.filter((r) => r.earlyOut);
+   330→   330→      } else if (statusFilter === 'ot') {
+   331→   331→        filtered = filtered.filter((r) => r.overtimeHours > 0);
+   332→   332→      }
+   333→   333→    }
+   334→   334→    // Employee search
+   335→   335→    if (searchEmployee) {
+   336→   336→      const q = searchEmployee.toLowerCase();
+   337→   337→      filtered = filtered.filter((r) =>
+   338→   338→        r.employee?.fullName?.toLowerCase().includes(q) ||
+   339→   339→        r.employeeId.toLowerCase().includes(q)
+   340→   340→      );
+   341→   341→    }
+   342→   342→    return filtered;
+   343→   343→  }, [records, searchEmployee, statusFilter]);
+   344→   344→
+   345→   345→  // ── Mark attendance submit ──
+   346→   346→  const handleSubmit = async () => {
+   347→   347→    if (!form.employeeId || !form.date) {
+   348→   348→      toast.error('Please select employee and date');
+   349→   349→      return;
+   350→   350→    }
+   351→   351→    try {
+   352→   352→      const res = await fetch('/api/attendance', {
+   353→   353→        method: 'POST',
+   354→   354→        headers: { 'Content-Type': 'application/json' },
+   355→   355→        body: JSON.stringify(form),
+   356→   356→      });
+   357→   357→      if (!res.ok) {
+   358→   358→        const errData = await res.json().catch(() => ({}));
+   359→   359→        throw new Error(errData.error || `Failed to record attendance`);
+   360→   360→      }
+   361→   361→      toast.success('Attendance recorded successfully');
+   362→   362→      setOpen(false);
+   363→   363→      setForm({ employeeId: '', date: '', checkIn: '', checkOut: '' });
+   364→   364→      setEmployeeSearch('');
+   365→   365→      loadData();
+   366→   366→    } catch (e: any) {
+   367→   367→      toast.error(e.message || 'Failed to record attendance');
+   368→   368→    }
+   369→   369→  };
+   370→   370→
+   371→   371→  // ── Edit attendance ──
+   372→   372→  const handleEdit = (rec: AttendanceRecord) => {
+   373→   373→    setEditRecord(rec);
+   374→   374→    setEditForm({ checkIn: rec.checkIn || '', checkOut: rec.checkOut || '' });
+   375→   375→    setEditOpen(true);
+   376→   376→  };
+   377→   377→
+   378→   378→  const handleEditSubmit = async () => {
+   379→   379→    if (!editRecord) return;
+   380→   380→    try {
+   381→   381→      const res = await fetch(`/api/attendance/${editRecord.id}`, {
+   382→   382→        method: 'PUT',
+   383→   383→        headers: { 'Content-Type': 'application/json' },
+   384→   384→        body: JSON.stringify(editForm),
+   385→   385→      });
+   386→   386→      if (res.ok) {
+   387→   387→        toast.success('Attendance updated successfully');
+   388→   388→        setEditOpen(false);
+   389→   389→        setEditRecord(null);
+   390→   390→        loadData();
+   391→   391→      } else {
+   392→   392→        const data = await res.json();
+   393→   393→        toast.error(data.error || 'Failed to update');
+   394→   394→      }
+   395→   395→    } catch {
+   396→   396→      toast.error('Failed to update attendance');
+   397→   397→    }
+   398→   398→  };
+   399→   399→
+   400→   400→  // ── Delete attendance ──
+   401→   401→  const handleDelete = async (id: string) => {
+   402→   402→    if (!confirm('Delete this attendance record?')) return;
+   403→   403→    try {
+   404→   404→      const res = await fetch(`/api/attendance/${id}`, { method: 'DELETE' });
+   405→   405→      if (res.ok) {
+   406→   406→        toast.success('Attendance record deleted');
+   407→   407→        loadData();
+   408→   408→      }
+   409→   409→    } catch {
+   410→   410→      toast.error('Failed to delete');
+   411→   411→    }
+   412→   412→  };
+   413→   413→
+   414→   414→  // ── Load Monthly Summary ──
+   415→   415→  const loadMonthlySummary = useCallback(async () => {
+   416→   416→    if (!monthlyEmpId) return;
+   417→   417→    setMonthlyLoading(true);
+   418→   418→    try {
+   419→   419→      const res = await fetch(`/api/attendance/monthly-summary?employeeId=${monthlyEmpId}&month=${filterMonth}&year=${filterYear}`);
+   420→   420→      if (res.ok) {
+   421→   421→        const data = await res.json();
+   422→   422→        setMonthlySummary(data);
+   423→   423→      } else {
+   424→   424→        setMonthlySummary(null);
+   425→   425→      }
+   426→   426→    } catch {
+   427→   427→      toast.error('Failed to load monthly summary');
+   428→   428→      setMonthlySummary(null);
+   429→   429→    }
+   430→   430→    setMonthlyLoading(false);
+   431→   431→  }, [monthlyEmpId, filterMonth, filterYear]);
+   432→   432→
+   433→   433→  useEffect(() => { loadMonthlySummary(); }, [loadMonthlySummary]);
+   434→   434→
+   435→   435→  // ── Export Daily Attendance — via server-side API ──
+   436→   436→  const handleExportDailyExcel = async () => {
+   437→   437→    if (filteredRecords.length === 0) {
+   438→   438→      toast.error('No records to export');
+   439→   439→      return;
+   440→   440→    }
+   441→   441→    try {
+   442→   442→      const params = new URLSearchParams();
+   443→   443→      if (filterDate) params.set('date', filterDate);
+   444→   444→      else { params.set('month', filterMonth); params.set('year', filterYear); }
+   445→   445→      if (filterFirm !== 'all') params.set('department', filterFirm);
+   446→   446→      if (filterLocation !== 'all') params.set('location', filterLocation);
+   447→   447→
+   448→   448→      const res = await fetch(`/api/attendance/export-daily?${params}`);
+   449→   449→      if (!res.ok) { toast.error('Export failed'); return; }
+   450→   450→      const blob = await res.blob();
+   451→   451→      const url = window.URL.createObjectURL(blob);
+   452→   452→      const a = document.createElement('a');
+   453→   453→      a.href = url;
+   454→   454→      a.download = `Daily_Attendance_${MONTHS[parseInt(filterMonth) - 1]}_${filterYear}.xlsx`;
+   455→   455→      document.body.appendChild(a);
+   456→   456→      a.click();
+   457→   457→      document.body.removeChild(a);
+   458→   458→      window.URL.revokeObjectURL(url);
+   459→   459→      toast.success('Daily Attendance Excel downloaded successfully!');
+   460→   460→    } catch (err) {
+   461→   461→      console.error('Daily export error:', err);
+   462→   462→      toast.error('Export failed. Please try again.');
+   463→   463→    }
+   464→   464→  };
+   465→   465→
+   466→   466→  // ── Export Monthly Attendance Register — via server-side API ──
+   467→   467→  const handleExportExcel = async () => {
+   468→   468→    if (!monthlySummary) return;
+   469→   469→    try {
+   470→   470→      const params = new URLSearchParams({
+   471→   471→        employeeId: monthlyEmpId,
+   472→   472→        month: filterMonth,
+   473→   473→        year: filterYear,
+   474→   474→      });
+   475→   475→      const res = await fetch(`/api/attendance/export-monthly?${params}`);
+   476→   476→      if (!res.ok) { toast.error('Export failed'); return; }
+   477→   477→      const blob = await res.blob();
+   478→   478→      const url = window.URL.createObjectURL(blob);
+   479→   479→      const a = document.createElement('a');
+   480→   480→      a.href = url;
+   481→   481→      a.download = `Monthly_Attendance_${monthlySummary.employee.fullName}_${monthlySummary.monthName}_${monthlySummary.year}.xlsx`;
+   482→   482→      document.body.appendChild(a);
+   483→   483→      a.click();
+   484→   484→      document.body.removeChild(a);
+   485→   485→      window.URL.revokeObjectURL(url);
+   486→   486→      toast.success('Monthly Attendance Excel downloaded successfully!');
+   487→   487→    } catch (err) {
+   488→   488→      console.error('Monthly export error:', err);
+   489→   489→      toast.error('Export failed. Please try again.');
+   490→   490→    }
+   491→   491→  };
+   492→   492→
+   493→   493→  // ── Convert Excel serial date to YYYY-MM-DD ──
+   494→   494→  const excelSerialToDate = (serial: number): string => {
+   495→   495→    // Excel serial date: days since Jan 1, 1900 (with the 1900 leap year bug)
+   496→   496→    const epoch = new Date(1899, 11, 30); // Dec 30, 1899 is day 0
+   497→   497→    const date = new Date(epoch.getTime() + serial * 86400000);
+   498→   498→    const y = date.getFullYear();
+   499→   499→    const m = String(date.getMonth() + 1).padStart(2, '0');
+   500→   500→    const d = String(date.getDate()).padStart(2, '0');
+   501→   501→    return `${y}-${m}-${d}`;
+   502→   502→  };
+   503→   503→
+   504→   504→  // ── Convert Excel decimal time to HH:MM ──
+   505→   505→  const excelDecimalToTime = (value: any): string => {
+   506→   506→    if (typeof value === 'string') {
+   507→   507→      // Already a string - check if it looks like HH:MM
+   508→   508→      const trimmed = value.trim();
+   509→   509→      if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(trimmed)) return trimmed.substring(0, 5);
+   510→   510→      // Try parsing as number
+   511→   511→      const num = parseFloat(trimmed);
+   512→   512→      if (!isNaN(num) && num >= 0 && num < 1) {
+   513→   513→        const totalMinutes = Math.round(num * 1440);
+   514→   514→        const hours = Math.floor(totalMinutes / 60);
+   515→   515→        const minutes = totalMinutes % 60;
+   516→   516→        return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+   517→   517→      }
+   518→   518→      return trimmed;
+   519→   519→    }
+   520→   520→    if (typeof value === 'number') {
+   521→   521→      if (value >= 1) {
+   522→   522→        // Could be a full datetime serial - extract time portion
+   523→   523→        const timePart = value - Math.floor(value);
+   524→   524→        const totalMinutes = Math.round(timePart * 1440);
+   525→   525→        const hours = Math.floor(totalMinutes / 60);
+   526→   526→        const minutes = totalMinutes % 60;
+   527→   527→        return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+   528→   528→      }
+   529→   529→      // Decimal time fraction (0 to <1)
+   530→   530→      const totalMinutes = Math.round(value * 1440);
+   531→   531→      const hours = Math.floor(totalMinutes / 60);
+   532→   532→      const minutes = totalMinutes % 60;
+   533→   533→      return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+   534→   534→    }
+   535→   535→    return String(value || '');
+   536→   536→  };
+   537→   537→
+   538→   538→  // ── Parse any date value to YYYY-MM-DD ──
+   539→   539→  const parseDateValue = (value: any): string => {
+   540→   540→    if (!value && value !== 0) return '';
+   541→   541→    if (typeof value === 'number') {
+   542→   542→      // Excel serial date number
+   543→   543→      return excelSerialToDate(value);
+   544→   544→    }
+   545→   545→    const str = String(value).trim();
+   546→   546→    if (!str) return '';
+   547→   547→    // Already in YYYY-MM-DD format
+   548→   548→    if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+   549→   549→    // Try DD/MM/YYYY or DD-MM-YYYY
+   550→   550→    const dmyMatch = str.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})$/);
+   551→   551→    if (dmyMatch) return `${dmyMatch[3]}-${dmyMatch[2].padStart(2, '0')}-${dmyMatch[1].padStart(2, '0')}`;
+   552→   552→    // Try MM/DD/YYYY
+   553→   553→    const mdyMatch = str.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})$/);
+   554→   554→    if (mdyMatch) return `${mdyMatch[3]}-${mdyMatch[1].padStart(2, '0')}-${mdyMatch[2].padStart(2, '0')}`;
+   555→   555→    // Fallback: try native Date parse
+   556→   556→    try {
+   557→   557→      const d = new Date(str);
+   558→   558→      if (!isNaN(d.getTime())) {
+   559→   559→        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+   560→   560→      }
+   561→   561→    } catch {}
+   562→   562→    return str;
+   563→   563→  };
+   564→   564→
+   565→   565→  // ── Smart Employee ID matching ──
+   566→   566→  const smartMatchEmployeeId = (rawId: string, empName: string): string => {
+   567→   567→    if (!rawId && !empName) return '';
+   568→   568→    let empId = String(rawId).trim();
+   569→   569→
+   570→   570→    // If we have an ID, try exact match first
+   571→   571→    if (empId) {
+   572→   572→      // Try exact match
+   573→   573→      const exact = employees.find(e => e.employeeId === empId);
+   574→   574→      if (exact) return exact.employeeId;
+   575→   575→
+   576→   576→      // Try with EMP- prefix (e.g., "41" → "EMP-041" or "EMP-41")
+   577→   577→      const withPrefix = `EMP-${empId.padStart(3, '0')}`;
+   578→   578→      const matchPad = employees.find(e => e.employeeId === withPrefix);
+   579→   579→      if (matchPad) return matchPad.employeeId;
+   580→   580→
+   581→   581→      const withoutPad = `EMP-${empId}`;
+   582→   582→      const matchNoPad = employees.find(e => e.employeeId === withoutPad);
+   583→   583→      if (matchNoPad) return matchNoPad.employeeId;
+   584→   584→    }
+   585→   585→
+   586→   586→    // Match by employee name
+   587→   587→    if (empName) {
+   588→   588→      const nameLower = empName.toLowerCase().trim();
+   589→   589→      // Exact name match
+   590→   590→      const exactName = employees.find(e => e.fullName.toLowerCase() === nameLower);
+   591→   591→      if (exactName) return exactName.employeeId;
+   592→   592→      // Partial name match
+   593→   593→      const partialName = employees.find(e =>
+   594→   594→        e.fullName.toLowerCase().includes(nameLower) || nameLower.includes(e.fullName.toLowerCase())
+   595→   595→      );
+   596→   596→      if (partialName) return partialName.employeeId;
+   597→   597→    }
+   598→   598→
+   599→   599→    return empId; // Return whatever we have
+   600→   600→  };
+   601→   601→
+   602→   602→  // ── File upload handler ──
+   603→   603→  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+   604→   604→    const file = e.target.files?.[0];
+   605→   605→    if (!file) return;
+   606→   606→    setImportFile(file);
+   607→   607→    setImportResult(null);
+   608→   608→
+   609→   609→    try {
+   610→   610→      const XLSX = await import('xlsx');
+   611→   611→      const arrayBuffer = await file.arrayBuffer();
+   612→   612→      const workbook = XLSX.read(arrayBuffer, { cellDates: false, raw: true });
+   613→   613→      const sheetName = workbook.SheetNames[0];
+   614→   614→      const sheet = workbook.Sheets[sheetName];
+   615→   615→      // Use raw:true to get actual values, then we convert ourselves
+   616→   616→      const data = XLSX.utils.sheet_to_json(sheet, { raw: true });
+   617→   617→
+   618→   618→      if (data.length === 0) {
+   619→   619→        toast.error('No data found in the file');
+   620→   620→        return;
+   621→   621→      }
+   622→   622→
+   623→   623→      // Try to map columns - look for common column names (supports both old and new template formats)
+   624→   624→      const mapped = data.map((row: any) => {
+   625→   625→        // Get raw values from various possible column names
+   626→   626→        const rawEmpId = row['E. Code'] || row['ECode'] || row['Emp Code'] || row['Employee Code'] || row['Employee_Code'] ||
+   627→   627→          row['Employee ID'] || row['employeeId'] || row['Employee_Code'] || row['EMP ID'] || row['Emp ID'] || row['Emp_Code'] || '';
+   628→   628→        const rawEmpName = row['Name'] || row['Employee Name'] || row['fullName'] || row['Employee_Name'] || row['Emp Name'] || '';
+   629→   629→        const rawDate = row['Date'] || row['date'] || row['Attendance Date'] || row['Att Date'] || '';
+   630→   630→        const rawCheckIn = row[' InTime'] || row['InTime'] || row['In Time'] || row['Check In'] || row['checkIn'] || row['In_Time'] || row['IN'] || row['Time In'] || '';
+   631→   631→        const rawCheckOut = row[' OutTime'] || row['OutTime'] || row['Out Time'] || row['Check Out'] || row['checkOut'] || row['Out_Time'] || row['OUT'] || row['Time Out'] || '';
+   632→   632→        const rawShift = row['Shift'] || row['shift'] || '';
+   633→   633→        const rawStatus = row['Status'] || row['status'] || '';
+   634→   634→        const rawRemarks = row['Remarks'] || row['remarks'] || row['Remark'] || row['remark'] || '';
+   635→   635→
+   636→   636→        // Convert values
+   637→   637→        const empId = String(rawEmpId).trim();
+   638→   638→        const empName = String(rawEmpName).trim();
+   639→   639→        const date = parseDateValue(rawDate);
+   640→   640→        const checkIn = excelDecimalToTime(rawCheckIn);
+   641→   641→        const checkOut = excelDecimalToTime(rawCheckOut);
+   642→   642→        const shift = String(rawShift).trim();
+   643→   643→        const status = String(rawStatus).trim();
+   644→   644→        const remarks = String(rawRemarks).trim();
+   645→   645→
+   646→   646→        return { employeeId: empId, employeeName: empName, date, checkIn, checkOut, shift, status, remarks };
+   647→   647→      }).filter(r => r.employeeId || r.employeeName);
+   648→   648→
+   649→   649→      setImportPreview(mapped);
+   650→   650→    } catch (err: any) {
+   651→   651→      toast.error('Failed to parse file: ' + err.message);
+   652→   652→    }
+   653→   653→  };
+   654→   654→
+   655→   655→  // ── Download Excel Template ──
+   656→   656→  // Downloads the pre-built template file from /public/Laxree_Attendance_Template.xlsx
+   657→   657→  const handleDownloadTemplate = async () => {
+   658→   658→    try {
+   659→   659→      const link = document.createElement('a');
+   660→   660→      link.href = '/Laxree_Attendance_Template.xlsx';
+   661→   661→      link.download = 'Laxree_Attendance_Template.xlsx';
+   662→   662→      document.body.appendChild(link);
+   663→   663→      link.click();
+   664→   664→      document.body.removeChild(link);
+   665→   665→      toast.success('Template downloaded! Fill it and upload.');
+   666→   666→    } catch {
+   667→   667→      toast.error('Failed to download template.');
+   668→   668→    }
+   669→   669→  };
+   670→   670→
+   671→   671→  // ── Process import ──
+   672→   672→  const handleProcessImport = async () => {
+   673→   673→    if (importPreview.length === 0) return;
+   674→   674→    setImporting(true);
+   675→   675→
+   676→   676→    try {
+   677→   677→      // Use smart matching for employee IDs
+   678→   678→      const recordsToImport = importPreview.map((row) => {
+   679→   679→        const empId = smartMatchEmployeeId(row.employeeId, row.employeeName);
+   680→   680→        // Use row date if available, otherwise fall back to the selected importDate
+   681→   681→        const date = row.date || importDate;
+   682→   682→        return {
+   683→   683→          employeeId: empId,
+   684→   684→          date,
+   685→   685→          checkIn: row.checkIn || '',
+   686→   686→          checkOut: row.checkOut || '',
+   687→   687→        };
+   688→   688→      }).filter(r => r.employeeId && r.date);
+   689→   689→
+   690→   690→      if (recordsToImport.length === 0) {
+   691→   691→        toast.error('No valid records found. Ensure Employee IDs or Names match the system.');
+   692→   692→        setImporting(false);
+   693→   693→        return;
+   694→   694→      }
+   695→   695→
+   696→   696→      const res = await fetch('/api/attendance/bulk-upload', {
+   697→   697→        method: 'POST',
+   698→   698→        headers: { 'Content-Type': 'application/json' },
+   699→   699→        body: JSON.stringify({ records: recordsToImport }),
+   700→   700→      });
+   701→   701→      const data = await res.json();
+   702→   702→
+   703→   703→      if (res.ok) {
+   704→   704→        setImportResult(data);
+   705→   705→        toast.success(`Processed ${data.successCount} records successfully!`);
+   706→   706→        loadData();
+   707→   707→      } else {
+   708→   708→        toast.error(data.error || 'Import failed');
+   709→   709→      }
+   710→   710→    } catch (err: any) {
+   711→   711→      toast.error('Import failed: ' + err.message);
+   712→   712→    }
+   713→   713→    setImporting(false);
+   714→   714→  };
+   715→   715→
+   716→   716→  // ── Summary cards config — clickable for daily tab ──
+   717→   717→  const statCards = [
+   718→   718→    { title: 'Present', value: summary.present, icon: CheckCircle, gradient: 'gradient-success', color: 'text-emerald-500', filter: 'present' },
+   719→   719→    { title: 'Absent', value: summary.absent, icon: XCircle, gradient: 'gradient-danger', color: 'text-red-500', filter: 'absent' },
+   720→   720→    { title: 'Late', value: summary.late, icon: AlertTriangle, gradient: 'gradient-warning', color: 'text-yellow-500', filter: 'late' },
+   721→   721→    { title: 'Early Out', value: summary.earlyOut, icon: Clock, gradient: 'gradient-rose', color: 'text-rose-500', filter: 'early-out' },
+   722→   722→    { title: 'OT Hours', value: summary.ot, icon: Timer, gradient: 'gradient-info', color: 'text-cyan-500', isHours: true, filter: 'ot' },
+   723→   723→  ];
+   724→   724→
+   725→   725→  // ── Filtered employees for the dialog searchable list ──
+   726→   726→  const filteredEmployees = useMemo(() => {
+   727→   727→    let list = employees;
+   728→   728→    if (employeeSearch) {
+   729→   729→      const q = employeeSearch.toLowerCase();
+   730→   730→      list = list.filter((e) =>
+   731→   731→        e.fullName.toLowerCase().includes(q) || e.employeeId.toLowerCase().includes(q)
+   732→   732→      );
+   733→   733→    }
+   734→   734→    return list;
+   735→   735→  }, [employees, employeeSearch]);
+   736→   736→
+   737→   737→  // Selected employee info
+   738→   738→  const selectedEmployee = useMemo(() => {
+   739→   739→    return employees.find((e) => e.employeeId === form.employeeId);
+   740→   740→  }, [employees, form.employeeId]);
+   741→   741→
+   742→   742→  return (
+   743→   743→    <div className="space-y-4">
+   744→   744→      {/* ── Header ── */}
+   745→   745→      <motion.div
+   746→   746→        initial={{ opacity: 0, y: -10 }}
+   747→   747→        animate={{ opacity: 1, y: 0 }}
+   748→   748→        className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3"
+   749→   749→      >
+   750→   750→        <div>
+   751→   751→          <h2 className="text-xl font-bold flex items-center gap-2">
+   752→   752→            <Clock className="w-5 h-5 text-gold" />
+   753→   753→            Attendance Tracker
+   754→   754→          </h2>
+   755→   755→          <p className="text-sm text-muted-foreground">
+   756→   756→            Auto-calculated working hours, overtime & deductions
+   757→   757→          </p>
+   758→   758→        </div>
+   759→   759→        <Button
+   760→   760→          className="gradient-laxree text-white gap-1.5 shrink-0"
+   761→   761→          size="sm"
+   762→   762→          onClick={() => setOpen(true)}
+   763→   763→        >
+   764→   764→          <Clock className="w-4 h-4" /> Mark Attendance
+   765→   765→        </Button>
+   766→   766→      </motion.div>
+   767→   767→
+   768→   768→      {/* ── Date Picker + Summary Cards (clickable) ── */}
+   769→   769→      <motion.div
+   770→   770→        initial={{ opacity: 0, y: -10 }}
+   771→   771→        animate={{ opacity: 1, y: 0 }}
+   772→   772→        className="glass-card p-4 space-y-4 border border-gold/10"
+   773→   773→      >
+   774→   774→        {/* Date Picker Row */}
+   775→   775→        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+   776→   776→          <div className="flex items-center gap-2">
+   777→   777→            <CalendarDays className="w-5 h-5 text-gold" />
+   778→   778→            <span className="text-sm font-semibold">Select Date</span>
+   779→   779→          </div>
+   780→   780→          <Input
+   781→   781→            type="date"
+   782→   782→            value={filterDate}
+   783→   783→            onChange={(e) => {
+   784→   784→              setFilterDate(e.target.value);
+   785→   785→              setStatusFilter('all');
+   786→   786→              // Auto-set month/year from date for monthly tab sync
+   787→   787→              if (e.target.value) {
+   788→   788→                const d = new Date(e.target.value);
+   789→   789→                setFilterMonth(String(d.getMonth() + 1));
+   790→   790→                setFilterYear(String(d.getFullYear()));
+   791→   791→              }
+   792→   792→            }}
+   793→   793→            className="w-full sm:w-48 h-10 text-sm font-medium input-premium rounded-lg"
+   794→   794→          />
+   795→   795→          {filterDate && (
+   796→   796→            <span className="text-xs text-muted-foreground">
+   797→   797→              {new Date(filterDate + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}
+   798→   798→            </span>
+   799→   799→          )}
+   800→   800→          <div className="sm:ml-auto flex items-center gap-2">
+   801→   801→            <Select value={filterFirm} onValueChange={(v) => { setFilterFirm(v); setStatusFilter('all'); }}>
+   802→   802→              <SelectTrigger className="w-32 h-9 text-xs">
+   803→   803→                <Building2 className="w-3.5 h-3.5 mr-1 text-muted-foreground" />
+   804→   804→                <SelectValue placeholder="All Firms" />
+   805→   805→              </SelectTrigger>
+   806→   806→              <SelectContent>
+   807→   807→                <SelectItem value="all">All Firms</SelectItem>
+   808→   808→                {FIRMS.map((f) => (<SelectItem key={f} value={f}>{f}</SelectItem>))}
+   809→   809→              </SelectContent>
+   810→   810→            </Select>
+   811→   811→            <Select value={filterLocation} onValueChange={(v) => { setFilterLocation(v); setStatusFilter('all'); }}>
+   812→   812→              <SelectTrigger className="w-36 h-9 text-xs">
+   813→   813→                <MapPin className="w-3.5 h-3.5 mr-1 text-muted-foreground" />
+   814→   814→                <SelectValue placeholder="All Locations" />
+   815→   815→              </SelectTrigger>
+   816→   816→              <SelectContent>
+   817→   817→                <SelectItem value="all">All Locations</SelectItem>
+   818→   818→                {LOCATIONS.map((l) => (<SelectItem key={l} value={l}>{l}</SelectItem>))}
+   819→   819→              </SelectContent>
+   820→   820→            </Select>
+   821→   821→          </div>
+   822→   822→        </div>
+   823→   823→
+   824→   824→        {/* Clickable Summary Cards */}
+   825→   825→        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+   826→   826→          {/* "All" card */}
+   827→   827→          <motion.div
+   828→   828→            initial={{ opacity: 0, y: 10 }}
+   829→   829→            animate={{ opacity: 1, y: 0 }}
+   830→   830→            transition={{ delay: 0 }}
+   831→   831→            className={`cursor-pointer transition-all duration-200 rounded-xl border-2 ${
+   832→   832→              statusFilter === 'all'
+   833→   833→                ? 'border-gold shadow-lg shadow-gold/10 kpi-card'
+   834→   834→                : 'border-transparent kpi-card hover:border-gold/30'
+   835→   835→            }`}
+   836→   836→            onClick={() => setStatusFilter('all')}
+   837→   837→          >
+   838→   838→            <Card className="border-0 shadow-none bg-transparent">
+   839→   839→              <CardContent className="p-3 flex items-center gap-3">
+   840→   840→                <div className="w-10 h-10 rounded-xl gradient-laxree flex items-center justify-center shrink-0 shadow-lg">
+   841→   841→                  <Users className="w-5 h-5 text-white" />
+   842→   842→                </div>
+   843→   843→                <div className="min-w-0">
+   844→   844→                  <p className="text-[10px] text-muted-foreground font-medium truncate">Total</p>
+   845→   845→                  <p className="text-xl font-bold">
+   846→   846→                    <AnimatedCounter value={records.length} />
+   847→   847→                  </p>
+   848→   848→                </div>
+   849→   849→              </CardContent>
+   850→   850→            </Card>
+   851→   851→          </motion.div>
+   852→   852→          {statCards.map((card, i) => {
+   853→   853→            const Icon = card.icon;
+   854→   854→            const isActive = statusFilter === card.filter;
+   855→   855→            return (
+   856→   856→              <motion.div
+   857→   857→                key={card.title}
+   858→   858→                initial={{ opacity: 0, y: 10 }}
+   859→   859→                animate={{ opacity: 1, y: 0 }}
+   860→   860→                transition={{ delay: (i + 1) * 0.05 }}
+   861→   861→                className={`cursor-pointer transition-all duration-200 rounded-xl border-2 ${
+   862→   862→                  isActive
+   863→   863→                    ? 'border-gold shadow-lg shadow-gold/10 kpi-card'
+   864→   864→                    : 'border-transparent kpi-card hover:border-gold/30'
+   865→   865→                }`}
+   866→   866→                onClick={() => setStatusFilter(isActive ? 'all' : card.filter)}
+   867→   867→              >
+   868→   868→                <Card className="border-0 shadow-none bg-transparent">
+   869→   869→                  <CardContent className="p-3 flex items-center gap-3">
+   870→   870→                    <div className={`w-10 h-10 rounded-xl ${card.gradient} flex items-center justify-center shrink-0 shadow-lg ${isActive ? 'animate-pulse' : ''}`}>
+   871→   871→                      <Icon className="w-5 h-5 text-white" />
+   872→   872→                    </div>
+   873→   873→                    <div className="min-w-0">
+   874→   874→                      <p className="text-[10px] text-muted-foreground font-medium truncate">{card.title}</p>
+   875→   875→                      <p className="text-xl font-bold">
+   876→   876→                        {card.isHours ? (
+   877→   877→                          <span>{formatOT(card.value)}</span>
+   878→   878→                        ) : (
+   879→   879→                          <AnimatedCounter
+   880→   880→                            value={card.value}
+   881→   881→                            suffix={'suffix' in card ? (card as any).suffix : ''}
+   882→   882→                            decimals={'decimals' in card ? (card as any).decimals : 0}
+   883→   883→                          />
+   884→   884→                        )}
+   885→   885→                      </p>
+   886→   886→                    </div>
+   887→   887→                  </CardContent>
+   888→   888→                </Card>
+   889→   889→              </motion.div>
+   890→   890→            );
+   891→   891→          })}
+   892→   892→        </div>
+   893→   893→
+   894→   894→        {/* Active filter indicator */}
+   895→   895→        {statusFilter !== 'all' && (
+   896→   896→          <div className="flex items-center gap-2">
+   897→   897→            <span className="text-xs text-muted-foreground">Showing:</span>
+   898→   898→            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-gold/10 text-gold border border-gold/20">
+   899→   899→              {statCards.find(c => c.filter === statusFilter)?.title || statusFilter} ({filteredRecords.length} records)
+   900→   900→            </span>
+   901→   901→            <button
+   902→   902→              className="text-xs text-muted-foreground hover:text-gold underline"
+   903→   903→              onClick={() => setStatusFilter('all')}
+   904→   904→            >
+   905→   905→              Show All
+   906→   906→            </button>
+   907→   907→          </div>
+   908→   908→        )}
+   909→   909→      </motion.div>
+   910→   910→
+   911→   911→      {/* ── Tabs: Daily / Monthly / Import ── */}
+   912→   912→      <Tabs defaultValue="daily" className="space-y-4">
+   913→   913→        <TabsList className="bg-muted/50">
+   914→   914→          <TabsTrigger value="daily" className="gap-1.5 text-xs">
+   915→   915→            <CalendarDays className="w-3.5 h-3.5" /> Daily
+   916→   916→          </TabsTrigger>
+   917→   917→          <TabsTrigger value="monthly" className="gap-1.5 text-xs">
+   918→   918→            <FileSpreadsheet className="w-3.5 h-3.5" /> Monthly
+   919→   919→          </TabsTrigger>
+   920→   920→          <TabsTrigger value="import" className="gap-1.5 text-xs">
+   921→   921→            <Upload className="w-3.5 h-3.5" /> Import
+   922→   922→          </TabsTrigger>
+   923→   923→        </TabsList>
+   924→   924→
+   925→   925→        {/* ══════════════════════════════════════════════════
+   926→   926→            DAILY ATTENDANCE TAB
+   927→   927→            ══════════════════════════════════════════════════ */}
+   928→   928→        <TabsContent value="daily" className="space-y-4">
+   929→   929→          {/* ── Search + Export Row ── */}
+   930→   930→          <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
+   931→   931→            <div className="relative flex-1">
+   932→   932→              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+   933→   933→              <Input className="pl-9 h-9" placeholder="Search employee by name or ID..." value={searchEmployee} onChange={(e) => setSearchEmployee(e.target.value)} />
+   934→   934→            </div>
+   935→   935→            <Button variant="outline" size="sm" className="h-9 gap-1.5 shrink-0" onClick={handleExportDailyExcel}>
+   936→   936→              <FileDown className="w-3.5 h-3.5" /> Export Excel
+   937→   937→            </Button>
+   938→   938→            <Button
+   939→   939→              variant="outline"
+   940→   940→              size="sm"
+   941→   941→              className="h-9 gap-1.5 shrink-0 border-red-500/30 hover:border-red-500/60 hover:bg-red-500/5 text-red-500"
+   942→   942→              onClick={async () => {
+   943→   943→                if (!confirm('Are you sure you want to CLEAR ALL attendance records? This cannot be undone!')) return;
+   944→   944→                if (!confirm('FINAL WARNING: All attendance data will be permanently deleted. Continue?')) return;
+   945→   945→                try {
+   946→   946→                  const res = await fetch('/api/attendance/clear-all', { method: 'DELETE' });
+   947→   947→                  if (res.ok) {
+   948→   948→                    const data = await res.json();
+   949→   949→                    toast.success(`Cleared ${data.deletedCount} attendance records`);
+   950→   950→                    loadData();
+   951→   951→                  } else {
+   952→   952→                    toast.error('Failed to clear attendance records');
+   953→   953→                  }
+   954→   954→                } catch {
+   955→   955→                  toast.error('Failed to clear attendance records');
+   956→   956→                }
+   957→   957→              }}
+   958→   958→            >
+   959→   959→              <Trash2 className="w-3.5 h-3.5" /> Clear All
+   960→   960→            </Button>
+   961→   961→          </motion.div>
+   962→   962→
+   963→   963→          {/* ── Attendance Table ── */}
+   964→   964→          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+   965→   965→            <Card className="glass-card card-gold-hover border-0">
+   966→   966→              <CardContent className="p-0">
+   967→   967→                <div className="overflow-auto max-h-[65vh]" style={{ WebkitOverflowScrolling: 'touch' }}>
+   968→   968→                  <Table id="daily-attendance-table">
+   969→   969→                    <TableHeader>
+   970→   970→                      <TableRow className="hover:bg-transparent sticky top-0 bg-card z-10">
+   971→   971→                        <TableHead className="min-w-[160px]">Employee</TableHead>
+   972→   972→                        <TableHead className="min-w-[70px]">Emp Code</TableHead>
+   973→   973→                        <TableHead className="hidden md:table-cell min-w-[70px]">Company</TableHead>
+   974→   974→                        <TableHead className="min-w-[80px]">In Time</TableHead>
+   975→   975→                        <TableHead className="hidden sm:table-cell min-w-[70px]">Out Time</TableHead>
+   976→   976→                        <TableHead className="min-w-[50px]">Hrs</TableHead>
+   977→   977→                        <TableHead className="min-w-[80px]">Status</TableHead>
+   978→   978→                        <TableHead className="hidden lg:table-cell min-w-[50px]">OT</TableHead>
+   979→   979→                        <TableHead className="w-[70px] sticky right-0 bg-card">Actions</TableHead>
+   980→   980→                      </TableRow>
+   981→   981→                    </TableHeader>
+   982→   982→                    <TableBody>
+   983→   983→                      {loading ? (
+   984→   984→                        Array.from({ length: 5 }).map((_, i) => (
+   985→   985→                          <TableRow key={i}>
+   986→   986→                            {Array.from({ length: 9 }).map((_, j) => (
+   987→   987→                              <TableCell key={j}><div className="h-4 bg-muted/50 rounded animate-pulse" /></TableCell>
+   988→   988→                            ))}
+   989→   989→                          </TableRow>
+   990→   990→                        ))
+   991→   991→                      ) : filteredRecords.length === 0 ? (
+   992→   992→                        <TableRow>
+   993→   993→                          <TableCell colSpan={9} className="text-center py-12 text-muted-foreground">
+   994→   994→                            <CalendarDays className="w-10 h-10 mx-auto mb-2 opacity-30" />
+   995→   995→                            <p className="font-medium">No attendance records for this date</p>
+   996→   996→                            <p className="text-xs mt-1">Select a different date or import attendance data</p>
+   997→   997→                          </TableCell>
+   998→   998→                        </TableRow>
+   999→   999→                      ) : (
+  1000→  1000→                        filteredRecords.map((rec) => (
+  1001→  1001→                          <TableRow key={rec.id} className="hover:bg-muted/30 transition-colors">
+  1002→  1002→                            <TableCell>
+  1003→  1003→                              <div className="flex items-center gap-2">
+  1004→  1004→                                <div className="w-7 h-7 rounded-full gradient-laxree flex items-center justify-center text-white text-[10px] font-bold shrink-0">
+  1005→  1005→                                  {rec.employee?.fullName?.charAt(0) || '?'}
+  1006→  1006→                                </div>
+  1007→  1007→                                <div className="min-w-0 overflow-hidden">
+  1008→  1008→                                  <p className="text-sm font-medium truncate max-w-[120px]">{rec.employee?.fullName || rec.employeeId}</p>
+  1009→  1009→                                </div>
+  1010→  1010→                              </div>
+  1011→  1011→                            </TableCell>
+  1012→  1012→                            <TableCell className="text-xs font-mono text-muted-foreground">{rec.employeeId}</TableCell>
+  1013→  1013→                            <TableCell className="hidden md:table-cell">
+  1014→  1014→                              <FirmBadge firm={getFirmFromEmployeeId(rec.employeeId) || rec.employee?.department || ''} />
+  1015→  1015→                            </TableCell>
+  1016→  1016→                            <TableCell className="text-sm font-mono whitespace-nowrap">{rec.checkIn || '—'}</TableCell>
+  1017→  1017→                            <TableCell className="hidden sm:table-cell text-sm font-mono whitespace-nowrap">{rec.checkOut || '—'}</TableCell>
+  1018→  1018→                            <TableCell className="text-sm font-medium whitespace-nowrap">{rec.totalHours > 0 ? `${formatHours(rec.totalHours)}h` : '—'}</TableCell>
+  1019→  1019→                            <TableCell><StatusBadge status={rec.status} /></TableCell>
+  1020→  1020→                            <TableCell className="hidden lg:table-cell text-sm whitespace-nowrap">
+  1021→  1021→                              {rec.overtimeHours > 0 ? (
+  1022→  1022→                                <span className="text-cyan-600 dark:text-cyan-400 font-medium">{formatOT(rec.overtimeHours)}</span>
+  1023→  1023→                              ) : '—'}
+  1024→  1024→                            </TableCell>
+  1025→  1025→                            <TableCell className="sticky right-0 bg-card">
+  1026→  1026→                              <div className="flex items-center gap-1">
+  1027→  1027→                                <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => handleEdit(rec)} title="Edit">
+  1028→  1028→                                  <Pencil className="w-3 h-3" />
+  1029→  1029→                                </Button>
+  1030→  1030→                                <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-destructive hover:text-destructive" onClick={() => handleDelete(rec.id)} title="Delete">
+  1031→  1031→                                  <Trash2 className="w-3 h-3" />
+  1032→  1032→                                </Button>
+  1033→  1033→                              </div>
+  1034→  1034→                            </TableCell>
+  1035→  1035→                          </TableRow>
+  1036→  1036→                        ))
+  1037→  1037→                      )}
+  1038→  1038→                    </TableBody>
+  1039→  1039→                  </Table>
+  1040→  1040→                </div>
+  1041→  1041→              </CardContent>
+  1042→  1042→            </Card>
+  1043→  1043→          </motion.div>
+  1044→  1044→        </TabsContent>
+  1045→  1045→
+  1046→  1046→        {/* ══════════════════════════════════════════════════
+  1047→  1047→            MONTHLY ATTENDANCE TAB
+  1048→  1048→            ══════════════════════════════════════════════════ */}
+  1049→  1049→        <TabsContent value="monthly" className="space-y-4">
+  1050→  1050→          {/* ── Employee Selector ── */}
+  1051→  1051→          <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-3">
+  1052→  1052→            <div className="flex flex-col sm:flex-row gap-3 flex-wrap items-end">
+  1053→  1053→              <div className="flex-1 min-w-[200px]">
+  1054→  1054→                <Label className="text-xs text-muted-foreground mb-1 block">Select Employee</Label>
+  1055→  1055→                <Select value={monthlyEmpId} onValueChange={setMonthlyEmpId}>
+  1056→  1056→                  <SelectTrigger className="w-full h-9">
+  1057→  1057→                    <Search className="w-3.5 h-3.5 mr-1.5 text-muted-foreground" />
+  1058→  1058→                    <SelectValue placeholder="Select Employee..." />
+  1059→  1059→                  </SelectTrigger>
+  1060→  1060→                  <SelectContent>
+  1061→  1061→                    {employees.sort((a, b) => a.fullName.localeCompare(b.fullName)).map(e => (
+  1062→  1062→                      <SelectItem key={e.employeeId} value={e.employeeId}>
+  1063→  1063→                        {e.fullName} ({e.employeeId})
+  1064→  1064→                      </SelectItem>
+  1065→  1065→                    ))}
+  1066→  1066→                  </SelectContent>
+  1067→  1067→                </Select>
+  1068→  1068→              </div>
+  1069→  1069→              <Select value={filterMonth} onValueChange={setFilterMonth}>
+  1070→  1070→                <SelectTrigger className="w-full sm:w-36 h-9"><SelectValue /></SelectTrigger>
+  1071→  1071→                <SelectContent>
+  1072→  1072→                  {MONTHS.map((m, i) => (<SelectItem key={i + 1} value={String(i + 1)}>{m}</SelectItem>))}
+  1073→  1073→                </SelectContent>
+  1074→  1074→              </Select>
+  1075→  1075→              <Select value={filterYear} onValueChange={setFilterYear}>
+  1076→  1076→                <SelectTrigger className="w-full sm:w-24 h-9"><SelectValue /></SelectTrigger>
+  1077→  1077→                <SelectContent>
+  1078→  1078→                  {[2024, 2025, 2026, 2027].map(y => (<SelectItem key={y} value={String(y)}>{y}</SelectItem>))}
+  1079→  1079→                </SelectContent>
+  1080→  1080→              </Select>
+  1081→  1081→              {monthlySummary && (
+  1082→  1082→                <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={handleExportExcel}>
+  1083→  1083→                  <FileDown className="w-3.5 h-3.5" /> Export Excel
+  1084→  1084→                </Button>
+  1085→  1085→              )}
+  1086→  1086→            </div>
+  1087→  1087→          </motion.div>
+  1088→  1088→
+  1089→  1089→          {/* ── Monthly Summary Card — Spreadsheet Format ── */}
+  1090→  1090→          {monthlyLoading ? (
+  1091→  1091→            <Card className="glass-card card-gold-hover border-0">
+  1092→  1092→              <CardContent className="p-8 text-center text-muted-foreground">
+  1093→  1093→                <div className="animate-spin w-8 h-8 border-2 border-gold border-t-transparent rounded-full mx-auto mb-3" />
+  1094→  1094→                <p>Loading monthly summary...</p>
+  1095→  1095→              </CardContent>
+  1096→  1096→            </Card>
+  1097→  1097→          ) : monthlySummary ? (
+  1098→  1098→            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+  1099→  1099→              <Card className="glass-card card-gold-hover border-0">
+  1100→  1100→                <CardContent className="p-4 md:p-6 space-y-4">
+  1101→  1101→                  {/* Employee Info Header */}
+  1102→  1102→                  <div className="flex items-center gap-3 pb-3 border-b border-border/50">
+  1103→  1103→                    {(() => {
+  1104→  1104→                      const firmCode = getFirmFromEmployeeId(monthlySummary.employee.employeeId) || monthlySummary.employee.firm || monthlySummary.employee.department;
+  1105→  1105→                      const logoSrc = FIRM_LOGOS[firmCode];
+  1106→  1106→                      return logoSrc ? (
+  1107→  1107→                        <div className="w-14 h-14 rounded-xl overflow-hidden border-2 border-gold/30 shrink-0 bg-white p-1">
+  1108→  1108→                          <Image src={logoSrc} alt={firmCode} width={48} height={48} className="w-full h-full object-contain" />
+  1109→  1109→                        </div>
+  1110→  1110→                      ) : (
+  1111→  1111→                        <div className="w-14 h-14 rounded-xl gradient-laxree flex items-center justify-center text-white text-lg font-bold shrink-0">
+  1112→  1112→                          {monthlySummary.employee.fullName.charAt(0)}
+  1113→  1113→                        </div>
+  1114→  1114→                      );
+  1115→  1115→                    })()}
+  1116→  1116→                    <div className="min-w-0">
+  1117→  1117→                      <h3 className="font-bold text-lg">{monthlySummary.employee.fullName}</h3>
+  1118→  1118→                      <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
+  1119→  1119→                        <span className="font-mono">{monthlySummary.employee.employeeId}</span>
+  1120→  1120→                        <span>•</span>
+  1121→  1121→                        <FirmBadge firm={getFirmFromEmployeeId(monthlySummary.employee.employeeId) || monthlySummary.employee.firm || monthlySummary.employee.department} />
+  1122→  1122→                        <span>•</span>
+  1123→  1123→                        <span>{monthlySummary.employee.location}</span>
+  1124→  1124→                        <span>•</span>
+  1125→  1125→                        <span>{monthlySummary.monthName} {monthlySummary.year}</span>
+  1126→  1126→                      </div>
+  1127→  1127→                    </div>
+  1128→  1128→                  </div>
+  1129→  1129→
+  1130→  1130→                  {/* ── Spreadsheet-style Summary Table ── */}
+  1131→  1131→                  <div className="overflow-x-auto rounded-lg border border-border/50">
+  1132→  1132→                    <table className="w-full text-sm border-collapse">
+  1133→  1133→                      <thead>
+  1134→  1134→                        <tr className="bg-emerald-700 dark:bg-emerald-900 text-white">
+  1135→  1135→                          <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider border-r border-emerald-600/30">Days Present</th>
+  1136→  1136→                          <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider border-r border-emerald-600/30">Days Absent</th>
+  1137→  1137→                          <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider border-r border-emerald-600/30">Half Days</th>
+  1138→  1138→                          <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider border-r border-emerald-600/30">AL</th>
+  1139→  1139→                          <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider border-r border-emerald-600/30">UL</th>
+  1140→  1140→                          <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider border-r border-emerald-600/30">Total Hrs Worked</th>
+  1141→  1141→                          <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider border-r border-emerald-600/30">OT Hrs</th>
+  1142→  1142→                          <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider border-r border-emerald-600/30">Sunday Hrs</th>
+  1143→  1143→                          <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider">Total Hrs (incl. Sunday)</th>
+  1144→  1144→                        </tr>
+  1145→  1145→                      </thead>
+  1146→  1146→                      <tbody>
+  1147→  1147→                        <tr className="bg-muted/30 hover:bg-muted/50 transition-colors">
+  1148→  1148→                          <td className="px-3 py-3 font-bold text-emerald-600 dark:text-emerald-400 border-r border-border/30">{monthlySummary.presentDays}</td>
+  1149→  1149→                          <td className="px-3 py-3 font-bold text-red-500 border-r border-border/30">{monthlySummary.absentDays}</td>
+  1150→  1150→                          <td className="px-3 py-3 font-bold text-orange-500 border-r border-border/30">{monthlySummary.halfDays}</td>
+  1151→  1151→                          <td className="px-3 py-3 text-blue-500 border-r border-border/30">{monthlySummary.annualLeaves || 0}</td>
+  1152→  1152→                          <td className="px-3 py-3 text-amber-600 dark:text-amber-400 border-r border-border/30">{monthlySummary.unpaidLeaves || 0}</td>
+  1153→  1153→                          <td className="px-3 py-3 font-bold text-cyan-600 dark:text-cyan-400 border-r border-border/30">{displayHHMM(monthlySummary.totalWorkHours)}</td>
+  1154→  1154→                          <td className="px-3 py-3 font-bold text-yellow-600 dark:text-yellow-400 border-r border-border/30">{formatOT(monthlySummary.totalOvertimeHours)}</td>
+  1155→  1155→                          <td className="px-3 py-3 text-blue-600 dark:text-blue-400 border-r border-border/30">{displayHHMM(monthlySummary.totalSundayHours)}</td>
+  1156→  1156→                          <td className="px-3 py-3 font-bold text-gold">{displayHHMM(monthlySummary.totalHrsInclSunday || (monthlySummary.totalWorkHours || 0))}</td>
+  1157→  1157→                        </tr>
+  1158→  1158→                      </tbody>
+  1159→  1159→                    </table>
+  1160→  1160→                  </div>
+  1161→  1161→
+  1162→  1162→                  {/* Additional Info Row */}
+  1163→  1163→                  <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+  1164→  1164→                    {[
+  1165→  1165→                      { label: 'Working Days', value: monthlySummary.totalWorkingDays, color: 'text-foreground' },
+  1166→  1166→                      { label: 'Weekly Offs', value: monthlySummary.weeklyOffs, color: 'text-sky-500' },
+  1167→  1167→                      { label: 'Sundays', value: monthlySummary.sundays, color: 'text-blue-500' },
+  1168→  1168→                      { label: 'Late Entries', value: monthlySummary.lateEntries, color: 'text-amber-500' },
+  1169→  1169→                      { label: 'Early Outs', value: monthlySummary.earlyOuts || 0, color: 'text-rose-500' },
+  1170→  1170→                      { label: 'Shift Hrs', value: `${displayHHMM(monthlySummary.employee.shiftHours)}h`, color: 'text-muted-foreground' },
+  1171→  1171→                    ].map(item => (
+  1172→  1172→                      <div key={item.label} className="p-2 rounded-lg bg-muted/20 text-center">
+  1173→  1173→                        <p className="text-[9px] text-muted-foreground font-medium uppercase tracking-wider">{item.label}</p>
+  1174→  1174→                        <p className={`text-sm font-bold ${item.color}`}>{item.value}</p>
+  1175→  1175→                      </div>
+  1176→  1176→                    ))}
+  1177→  1177→                  </div>
+  1178→  1178→
+  1179→  1179→                  <Separator />
+  1180→  1180→
+  1181→  1181→                  {/* Daily Records Table — Full scrollable */}
+  1182→  1182→                  <div>
+  1183→  1183→                    <h4 className="text-sm font-semibold mb-2 flex items-center gap-1.5">
+  1184→  1184→                      <ChevronRight className="w-4 h-4 text-gold" />
+  1185→  1185→                      Daily Attendance Breakdown ({monthlySummary.records.length} days)
+  1186→  1186→                    </h4>
+  1187→  1187→                    <div
+  1188→  1188→                      className="rounded-lg border border-border/50"
+  1189→  1189→                      style={{
+  1190→  1190→                        maxHeight: '60vh',
+  1191→  1191→                        overflowY: 'auto',
+  1192→  1192→                        WebkitOverflowScrolling: 'touch',
+  1193→  1193→                        scrollBehavior: 'smooth',
+  1194→  1194→                      }}
+  1195→  1195→                    >
+  1196→  1196→                      <Table>
+  1197→  1197→                        <TableHeader>
+  1198→  1198→                          <TableRow className="hover:bg-transparent sticky top-0 bg-card z-10">
+  1199→  1199→                            <TableHead className="text-xs">Date</TableHead>
+  1200→  1200→                            <TableHead className="text-xs">Day</TableHead>
+  1201→  1201→                            <TableHead className="text-xs">In</TableHead>
+  1202→  1202→                            <TableHead className="text-xs">Out</TableHead>
+  1203→  1203→                            <TableHead className="text-xs">Hrs</TableHead>
+  1204→  1204→                            <TableHead className="text-xs">Status</TableHead>
+  1205→  1205→                            <TableHead className="text-xs">OT</TableHead>
+  1206→  1206→                          </TableRow>
+  1207→  1207→                        </TableHeader>
+  1208→  1208→                        <TableBody>
+  1209→  1209→                          {(() => {
+  1210→  1210→                            const daysInMonth = new Date(monthlySummary.year, monthlySummary.month, 0).getDate();
+  1211→  1211→                            const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  1212→  1212→                            const rows = [];
+  1213→  1213→                            for (let day = 1; day <= daysInMonth; day++) {
+  1214→  1214→                              const dateStr = `${monthlySummary.year}-${String(monthlySummary.month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  1215→  1215→                              const dateObj = new Date(dateStr + 'T00:00:00');
+  1216→  1216→                              const dayName = dayNames[dateObj.getDay()];
+  1217→  1217→                              const rec = monthlySummary.records.find((r: any) => {
+  1218→  1218→                                const rDate = new Date(r.date);
+  1219→  1219→                                return rDate.getFullYear() === monthlySummary.year && rDate.getMonth() + 1 === monthlySummary.month && rDate.getDate() === day;
+  1220→  1220→                              });
+  1221→  1221→                              const isSunday = dateObj.getDay() === 0;
+  1222→  1222→                              rows.push(
+  1223→  1223→                                <TableRow
+  1224→  1224→                                  key={day}
+  1225→  1225→                                  className={`${isSunday ? 'bg-blue-500/5' : 'hover:bg-muted/30'} transition-colors`}
+  1226→  1226→                                >
+  1227→  1227→                                  <TableCell className="text-xs whitespace-nowrap font-medium">
+  1228→  1228→                                    {dateObj.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+  1229→  1229→                                  </TableCell>
+  1230→  1230→                                  <TableCell className={`text-xs ${isSunday ? 'text-blue-500 font-bold' : ''}`}>{dayName}</TableCell>
+  1231→  1231→                                  <TableCell className="text-xs font-mono">{rec?.checkIn || '—'}</TableCell>
+  1232→  1232→                                  <TableCell className="text-xs font-mono">{rec?.checkOut || '—'}</TableCell>
+  1233→  1233→                                  <TableCell className="text-xs font-medium">{rec && rec.totalHours > 0 ? `${formatHours(rec.totalHours)}h` : '—'}</TableCell>
+  1234→  1234→                                  <TableCell>
+  1235→  1235→                                    {rec ? (
+  1236→  1236→                                      <StatusBadge status={rec.status} />
+  1237→  1237→                                    ) : isSunday ? (
+  1238→  1238→                                      <StatusBadge status="weekly-off" />
+  1239→  1239→                                    ) : (
+  1240→  1240→                                      <span className="text-xs text-muted-foreground italic">No Record</span>
+  1241→  1241→                                    )}
+  1242→  1242→                                  </TableCell>
+  1243→  1243→                                  <TableCell className="text-xs">{rec && rec.overtimeHours > 0 ? formatOT(rec.overtimeHours) : '—'}</TableCell>
+  1244→  1244→                                </TableRow>
+  1245→  1245→                              );
+  1246→  1246→                            }
+  1247→  1247→                            return rows;
+  1248→  1248→                          })()}
+  1249→  1249→                        </TableBody>
+  1250→  1250→                      </Table>
+  1251→  1251→                    </div>
+  1252→  1252→                  </div>
+  1253→  1253→                </CardContent>
+  1254→  1254→              </Card>
+  1255→  1255→            </motion.div>
+  1256→  1256→          ) : (
+  1257→  1257→            <Card className="glass-card card-gold-hover border-0">
+  1258→  1258→              <CardContent className="p-8 text-center text-muted-foreground">
+  1259→  1259→                <CalendarDays className="w-12 h-12 mx-auto mb-3 opacity-30" />
+  1260→  1260→                <p>Select an employee to view monthly attendance summary</p>
+  1261→  1261→              </CardContent>
+  1262→  1262→            </Card>
+  1263→  1263→          )}
+  1264→  1264→        </TabsContent>
+  1265→  1265→
+  1266→  1266→        {/* ══════════════════════════════════════════════════
+  1267→  1267→            DAILY ATTENDANCE IMPORT TAB
+  1268→  1268→            ══════════════════════════════════════════════════ */}
+  1269→  1269→        <TabsContent value="import" className="space-y-4">
+  1270→  1270→          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+  1271→  1271→            <Card className="glass-card card-gold-hover border-0">
+  1272→  1272→              <CardContent className="p-6 space-y-6">
+  1273→  1273→                {/* Upload Section */}
+  1274→  1274→                <div>
+  1275→  1275→                  <div className="flex items-center justify-between mb-3">
+  1276→  1276→                    <h3 className="text-sm font-semibold flex items-center gap-2">
+  1277→  1277→                      <Upload className="w-4 h-4 text-gold" />
+  1278→  1278→                      Upload Attendance Sheet
+  1279→  1279→                    </h3>
+  1280→  1280→                    <Button
+  1281→  1281→                      variant="outline"
+  1282→  1282→                      size="sm"
+  1283→  1283→                      className="h-8 gap-1.5 text-xs border-gold/30 hover:border-gold/60 hover:bg-gold/5"
+  1284→  1284→                      onClick={handleDownloadTemplate}
+  1285→  1285→                    >
+  1286→  1286→                      <Download className="w-3.5 h-3.5" /> Download Template
+  1287→  1287→                    </Button>
+  1288→  1288→                  </div>
+  1289→  1289→
+  1290→  1290→                  {/* Attendance Date Picker */}
+  1291→  1291→                  <div className="mb-4">
+  1292→  1292→                    <Label htmlFor="importDate" className="text-xs font-semibold flex items-center gap-1.5 mb-1.5">
+  1293→  1293→                      <CalendarDays className="w-3.5 h-3.5 text-gold" />
+  1294→  1294→                      Attendance Date
+  1295→  1295→                    </Label>
+  1296→  1296→                    <Input
+  1297→  1297→                      id="importDate"
+  1298→  1298→                      type="date"
+  1299→  1299→                      value={importDate}
+  1300→  1300→                      onChange={(e) => setImportDate(e.target.value)}
+  1301→  1301→                      className="w-full sm:w-56 h-9 text-sm font-medium input-premium rounded-lg"
+  1302→  1302→                    />
+  1303→  1303→                    <p className="text-[10px] text-muted-foreground mt-1">
+  1304→  1304→                      This date will be used for all rows in the uploaded file (daily template has no Date column per row).
+  1305→  1305→                    </p>
+  1306→  1306→                  </div>
+  1307→  1307→
+  1308→  1308→                  <div className="border-2 border-dashed border-border rounded-xl p-8 text-center hover:border-gold/50 transition-colors">
+  1309→  1309→                    <input
+  1310→  1310→                      ref={fileInputRef}
+  1311→  1311→                      type="file"
+  1312→  1312→                      accept=".xlsx,.xls,.csv"
+  1313→  1313→                      onChange={handleFileUpload}
+  1314→  1314→                      className="hidden"
+  1315→  1315→                    />
+  1316→  1316→                    <FileSpreadsheet className="w-12 h-12 mx-auto mb-3 text-muted-foreground/50" />
+  1317→  1317→                    <p className="text-sm text-muted-foreground mb-3">
+  1318→  1318→                      Upload Excel (.xlsx, .xls) or CSV file with attendance data
+  1319→  1319→                    </p>
+  1320→  1320→                    <Button
+  1321→  1321→                      variant="outline"
+  1322→  1322→                      onClick={() => fileInputRef.current?.click()}
+  1323→  1323→                      className="gap-1.5"
+  1324→  1324→                    >
+  1325→  1325→                      <Upload className="w-4 h-4" /> Choose File
+  1326→  1326→                    </Button>
+  1327→  1327→                    {importFile && (
+  1328→  1328→                      <p className="text-xs text-muted-foreground mt-2">
+  1329→  1329→                        Selected: {importFile.name} ({(importFile.size / 1024).toFixed(1)} KB)
+  1330→  1330→                      </p>
+  1331→  1331→                    )}
+  1332→  1332→                  </div>
+  1333→  1333→                  <div className="mt-3 p-3 rounded-lg bg-gold/5 border border-gold/10">
+  1334→  1334→                    <Info className="w-4 h-4 text-gold inline mr-1.5 -mt-0.5" />
+  1335→  1335→                    <span className="text-xs text-muted-foreground">
+  1336→  1336→                      <strong>Template format:</strong> SNo, E. Code, Name, Shift, InTime, OutTime, Work Dur., OT, Tot. Dur., Status, Remarks. 
+  1337→  1337→                      The daily template has no Date column — set the <strong>Attendance Date</strong> above before uploading.
+  1338→  1338→                      Click <strong>"Download Template"</strong> to get the correct format with all employees pre-filled. 
+  1339→  1339→                      The system auto-converts Excel dates/times and matches employees by E. Code or Name.
+  1340→  1340→                      Also supports the old format (Employee ID, Employee Name, Date, In Time, Out Time, Status).
+  1341→  1341→                    </span>
+  1342→  1342→                  </div>
+  1343→  1343→                </div>
+  1344→  1344→
+  1345→  1345→                {/* Preview Section */}
+  1346→  1346→                {importPreview.length > 0 && (
+  1347→  1347→                  <div>
+  1348→  1348→                    <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+  1349→  1349→                      <Search className="w-4 h-4 text-gold" />
+  1350→  1350→                      Preview ({importPreview.length} records found)
+  1351→  1351→                      {!importPreview.some(r => r.date) && importDate && (
+  1352→  1352→                        <span className="text-[10px] text-muted-foreground font-normal ml-1">
+  1353→  1353→                          — using date: {importDate}
+  1354→  1354→                        </span>
+  1355→  1355→                      )}
+  1356→  1356→                    </h3>
+  1357→  1357→                    <div className="max-h-[40vh] overflow-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
+  1358→  1358→                      <Table>
+  1359→  1359→                        <TableHeader>
+  1360→  1360→                          <TableRow className="hover:bg-transparent">
+  1361→  1361→                            <TableHead className="text-xs">E. Code</TableHead>
+  1362→  1362→                            <TableHead className="text-xs">Name</TableHead>
+  1363→  1363→                            <TableHead className="text-xs">Shift</TableHead>
+  1364→  1364→                            <TableHead className="text-xs">InTime</TableHead>
+  1365→  1365→                            <TableHead className="text-xs">OutTime</TableHead>
+  1366→  1366→                            <TableHead className="text-xs">Status</TableHead>
+  1367→  1367→                            <TableHead className="text-xs">Remarks</TableHead>
+  1368→  1368→                          </TableRow>
+  1369→  1369→                        </TableHeader>
+  1370→  1370→                        <TableBody>
+  1371→  1371→                          {importPreview.slice(0, 100).map((row, i) => (
+  1372→  1372→                            <TableRow key={i} className="hover:bg-muted/30">
+  1373→  1373→                              <TableCell className="text-xs font-mono">{row.employeeId || '—'}</TableCell>
+  1374→  1374→                              <TableCell className="text-xs">{row.employeeName || '—'}</TableCell>
+  1375→  1375→                              <TableCell className="text-xs">{row.shift || '—'}</TableCell>
+  1376→  1376→                              <TableCell className="text-xs font-mono">{row.checkIn || '—'}</TableCell>
+  1377→  1377→                              <TableCell className="text-xs font-mono">{row.checkOut || '—'}</TableCell>
+  1378→  1378→                              <TableCell className="text-xs">{row.status || '—'}</TableCell>
+  1379→  1379→                              <TableCell className="text-xs">{row.remarks || '—'}</TableCell>
+  1380→  1380→                            </TableRow>
+  1381→  1381→                          ))}
+  1382→  1382→                        </TableBody>
+  1383→  1383→                      </Table>
+  1384→  1384→                    </div>
+  1385→  1385→
+  1386→  1386→                    {/* Process Button */}
+  1387→  1387→                    <div className="flex items-center gap-3 mt-4 pt-4 border-t relative z-10 bg-background">
+  1388→  1388→                      <Button
+  1389→  1389→                        className="gradient-laxree text-white gap-1.5 shrink-0"
+  1390→  1390→                        onClick={handleProcessImport}
+  1391→  1391→                        disabled={importing}
+  1392→  1392→                      >
+  1393→  1393→                        {importing ? (
+  1394→  1394→                          <>
+  1395→  1395→                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+  1396→  1396→                            Processing...
+  1397→  1397→                          </>
+  1398→  1398→                        ) : (
+  1399→  1399→                          <>
+  1400→  1400→                            <CheckCircle className="w-4 h-4" /> Process Attendance
+  1401→  1401→                          </>
+  1402→  1402→                        )}
+  1403→  1403→                      </Button>
+  1404→  1404→                      <Button
+  1405→  1405→                        variant="outline"
+  1406→  1406→                        className="shrink-0"
+  1407→  1407→                        onClick={() => {
+  1408→  1408→                          setImportPreview([]);
+  1409→  1409→                          setImportFile(null);
+  1410→  1410→                          setImportResult(null);
+  1411→  1411→                          if (fileInputRef.current) fileInputRef.current.value = '';
+  1412→  1412→                        }}
+  1413→  1413→                      >
+  1414→  1414→                        Clear
+  1415→  1415→                      </Button>
+  1416→  1416→                      <span className="text-xs text-muted-foreground ml-auto">{importPreview.length} records ready to process</span>
+  1417→  1417→                    </div>
+  1418→  1418→                  </div>
+  1419→  1419→                )}
+  1420→  1420→
+  1421→  1421→                {/* Import Result */}
+  1422→  1422→                {importResult && (
+  1423→  1423→                  <div className="p-4 rounded-lg bg-muted/30 border">
+  1424→  1424→                    <h4 className="text-sm font-semibold mb-2">Import Results</h4>
+  1425→  1425→                    <div className="flex gap-4 text-sm">
+  1426→  1426→                      <span className="text-emerald-500 font-medium">Success: {importResult.successCount}</span>
+  1427→  1427→                      {importResult.errorCount > 0 && (
+  1428→  1428→                        <span className="text-red-500 font-medium">Errors: {importResult.errorCount}</span>
+  1429→  1429→                      )}
+  1430→  1430→                    </div>
+  1431→  1431→                    {importResult.results?.filter((r: any) => r.error).length > 0 && (
+  1432→  1432→                      <div className="mt-2 text-xs text-red-500">
+  1433→  1433→                        {importResult.results.filter((r: any) => r.error).map((r: any, i: number) => (
+  1434→  1434→                          <p key={i}>{r.employeeId} ({r.date}): {r.error}</p>
+  1435→  1435→                        ))}
+  1436→  1436→                      </div>
+  1437→  1437→                    )}
+  1438→  1438→                  </div>
+  1439→  1439→                )}
+  1440→  1440→              </CardContent>
+  1441→  1441→            </Card>
+  1442→  1442→          </motion.div>
+  1443→  1443→        </TabsContent>
+  1444→  1444→      </Tabs>
+  1445→  1445→
+  1446→  1446→      {/* ── Mark Attendance Dialog ── */}
+  1447→  1447→      <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setForm({ employeeId: '', date: '', checkIn: '', checkOut: '' }); setEmployeeSearch(''); } }}>
+  1448→  1448→        <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto z-[100]">
+  1449→  1449→          <DialogHeader>
+  1450→  1450→            <DialogTitle className="flex items-center gap-2">
+  1451→  1451→              <Clock className="w-5 h-5 text-gold" />
+  1452→  1452→              Mark Attendance
+  1453→  1453→            </DialogTitle>
+  1454→  1454→            <DialogDescription>Select an employee and enter attendance details</DialogDescription>
+  1455→  1455→          </DialogHeader>
+  1456→  1456→          <div className="space-y-4 py-2">
+  1457→  1457→            {/* Employee Selection */}
+  1458→  1458→            <div className="space-y-2">
+  1459→  1459→              <Label className="text-sm font-medium">Employee *</Label>
+  1460→  1460→              {!form.employeeId ? (
+  1461→  1461→                <div className="space-y-2">
+  1462→  1462→                  <div className="relative">
+  1463→  1463→                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+  1464→  1464→                    <Input
+  1465→  1465→                      className="pl-9"
+  1466→  1466→                      placeholder="Search employee by name or ID..."
+  1467→  1467→                      value={employeeSearch}
+  1468→  1468→                      onChange={(e) => setEmployeeSearch(e.target.value)}
+  1469→  1469→                      autoFocus
+  1470→  1470→                    />
+  1471→  1471→                  </div>
+  1472→  1472→                  <div className="border rounded-lg max-h-48 overflow-y-auto">
+  1473→  1473→                    {filteredEmployees.length === 0 ? (
+  1474→  1474→                      <p className="text-sm text-muted-foreground text-center py-4">No employees found</p>
+  1475→  1475→                    ) : (
+  1476→  1476→                      filteredEmployees.slice(0, 20).map((e) => (
+  1477→  1477→                        <button
+  1478→  1478→                          key={e.employeeId}
+  1479→  1479→                          className="w-full text-left px-3 py-2.5 hover:bg-muted/80 text-sm flex items-center justify-between transition-colors border-b border-border/50 last:border-0 gap-2"
+  1480→  1480→                          onClick={() => { setForm({ ...form, employeeId: e.employeeId }); setEmployeeSearch(''); }}
+  1481→  1481→                        >
+  1482→  1482→                          <div className="flex items-center gap-2 min-w-0 overflow-hidden">
+  1483→  1483→                            <FirmBadge firm={e.department} />
+  1484→  1484→                            <span className="truncate-fix">{e.fullName}</span>
+  1485→  1485→                          </div>
+  1486→  1486→                          <span className="text-xs text-muted-foreground font-mono shrink-0">{e.employeeId}</span>
+  1487→  1487→                        </button>
+  1488→  1488→                      ))
+  1489→  1489→                    )}
+  1490→  1490→                  </div>
+  1491→  1491→                </div>
+  1492→  1492→              ) : (
+  1493→  1493→                <div className="flex items-center justify-between px-3 py-2.5 bg-muted/50 rounded-lg gap-2">
+  1494→  1494→                  <div className="flex items-center gap-2 min-w-0 overflow-hidden">
+  1495→  1495→                    <div className="w-7 h-7 rounded-full gradient-laxree flex items-center justify-center text-white text-[10px] font-bold shrink-0">
+  1496→  1496→                      {selectedEmployee?.fullName?.charAt(0) || '?'}
+  1497→  1497→                    </div>
+  1498→  1498→                    <span className="text-sm font-medium truncate-fix">{selectedEmployee?.fullName}</span>
+  1499→  1499→                    <FirmBadge firm={selectedEmployee?.department || ''} />
+  1500→  1500→                  </div>
+  1501→  1501→                  <Button variant="ghost" size="sm" className="h-7 text-xs shrink-0 px-2" onClick={() => setForm({ ...form, employeeId: '' })}>
+  1502→  1502→                    <X className="w-3 h-3 mr-1" /> Change
+  1503→  1503→                  </Button>
+  1504→  1504→                </div>
+  1505→  1505→              )}
+  1506→  1506→            </div>
+  1507→  1507→
+  1508→  1508→            <div className="space-y-2">
+  1509→  1509→              <Label className="text-sm font-medium">Date *</Label>
+  1510→  1510→              <Input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} className="w-full" />
+  1511→  1511→            </div>
+  1512→  1512→            <div className="grid grid-cols-2 gap-3">
+  1513→  1513→              <div className="space-y-2">
+  1514→  1514→                <Label className="text-sm font-medium">Check-In Time</Label>
+  1515→  1515→                <Input type="time" value={form.checkIn} onChange={(e) => setForm({ ...form, checkIn: e.target.value })} className="w-full" />
+  1516→  1516→              </div>
+  1517→  1517→              <div className="space-y-2">
+  1518→  1518→                <Label className="text-sm font-medium">Check-Out Time</Label>
+  1519→  1519→                <Input type="time" value={form.checkOut} onChange={(e) => setForm({ ...form, checkOut: e.target.value })} className="w-full" />
+  1520→  1520→              </div>
+  1521→  1521→            </div>
+  1522→  1522→
+  1523→  1523→            <div className="flex items-start gap-2 p-3 rounded-lg bg-gold/5 border border-gold/10">
+  1524→  1524→              <Info className="w-4 h-4 text-gold shrink-0 mt-0.5" />
+  1525→  1525→              <p className="text-xs text-muted-foreground leading-relaxed">
+  1526→  1526→                System auto-calculates working hours, late entry detection, overtime, Sunday hours, and public holiday tracking.
+  1527→  1527→              </p>
+  1528→  1528→            </div>
+  1529→  1529→
+  1530→  1530→            <Button className="w-full gradient-laxree text-white h-10" onClick={handleSubmit}>
+  1531→  1531→              Save Attendance
+  1532→  1532→            </Button>
+  1533→  1533→          </div>
+  1534→  1534→        </DialogContent>
+  1535→  1535→      </Dialog>
+  1536→  1536→
+  1537→  1537→      {/* ── Edit Attendance Dialog ── */}
+  1538→  1538→      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+  1539→  1539→        <DialogContent className="sm:max-w-md z-[100]">
+  1540→  1540→          <DialogHeader>
+  1541→  1541→            <DialogTitle className="flex items-center gap-2">
+  1542→  1542→              <Pencil className="w-5 h-5 text-gold" />
+  1543→  1543→              Edit Attendance
+  1544→  1544→            </DialogTitle>
+  1545→  1545→            <DialogDescription>Update check-in and check-out times for this attendance record</DialogDescription>
+  1546→  1546→          </DialogHeader>
+  1547→  1547→          {editRecord && (
+  1548→  1548→            <div className="space-y-4 py-2">
+  1549→  1549→              <div className="px-3 py-2.5 bg-muted/50 rounded-lg flex items-center gap-2">
+  1550→  1550→                <div className="w-8 h-8 rounded-full gradient-laxree flex items-center justify-center text-white text-xs font-bold shrink-0">
+  1551→  1551→                  {editRecord.employee?.fullName?.charAt(0) || '?'}
+  1552→  1552→                </div>
+  1553→  1553→                <div>
+  1554→  1554→                  <p className="text-sm font-medium">{editRecord.employee?.fullName || editRecord.employeeId}</p>
+  1555→  1555→                  <p className="text-xs text-muted-foreground">
+  1556→  1556→                    {editRecord.employeeId} • {new Date(editRecord.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+  1557→  1557→                  </p>
+  1558→  1558→                </div>
+  1559→  1559→                <StatusBadge status={editRecord.status} />
+  1560→  1560→              </div>
+  1561→  1561→              <div className="grid grid-cols-2 gap-3">
+  1562→  1562→                <div className="space-y-2">
+  1563→  1563→                  <Label className="text-sm font-medium">Check-In Time</Label>
+  1564→  1564→                  <Input type="time" value={editForm.checkIn} onChange={(e) => setEditForm({ ...editForm, checkIn: e.target.value })} className="w-full" />
+  1565→  1565→                </div>
+  1566→  1566→                <div className="space-y-2">
+  1567→  1567→                  <Label className="text-sm font-medium">Check-Out Time</Label>
+  1568→  1568→                  <Input type="time" value={editForm.checkOut} onChange={(e) => setEditForm({ ...editForm, checkOut: e.target.value })} className="w-full" />
+  1569→  1569→                </div>
+  1570→  1570→              </div>
+  1571→  1571→              <div className="flex items-start gap-2 p-3 rounded-lg bg-gold/5 border border-gold/10">
+  1572→  1572→                <Info className="w-4 h-4 text-gold shrink-0 mt-0.5" />
+  1573→  1573→                <p className="text-xs text-muted-foreground leading-relaxed">
+  1574→  1574→                  Hours, OT, late entry, and status will be auto-recalculated when you save.
+  1575→  1575→                </p>
+  1576→  1576→              </div>
+  1577→  1577→              <Button className="w-full gradient-laxree text-white h-10" onClick={handleEditSubmit}>
+  1578→  1578→                Update Attendance
+  1579→  1579→              </Button>
+  1580→  1580→            </div>
+  1581→  1581→          )}
+  1582→  1582→        </DialogContent>
+  1583→  1583→      </Dialog>
+  1584→  1584→    </div>
+  1585→  1585→  );
+  1586→  1586→}
+  1587→  1587→

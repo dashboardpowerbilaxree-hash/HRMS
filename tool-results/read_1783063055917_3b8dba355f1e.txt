@@ -1,0 +1,771 @@
+     1→     1→import { NextRequest, NextResponse } from 'next/server';
+     2→     2→import { db } from '@/lib/db';
+     3→     3→import * as XLSXStyle from 'xlsx-js-style';
+     4→     4→import {
+     5→     5→  getEffectiveCutoffDay,
+     6→     6→  countSundaysUpTo,
+     7→     7→  countHolidaysUpTo,
+     8→     8→  filterAttendanceUpTo,
+     9→     9→} from '@/lib/payroll-calc';
+    10→    10→
+    11→    11→const FIRM_NAMES: Record<string, string> = {
+    12→    12→  LAPL: 'LAXREE AMENITIES PVT LTD',
+    13→    13→  LRSL: 'LAXREE ROOFING SOLUTION',
+    14→    14→  SI: 'SMARTH INTERNATIONAL',
+    15→    15→  SDF: 'SANGRAH DECOR & FURNITURE',
+    16→    16→};
+    17→    17→
+    18→    18→function getFirmFromEmployeeId(employeeId: string): string {
+    19→    19→  const id = employeeId.toUpperCase();
+    20→    20→  if (id.startsWith('LAPL')) return 'LAPL';
+    21→    21→  if (id.startsWith('LRSL')) return 'LRSL';
+    22→    22→  if (id.startsWith('SI-') || id.startsWith('SI0')) return 'SI';
+    23→    23→  if (id.startsWith('SDF')) return 'SDF';
+    24→    24→  return '';
+    25→    25→}
+    26→    26→
+    27→    27→function formatHours(decimal: number): string {
+    28→    28→  if (!decimal || decimal === 0) return '0:00';
+    29→    29→  const hours = Math.floor(decimal);
+    30→    30→  const minutes = Math.round((decimal - hours) * 60);
+    31→    31→  if (minutes >= 60) return `${hours + 1}:00`;
+    32→    32→  return `${hours}:${String(minutes).padStart(2, '0')}`;
+    33→    33→}
+    34→    34→
+    35→    35→// Format overtime in clear human-readable format (e.g., "7m", "1h 30m")
+    36→    36→function formatOT(decimal: number): string {
+    37→    37→  if (!decimal || decimal === 0) return '0m';
+    38→    38→  const totalMinutes = Math.round(decimal * 60);
+    39→    39→  if (totalMinutes < 60) return `${totalMinutes}m`;
+    40→    40→  const hours = Math.floor(totalMinutes / 60);
+    41→    41→  const minutes = totalMinutes % 60;
+    42→    42→  if (minutes === 0) return `${hours}h`;
+    43→    43→  return `${hours}h ${minutes}m`;
+    44→    44→}
+    45→    45→
+    46→    46→// Format minutes directly to HH.MM string (e.g., 71 → "1.11", 325 → "5.25")
+    47→    47→function formatMinutesToHHMM(totalMinutes: number): string {
+    48→    48→  if (!totalMinutes || totalMinutes === 0) return '0.00';
+    49→    49→  const hours = Math.floor(totalMinutes / 60);
+    50→    50→  const minutes = totalMinutes % 60;
+    51→    51→  return `${hours}.${String(minutes).padStart(2, '0')}`;
+    52→    52→}
+    53→    53→
+    54→    54→// Convert HH.MM numeric (e.g., 1.11 = 1h 11min) to total minutes
+    55→    55→function hhmmToMinutes(val: number): number {
+    56→    56→  const h = Math.floor(val);
+    57→    57→  const m = Math.round((val - h) * 100); // extract minutes part from HH.MM
+    58→    58→  return h * 60 + m;
+    59→    59→}
+    60→    60→
+    61→    61→// Count Sundays where employee actually worked (has present/late/early-out record)
+    62→    62→function countSundaysEarned(attendance: any[]): number {
+    63→    63→  return attendance.filter(a => a.isSunday && ['present', 'late', 'early-out', 'half-day', 'half_day'].includes(a.status)).length;
+    64→    64→}
+    65→    65→
+    66→    66→const MONTHS = [
+    67→    67→  'January', 'February', 'March', 'April', 'May', 'June',
+    68→    68→  'July', 'August', 'September', 'October', 'November', 'December',
+    69→    69→];
+    70→    70→
+    71→    71→// Color constants
+    72→    72→const GOLD = 'D4A843';
+    73→    73→const DARK = '1A1A1A';
+    74→    74→const WHITE = 'FFFFFF';
+    75→    75→const EMERALD = '059669';
+    76→    76→const RED = 'DC2626';
+    77→    77→const AMBER = 'D97706';
+    78→    78→const CYAN = '0891B2';
+    79→    79→const PURPLE = '7C3AED';
+    80→    80→const SKY = '0284C7';
+    81→    81→const LIGHT_BG = 'FFF8E7';
+    82→    82→const LIGHT_GREEN = 'ECFDF5';
+    83→    83→const LIGHT_RED = 'FEF2F2';
+    84→    84→const LIGHT_AMBER = 'FFFBEB';
+    85→    85→const DEEP_BLUE = '1E3A5F';
+    86→    86→const TEAL = '0D9488';
+    87→    87→
+    88→    88→const fullBorder = (color: string = 'B0B0B0', style: 'thin' | 'medium' = 'thin') => ({
+    89→    89→  top: { style, color: { rgb: color } },
+    90→    90→  bottom: { style, color: { rgb: color } },
+    91→    91→  left: { style, color: { rgb: color } },
+    92→    92→  right: { style, color: { rgb: color } },
+    93→    93→});
+    94→    94→
+    95→    95→const goldBorder = {
+    96→    96→  top: { style: 'medium' as const, color: { rgb: GOLD } },
+    97→    97→  bottom: { style: 'medium' as const, color: { rgb: GOLD } },
+    98→    98→  left: { style: 'medium' as const, color: { rgb: GOLD } },
+    99→    99→  right: { style: 'medium' as const, color: { rgb: GOLD } },
+   100→   100→};
+   101→   101→
+   102→   102→const styleHeader = (rgb: string = DARK) => ({
+   103→   103→  font: { bold: true, color: { rgb: GOLD }, sz: 14 },
+   104→   104→  fill: { fgColor: { rgb } },
+   105→   105→  alignment: { horizontal: 'center' as const, vertical: 'center' as const },
+   106→   106→  border: goldBorder,
+   107→   107→});
+   108→   108→
+   109→   109→const styleSubHeader = (rgb: string = DEEP_BLUE) => ({
+   110→   110→  font: { bold: true, color: { rgb: WHITE }, sz: 11 },
+   111→   111→  fill: { fgColor: { rgb } },
+   112→   112→  alignment: { horizontal: 'center' as const, vertical: 'center' as const },
+   113→   113→  border: fullBorder('FFFFFF', 'medium'),
+   114→   114→});
+   115→   115→
+   116→   116→const styleColHeader = (rgb: string = TEAL) => ({
+   117→   117→  font: { bold: true, color: { rgb: WHITE }, sz: 9 },
+   118→   118→  fill: { fgColor: { rgb } },
+   119→   119→  alignment: { horizontal: 'center' as const, vertical: 'center' as const, wrapText: true },
+   120→   120→  border: fullBorder(WHITE, 'medium'),
+   121→   121→});
+   122→   122→
+   123→   123→const styleData = (bg?: string) => ({
+   124→   124→  font: { sz: 10, color: { rgb: '333333' } },
+   125→   125→  fill: bg ? { fgColor: { rgb: bg } } : undefined,
+   126→   126→  alignment: { horizontal: 'center' as const, vertical: 'center' as const },
+   127→   127→  border: fullBorder('D0D0D0'),
+   128→   128→});
+   129→   129→
+   130→   130→const styleBold = (rgb: string = DARK, bg?: string) => ({
+   131→   131→  font: { bold: true, color: { rgb }, sz: 10 },
+   132→   132→  fill: bg ? { fgColor: { rgb: bg } } : undefined,
+   133→   133→  alignment: { horizontal: 'center' as const, vertical: 'center' as const },
+   134→   134→  border: fullBorder('D0D0D0'),
+   135→   135→});
+   136→   136→
+   137→   137→const safeStyle = (ws: any, cellRef: string, style: any) => {
+   138→   138→  if (ws[cellRef]) ws[cellRef].s = style;
+   139→   139→};
+   140→   140→
+   141→   141→// Style for label-value pair rows (like "Employee Name: | Khushboo | | Employee Code: | EMP-007")
+   142→   142→const styleLabelCell = { font: { bold: true, sz: 10, color: { rgb: 'AAAAAA' } }, fill: { fgColor: { rgb: '2D2D2D' } }, alignment: { horizontal: 'right' as const, vertical: 'center' as const } };
+   143→   143→const styleValueCell = { font: { bold: true, sz: 10, color: { rgb: WHITE } }, fill: { fgColor: { rgb: '2D2D2D' } }, alignment: { horizontal: 'left' as const, vertical: 'center' as const } };
+   144→   144→
+   145→   145→export async function GET(request: NextRequest) {
+   146→   146→  try {
+   147→   147→    const { searchParams } = new URL(request.url);
+   148→   148→    const employeeId = searchParams.get('employeeId') || '';
+   149→   149→    const month = parseInt(searchParams.get('month') || String(new Date().getMonth() + 1));
+   150→   150→    const year = parseInt(searchParams.get('year') || String(new Date().getFullYear()));
+   151→   151→
+   152→   152→    if (!employeeId) {
+   153→   153→      return NextResponse.json({ error: 'employeeId is required' }, { status: 400 });
+   154→   154→    }
+   155→   155→
+   156→   156→    const employee = await db.employee.findUnique({
+   157→   157→      where: { employeeId },
+   158→   158→      select: {
+   159→   159→        fullName: true, employeeId: true, firm: true, location: true,
+   160→   160→        department: true, designation: true, shiftHours: true,
+   161→   161→        employmentType: true, hourlyRate: true, monthlySalary: true, overtimeRate: true,
+   162→   162→        relievingDate: true,
+   163→   163→      },
+   164→   164→    });
+   165→   165→
+   166→   166→    if (!employee) {
+   167→   167→      return NextResponse.json({ error: 'Employee not found' }, { status: 404 });
+   168→   168→    }
+   169→   169→
+   170→   170→    const startDate = new Date(year, month - 1, 1);
+   171→   171→    const endDate = new Date(year, month, 1);
+   172→   172→    const daysInMonth = new Date(year, month, 0).getDate();
+   173→   173→
+   174→   174→    const attendance = await db.attendance.findMany({
+   175→   175→      where: { employeeId, date: { gte: startDate, lt: endDate } },
+   176→   176→      orderBy: { date: 'asc' },
+   177→   177→    });
+   178→   178→
+   179→   179→    const leaves = await db.leave.findMany({
+   180→   180→      where: { employeeId, status: 'approved', startDate: { gte: startDate }, endDate: { lt: endDate } },
+   181→   181→    });
+   182→   182→
+   183→   183→    const holidays = await db.holiday.findMany({ where: { date: { gte: startDate, lt: endDate } } });
+   184→   184→
+   185→   185→    // ── Effective cutoff day: caps future days and post-relieving days ──
+   186→   186→    const cutoffDay = getEffectiveCutoffDay(year, month, daysInMonth, employee.relievingDate);
+   187→   187→    const elapsedHolidays = countHolidaysUpTo(holidays, cutoffDay);
+   188→   188→    const holidayDays = elapsedHolidays;
+   189→   189→    // Sundays only up to cutoff day
+   190→   190→    const sundays = countSundaysUpTo(year, month, cutoffDay);
+   191→   191→    // Filter attendance defensively
+   192→   192→    const effectiveAttendance = filterAttendanceUpTo(attendance, year, month, cutoffDay);
+   193→   193→
+   194→   194→    const rawPresentDays = effectiveAttendance.filter(a => ['present', 'late', 'early-out'].includes(a.status)).length;
+   195→   195→    const halfDays = effectiveAttendance.filter(a => a.status === 'half-day' || a.halfDay).length;
+   196→   196→    const presentDays = rawPresentDays;
+   197→   197→    const shiftMinutes = Math.round(employee.shiftHours * 60);
+   198→   198→    let totalBaseHours = 0;
+   199→   199→    let effectivePresentDays = 0;
+   200→   200→    for (const a of effectiveAttendance) {
+   201→   201→      if (['present', 'late', 'early-out', 'half-day', 'half_day'].includes(a.status)) {
+   202→   202→        const baseHrs = Math.max(0, (a.totalHours || 0) - (a.overtimeHours || 0));
+   203→   203→        totalBaseHours += baseHrs;
+   204→   204→        if (a.status === 'half-day' || a.status === 'half_day') {
+   205→   205→          effectivePresentDays += 0.5;
+   206→   206→        } else {
+   207→   207→          effectivePresentDays += Math.min(1, baseHrs / employee.shiftHours);
+   208→   208→        }
+   209→   209→      }
+   210→   210→    }
+   211→   211→    effectivePresentDays = Math.round(effectivePresentDays * 100) / 100;
+   212→   212→    // Working days = cutoffDay - sundays - elapsedHolidays (caps future days)
+   213→   213→    const totalWorkingDays = Math.max(0, cutoffDay - sundays - elapsedHolidays);
+   214→   214→
+   215→   215→    const holidayDateStrs = new Set(
+   216→   216→      holidays.map(h => {
+   217→   217→        const hd = new Date(h.date);
+   218→   218→        return `${hd.getFullYear()}-${String(hd.getMonth() + 1).padStart(2, '0')}-${String(hd.getDate()).padStart(2, '0')}`;
+   219→   219→      })
+   220→   220→    );
+   221→   221→    const presentDateStrs = new Set();
+   222→   222→    for (const a of effectiveAttendance) {
+   223→   223→      if (['present', 'late', 'early-out', 'half-day'].includes(a.status)) {
+   224→   224→        const ad = new Date(a.date);
+   225→   225→        presentDateStrs.add(`${ad.getFullYear()}-${String(ad.getMonth() + 1).padStart(2, '0')}-${String(ad.getDate()).padStart(2, '0')}`);
+   226→   226→      }
+   227→   227→    }
+   228→   228→    let effectivePaidLeaves = 0;
+   229→   229→    let effectiveUnpaidLeaves = 0;
+   230→   230→    const cutoffDate = new Date(year, month - 1, cutoffDay);
+   231→   231→    for (const leave of leaves) {
+   232→   232→      const isUnpaid = leave.type === 'unpaid' || leave.type === 'UL' || leave.type === 'LOP';
+   233→   233→      let d = new Date(leave.startDate);
+   234→   234→      const end = new Date(leave.endDate);
+   235→   235→      // Cap leave iteration at cutoff day — don't count future leave days
+   236→   236→      const effectiveEnd = end > cutoffDate ? cutoffDate : end;
+   237→   237→      while (d <= effectiveEnd) {
+   238→   238→        const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+   239→   239→        const isSunday = d.getDay() === 0;
+   240→   240→        const isHoliday = holidayDateStrs.has(dateStr);
+   241→   241→        if (!isSunday && !isHoliday && !presentDateStrs.has(dateStr)) {
+   242→   242→          if (isUnpaid) effectiveUnpaidLeaves++;
+   243→   243→          else effectivePaidLeaves++;
+   244→   244→        }
+   245→   245→        d.setDate(d.getDate() + 1);
+   246→   246→      }
+   247→   247→    }
+   248→   248→    const absentDays = Math.max(0, totalWorkingDays - presentDays - halfDays - effectivePaidLeaves - effectiveUnpaidLeaves);
+   249→   249→
+   250→   250→    const firmFromId = getFirmFromEmployeeId(employeeId);
+   251→   251→    const effectiveFirm = firmFromId || employee.firm;
+   252→   252→    const firmFullName = FIRM_NAMES[effectiveFirm] || employee.firm;
+   253→   253→    const monthName = MONTHS[month - 1];
+   254→   254→
+   255→   255→    // Computed totals
+   256→   256→    let totalWorkMinutes = 0;
+   257→   257→    let totalSundayMinutes = 0;
+   258→   258→
+   259→   259→    for (const a of effectiveAttendance) {
+   260→   260→      if (a.checkIn && a.checkOut) {
+   261→   261→        const [h1, m1] = a.checkIn.split(':').map(Number);
+   262→   262→        const [h2, m2] = a.checkOut.split(':').map(Number);
+   263→   263→        const workMin = Math.max(0, (h2 * 60 + m2) - (h1 * 60 + m1));
+   264→   264→        totalWorkMinutes += workMin;
+   265→   265→      }
+   266→   266→      if (a.sundayHours > 0) {
+   267→   267→        totalSundayMinutes += hhmmToMinutes(a.sundayHours);
+   268→   268→      }
+   269→   269→
+   270→   270→    }
+   271→   271→
+   272→   272→    const totalWorkHours = formatMinutesToHHMM(totalWorkMinutes);
+   273→   273→    const totalOvertimeHoursDecimal = Math.round(effectiveAttendance.reduce((sum, a) => sum + (a.overtimeHours || 0), 0) * 100) / 100;
+   274→   274→    const totalOvertimeHours = formatOT(totalOvertimeHoursDecimal);
+   275→   275→    const totalSundayHours = formatMinutesToHHMM(totalSundayMinutes);
+   276→   276→
+   277→   277→    const lateEntries = effectiveAttendance.filter(a => a.lateEntry).length;
+   278→   278→    const earlyOuts = effectiveAttendance.filter(a => a.earlyOut).length;
+   279→   279→    const weeklyOffs = effectiveAttendance.filter(a => a.isWeeklyOff || a.isSunday).length;
+   280→   280→    const annualLeaves = effectivePaidLeaves;
+   281→   281→    const unpaidLeaves = effectiveUnpaidLeaves;
+   282→   282→    const sundaysEarned = countSundaysEarned(attendance);
+   283→   283→    const totalHrsInclSunday = formatMinutesToHHMM(totalWorkMinutes + totalSundayMinutes);
+   284→   284→
+   285→   285→    // ─── Salary Calculation (matching Excel Payroll Master) ───
+   286→   286→    const salaryHourlyRate = employee.monthlySalary / (daysInMonth * employee.shiftHours);
+   287→   287→    const salaryPerDayRate = employee.monthlySalary / daysInMonth;
+   288→   288→    const salarySundayHrs = sundays * employee.shiftHours;
+   289→   289→    const salaryPaidLeaveHrs = effectivePaidLeaves * employee.shiftHours;
+   290→   290→    const salaryTotalHrs = totalBaseHours + salarySundayHrs + totalOvertimeHoursDecimal + salaryPaidLeaveHrs;
+   291→   291→    const salaryBaseSalary = salaryHourlyRate * totalBaseHours;
+   292→   292→    const salarySundayEarnings = salaryHourlyRate * salarySundayHrs;
+   293→   293→    const salaryOtAmount = totalOvertimeHoursDecimal * salaryHourlyRate;
+   294→   294→    const salaryGrossSalary = salaryHourlyRate * salaryTotalHrs;
+   295→   295→
+   296→   296→    const wb = XLSXStyle.utils.book_new();
+   297→   297→
+   298→   298→    // ═══════════════════════════════════════════════════════════════════
+   299→   299→    // SHEET 1: Attendance Register (Matching Khushboo May 2026 format)
+   300→   300→    // ═══════════════════════════════════════════════════════════════════
+   301→   301→    // Layout:
+   302→   302→    // Row 1: Company Name (merged across all 12 cols)
+   303→   303→    // Row 2: "MONTHLY ATTENDANCE REGISTER" (merged)
+   304→   304→    // Row 3: empty
+   305→   305→    // Row 4: Employee Name: | name | | Employee Code: | code | | Month: | May 2026 | | Company: | firm
+   306→   306→    // Row 5: Designation: | desig | | Department: | dept | | Location: | loc | | Shift Hrs: | hrs
+   307→   307→    // Row 6: Generated: | datetime
+   308→   308→    // Row 7: empty
+   309→   309→    // Row 8: Summary header (11 cols): DAYS PRESENT | DAYS ABSENT | HALF DAYS | AL | UL | PH | TOTAL HRS WORKED | OT HRS | SUNDAYS EARNED | SUNDAY HRS | TOTAL HRS (INCL. S+PH)
+   310→   310→    // Row 9: Summary data (11 cols)
+   311→   311→    // Row 10: Additional header (7 cols): WORKING DAYS | WEEKLY OFFS | SUNDAYS | LATE ENTRIES | EARLY OUTS | PH HOURS | SHIFT HRS
+   312→   312→    // Row 11: Additional data (7 cols)
+   313→   313→    // Row 12: empty
+   314→   314→    // Row 13: Daily register header (12 cols): S.No | Date | Day | Check In | Check Out | Total Hrs | Status | OT Hrs | Sunday Hrs | PH Hrs | Late | Early Out
+   315→   315→    // Row 14+: Daily data rows
+   316→   316→
+   317→   317→    const regData: any[][] = [
+   318→   318→      [firmFullName],                                                                                             // R1
+   319→   319→      ['MONTHLY ATTENDANCE REGISTER'],                                                                            // R2
+   320→   320→      [],                                                                                                          // R3
+   321→   321→      ['Employee Name:', employee.fullName, '', 'Employee Code:', employee.employeeId, '', 'Month:', `${monthName} ${year}`, '', 'Company:', firmFullName], // R4
+   322→   322→      ['Designation:', employee.designation || 'N/A', '', 'Department:', employee.department || 'N/A', '', 'Location:', employee.location || 'N/A', '', 'Shift Hrs:', `${formatHours(employee.shiftHours)} hrs`], // R5
+   323→   323→      ['Generated:', new Date().toLocaleString('en-IN')],                                                         // R6
+   324→   324→      [],                                                                                                          // R7
+   325→   325→      // Row 8: Attendance overview header
+   326→   326→      ['DAYS PRESENT', 'DAYS ABSENT', 'HALF DAYS', 'AL', 'UL', 'TOTAL HRS WORKED', 'OT HRS', 'SUNDAYS EARNED', 'SUNDAY HRS', 'TOTAL HRS (INCL. SUNDAY)'],
+   327→   327→      // Row 9: Attendance overview data
+   328→   328→      [presentDays, absentDays, halfDays, annualLeaves, unpaidLeaves, totalWorkHours, totalOvertimeHours, sundaysEarned, totalSundayHours, totalHrsInclSunday],
+   329→   329→      // Row 10: Additional info header
+   330→   330→      ['WORKING DAYS', 'WEEKLY OFFS', 'SUNDAYS', 'LATE ENTRIES', 'EARLY OUTS', 'SHIFT HRS'],
+   331→   331→      // Row 11: Additional info data
+   332→   332→      [totalWorkingDays, weeklyOffs, sundays, lateEntries, earlyOuts, `${formatMinutesToHHMM(shiftMinutes)}h`],
+   333→   333→      [],                                                                                                          // R12
+   334→   334→      // Row 13: Daily register header (11 columns)
+   335→   335→      ['S.No', 'Date', 'Day', 'Check In', 'Check Out', 'Total Hrs', 'Status', 'OT Hrs', 'Sunday Hrs', 'Late', 'Early Out'],
+   336→   336→    ];
+   337→   337→
+   338→   338→    const ws1 = XLSXStyle.utils.aoa_to_sheet(regData);
+   339→   339→
+   340→   340→    // Style Row 1: Company name (gold on dark, merged)
+   341→   341→    const cols12 = ['A','B','C','D','E','F','G','H','I','J','K','L'];
+   342→   342→    cols12.forEach(c => { safeStyle(ws1, `${c}1`, styleHeader()); });
+   343→   343→    // Style Row 2: Sub header
+   344→   344→    cols12.forEach(c => { safeStyle(ws1, `${c}2`, styleSubHeader('2D2D2D')); });
+   345→   345→    // Row 3: empty (dark bg)
+   346→   346→    cols12.forEach(c => { safeStyle(ws1, `${c}3`, { fill: { fgColor: { rgb: '2D2D2D' } } }); });
+   347→   347→
+   348→   348→    // Style Row 4: Employee Name / Code / Month / Company (label-value pairs)
+   349→   349→    ['A','C','F','I'].forEach(c => { safeStyle(ws1, `${c}4`, styleLabelCell); });
+   350→   350→    ['B','E','H','K'].forEach(c => { safeStyle(ws1, `${c}4`, styleValueCell); });
+   351→   351→    // Fill remaining cells in R4 with dark bg
+   352→   352→    ['D','G','J','L'].forEach(c => { safeStyle(ws1, `${c}4`, { fill: { fgColor: { rgb: '2D2D2D' } } }); });
+   353→   353→
+   354→   354→    // Style Row 5: Designation / Department / Location / Shift Hrs
+   355→   355→    ['A','C','F','I'].forEach(c => { safeStyle(ws1, `${c}5`, styleLabelCell); });
+   356→   356→    ['B','E','H','K'].forEach(c => { safeStyle(ws1, `${c}5`, styleValueCell); });
+   357→   357→    ['D','G','J','L'].forEach(c => { safeStyle(ws1, `${c}5`, { fill: { fgColor: { rgb: '2D2D2D' } } }); });
+   358→   358→
+   359→   359→    // Style Row 6: Generated
+   360→   360→    safeStyle(ws1, 'A6', styleLabelCell);
+   361→   361→    safeStyle(ws1, 'B6', { font: { sz: 9, color: { rgb: '888888' } }, fill: { fgColor: { rgb: '2D2D2D' } }, alignment: { horizontal: 'left' as const, vertical: 'center' as const } });
+   362→   362→    ['C','D','E','F','G','H','I','J','K','L'].forEach(c => { safeStyle(ws1, `${c}6`, { fill: { fgColor: { rgb: '2D2D2D' } } }); });
+   363→   363→
+   364→   364→    // Row 7: empty
+   365→   365→    cols12.forEach(c => { safeStyle(ws1, `${c}7`, { fill: { fgColor: { rgb: '2D2D2D' } } }); });
+   366→   366→
+   367→   367→    // Style Row 8: Attendance overview header (EMERALD green)
+   368→   368→    const cols10 = ['A','B','C','D','E','F','G','H','I','J'];
+   369→   369→    cols10.forEach(c => { safeStyle(ws1, `${c}8`, styleColHeader(EMERALD)); });
+   370→   370→    safeStyle(ws1, 'K8', { fill: { fgColor: { rgb: '1A1A1A' } } });
+   371→   371→
+   372→   372→    // Style Row 9: Attendance overview data — color-coded
+   373→   373→    safeStyle(ws1, 'A9', styleBold(EMERALD, LIGHT_GREEN));    // Days Present
+   374→   374→    safeStyle(ws1, 'B9', styleBold(RED, LIGHT_RED));           // Days Absent
+   375→   375→    safeStyle(ws1, 'C9', styleBold(AMBER, LIGHT_AMBER));       // Half Days
+   376→   376→    safeStyle(ws1, 'D9', styleBold(SKY, 'EFF6FF'));            // AL
+   377→   377→    safeStyle(ws1, 'E9', styleBold(AMBER, LIGHT_AMBER));       // UL
+   378→   378→    safeStyle(ws1, 'F9', styleBold(CYAN, LIGHT_BG));           // Total Hrs Worked
+   379→   379→    safeStyle(ws1, 'G9', styleBold(AMBER, LIGHT_AMBER));       // OT Hrs
+   380→   380→    safeStyle(ws1, 'H9', styleBold(EMERALD, LIGHT_GREEN));     // Sundays Earned
+   381→   381→    safeStyle(ws1, 'I9', styleBold(SKY, 'EFF6FF'));            // Sunday Hrs
+   382→   382→    safeStyle(ws1, 'J9', styleBold(GOLD, LIGHT_BG));           // Total Hrs (incl. Sunday)
+   383→   383→    safeStyle(ws1, 'K9', { fill: { fgColor: { rgb: '1A1A1A' } } });
+   384→   384→
+   385→   385→    // Style Row 10: Additional info header (dark style)
+   386→   386→    const cols6 = ['A','B','C','D','E','F'];
+   387→   387→    cols6.forEach(c => { safeStyle(ws1, `${c}10`, styleColHeader('2D2D2D')); });
+   388→   388→
+   389→   389→    // Style Row 11: Additional info data
+   390→   390→    safeStyle(ws1, 'A11', styleBold(EMERALD));     // Working Days
+   391→   391→    safeStyle(ws1, 'B11', styleBold(SKY));          // Weekly Offs
+   392→   392→    safeStyle(ws1, 'C11', styleBold(SKY));          // Sundays
+   393→   393→    safeStyle(ws1, 'D11', styleBold(AMBER));        // Late Entries
+   394→   394→    safeStyle(ws1, 'E11', styleBold(RED));          // Early Outs
+   395→   395→    safeStyle(ws1, 'F11', styleBold(CYAN));         // Shift Hrs
+   396→   396→
+   397→   397→    // Row 12: empty
+   398→   398→    cols12.forEach(c => { safeStyle(ws1, `${c}12`, { fill: { fgColor: { rgb: '2D2D2D' } } }); });
+   399→   399→
+   400→   400→    // Style Row 13: Daily register header (TEAL)
+   401→   401→    const cols11 = ['A','B','C','D','E','F','G','H','I','J','K'];
+   402→   402→    cols11.forEach(c => { safeStyle(ws1, `${c}13`, styleColHeader(TEAL)); });
+   403→   403→
+   404→   404→    // ── Daily data rows ──
+   405→   405→    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+   406→   406→    let dailyStartRow = 14;
+   407→   407→
+   408→   408→    for (let day = 1; day <= daysInMonth; day++) {
+   409→   409→      const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+   410→   410→      const dateObj = new Date(dateStr + 'T00:00:00');
+   411→   411→      const dayName = dayNames[dateObj.getDay()];
+   412→   412→      const isSunday = dateObj.getDay() === 0;
+   413→   413→
+   414→   414→      const rec = attendance.find((r: any) => {
+   415→   415→        const rDate = new Date(r.date);
+   416→   416→        return rDate.getFullYear() === year && rDate.getMonth() + 1 === month && rDate.getDate() === day;
+   417→   417→      });
+   418→   418→
+   419→   419→      const row = dailyStartRow + day - 1;
+   420→   420→
+   421→   421→      if (rec) {
+   422→   422→        let dayTotalHrs = '-';
+   423→   423→        let dayOTHrs = '0.00';
+   424→   424→        let daySundayHrs = '0.00';
+   425→   425→        if (rec.checkIn && rec.checkOut) {
+   426→   426→          const [h1, m1] = rec.checkIn.split(':').map(Number);
+   427→   427→          const [h2, m2] = rec.checkOut.split(':').map(Number);
+   428→   428→          const workMin = Math.max(0, (h2 * 60 + m2) - (h1 * 60 + m1));
+   429→   429→          dayTotalHrs = formatMinutesToHHMM(workMin);
+   430→   430→          dayOTHrs = rec.overtimeHours > 0 ? formatOT(rec.overtimeHours) : '0m';
+   431→   431→        }
+   432→   432→        if (rec.sundayHours > 0) {
+   433→   433→          daySundayHrs = formatHours(rec.sundayHours);
+   434→   434→        }
+   435→   435→
+   436→   436→        XLSXStyle.utils.sheet_add_aoa(ws1, [[
+   437→   437→          day,
+   438→   438→          dateObj.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
+   439→   439→          dayName,
+   440→   440→          rec.checkIn || '-',
+   441→   441→          rec.checkOut || '-',
+   442→   442→          dayTotalHrs,
+   443→   443→          rec.status.charAt(0).toUpperCase() + rec.status.slice(1).replace('-', ' '),
+   444→   444→          dayOTHrs,
+   445→   445→          daySundayHrs,
+   446→   446→          rec.lateEntry ? 'Yes' : '',
+   447→   447→          rec.earlyOut ? 'Yes' : '',
+   448→   448→        ]], { origin: `A${row}` });
+   449→   449→      } else {
+   450→   450→        XLSXStyle.utils.sheet_add_aoa(ws1, [[
+   451→   451→          day,
+   452→   452→          dateObj.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
+   453→   453→          dayName,
+   454→   454→          '-', '-', isSunday ? '0.00' : '-',
+   455→   455→          isSunday ? 'Weekly Off' : 'No Record',
+   456→   456→          '0.00', '0.00', '', '',
+   457→   457→        ]], { origin: `A${row}` });
+   458→   458→      }
+   459→   459→
+   460→   460→      // Style daily rows
+   461→   461→      const bg = (day - 1) % 2 === 0 ? LIGHT_BG : undefined;
+   462→   462→      cols12.forEach(c => {
+   463→   463→        const cell = ws1[`${c}${row}`];
+   464→   464→        if (cell) {
+   465→   465→          if (c === 'G') {
+   466→   466→            const status = String(cell.v || '');
+   467→   467→            if (status === 'Present') cell.s = styleBold(EMERALD, LIGHT_GREEN);
+   468→   468→            else if (status === 'Absent') cell.s = styleBold(RED, LIGHT_RED);
+   469→   469→            else if (status === 'Late') cell.s = styleBold(AMBER, LIGHT_AMBER);
+   470→   470→            else if (status === 'Early out' || status === 'Early Out') cell.s = styleBold('E11D48', LIGHT_RED);
+   471→   471→            else if (status === 'Half Day') cell.s = styleBold(AMBER, LIGHT_AMBER);
+   472→   472→            else if (status === 'Weekly Off') cell.s = styleBold(SKY, 'EFF6FF');
+   473→   473→            else if (status === 'Holiday') cell.s = styleBold(PURPLE, 'F5F3FF');
+   474→   474→            else cell.s = styleData(bg);
+   475→   475→          } else if (c === 'C') {
+   476→   476→            const dayVal = String(cell.v || '');
+   477→   477→            if (dayVal === 'Sunday') cell.s = styleBold(SKY, 'EFF6FF');
+   478→   478→            else cell.s = styleData(bg);
+   479→   479→          } else if (c === 'J') {
+   480→   480→            if (String(cell.v) === 'Yes') cell.s = styleBold(AMBER, LIGHT_AMBER);
+   481→   481→            else cell.s = styleData(bg);
+   482→   482→          } else if (c === 'K') {
+   483→   483→            if (String(cell.v) === 'Yes') cell.s = styleBold('E11D48', LIGHT_RED);
+   484→   484→            else cell.s = styleData(bg);
+   485→   485→          } else {
+   486→   486→            cell.s = styleData(bg);
+   487→   487→          }
+   488→   488→        }
+   489→   489→      });
+   490→   490→    }
+   491→   491→
+   492→   492→    ws1['!cols'] = [
+   493→   493→      { wch: 6 },   // A: S.No
+   494→   494→      { wch: 16 },  // B: Date
+   495→   495→      { wch: 12 },  // C: Day
+   496→   496→      { wch: 10 },  // D: Check In
+   497→   497→      { wch: 10 },  // E: Check Out
+   498→   498→      { wch: 10 },  // F: Total Hrs
+   499→   499→      { wch: 14 },  // G: Status
+   500→   500→      { wch: 10 },  // H: OT Hrs
+   501→   501→      { wch: 12 },  // I: Sunday Hrs
+   502→   502→      { wch: 8 },   // J: Late
+   503→   503→      { wch: 10 },  // K: Early Out
+   504→   504→    ];
+   505→   505→    ws1['!merges'] = [
+   506→   506→      { s: { r: 0, c: 0 }, e: { r: 0, c: 10 } },  // R1: Company name
+   507→   507→      { s: { r: 1, c: 0 }, e: { r: 1, c: 10 } },  // R2: Sub header
+   508→   508→    ];
+   509→   509→
+   510→   510→    XLSXStyle.utils.book_append_sheet(wb, ws1, 'Attendance Register');
+   511→   511→
+   512→   512→    // ═══════════════════════════════════════════════════════════════════
+   513→   513→    // SHEET 2: Summary (Matching Khushboo May 2026 format - Dashboard style)
+   514→   514→    // ═══════════════════════════════════════════════════════════════════
+   515→   515→    // Layout:
+   516→   516→    // R1: Company Name (merged across all 12 cols)
+   517→   517→    // R2: "ATTENDANCE SUMMARY DASHBOARD" (merged)
+   518→   518→    // R3: empty
+   519→   519→    // R4: Employee Name: | name | | Employee Code: | code | | Month: | May 2026 | | Company: | firm
+   520→   520→    // R5: Designation: | desig | | Department: | dept | | Location: | loc | | Shift Hrs: | hrs
+   521→   521→    // R6: empty
+   522→   522→    // R7: "ATTENDANCE OVERVIEW" section header
+   523→   523→    // R8: DAYS PRESENT: 16 | | DAYS ABSENT: 8 | | HALF DAYS: 0 | | AL: 0
+   524→   524→    // R9: UL: 0 | | PH: 0 | | WORKING DAYS: 26 | | WEEKLY OFFS: 0
+   525→   525→    // R10: SUNDAYS: 5 | | SUNDAYS EARNED: 2 | | LATE ENTRIES: 2 | | EARLY OUTS: 1
+   526→   526→    // R11: empty
+   527→   527→    // R12: "HOURS OVERVIEW" section header
+   528→   528→    // R13: TOTAL HRS WORKED: 144.00 | | OT HRS: 0.38 | | SUNDAY HRS: 0.00 | | PH HOURS: 0.00h
+   529→   529→    // R14: TOTAL HRS (INCL. S+PH): 144.00 | | SHIFT HRS: 9.00h
+   530→   530→    // R15: empty
+   531→   531→
+   532→   532→    const summaryData: any[][] = [
+   533→   533→      [firmFullName],                                                                                             // R1
+   534→   534→      ['ATTENDANCE SUMMARY DASHBOARD'],                                                                           // R2
+   535→   535→      [],                                                                                                          // R3
+   536→   536→      ['Employee Name:', employee.fullName, '', 'Employee Code:', employee.employeeId, '', 'Month:', `${monthName} ${year}`, '', 'Company:', firmFullName, ''], // R4
+   537→   537→      ['Designation:', employee.designation || 'N/A', '', 'Department:', employee.department || 'N/A', '', 'Location:', employee.location || 'N/A', '', 'Shift Hrs:', `${formatHours(employee.shiftHours)} hrs`, ''], // R5
+   538→   538→      [],                                                                                                          // R6
+   539→   539→      ['ATTENDANCE OVERVIEW'],                                                                                     // R7
+   540→   540→      ['DAYS PRESENT', presentDays, '', 'DAYS ABSENT', absentDays, '', 'HALF DAYS', halfDays, '', 'AL', annualLeaves],  // R8
+   541→   541→      ['UL', unpaidLeaves, '', 'WORKING DAYS', totalWorkingDays, '', 'WEEKLY OFFS', weeklyOffs, '', 'SUNDAYS EARNED', sundaysEarned], // R9
+   542→   542→      ['SUNDAYS', sundays, '', 'LATE ENTRIES', lateEntries, '', 'EARLY OUTS', earlyOuts, '', '', ''], // R10
+   543→   543→      [],                                                                                                          // R11
+   544→   544→      ['HOURS OVERVIEW'],                                                                                          // R12
+   545→   545→      ['TOTAL HRS WORKED', totalWorkHours, '', 'OT HRS', totalOvertimeHours, '', 'SUNDAY HRS', totalSundayHours, '', '', ''],  // R13
+   546→   546→      ['TOTAL HRS (INCL. SUNDAY)', totalHrsInclSunday, '', 'SHIFT HRS', `${formatMinutesToHHMM(shiftMinutes)}h`],  // R14
+   547→   547→      [],                                                                                                          // R15
+   548→   548→    ];
+   549→   549→
+   550→   550→    const ws2 = XLSXStyle.utils.aoa_to_sheet(summaryData);
+   551→   551→
+   552→   552→    // Style R1: Company name (gold on dark)
+   553→   553→    cols12.forEach(c => { safeStyle(ws2, `${c}1`, styleHeader()); });
+   554→   554→    // Style R2: Sub header
+   555→   555→    cols12.forEach(c => { safeStyle(ws2, `${c}2`, styleSubHeader('2D2D2D')); });
+   556→   556→    // R3: empty
+   557→   557→    cols12.forEach(c => { safeStyle(ws2, `${c}3`, { fill: { fgColor: { rgb: '2D2D2D' } } }); });
+   558→   558→
+   559→   559→    // Style R4: Employee Name / Code / Month / Company
+   560→   560→    ['A','D','G','J'].forEach(c => { safeStyle(ws2, `${c}4`, styleLabelCell); });
+   561→   561→    ['B','E','H','K'].forEach(c => { safeStyle(ws2, `${c}4`, styleValueCell); });
+   562→   562→    ['C','F','I','L'].forEach(c => { safeStyle(ws2, `${c}4`, { fill: { fgColor: { rgb: '2D2D2D' } } }); });
+   563→   563→
+   564→   564→    // Style R5: Designation / Department / Location / Shift Hrs
+   565→   565→    ['A','D','G','J'].forEach(c => { safeStyle(ws2, `${c}5`, styleLabelCell); });
+   566→   566→    ['B','E','H','K'].forEach(c => { safeStyle(ws2, `${c}5`, styleValueCell); });
+   567→   567→    ['C','F','I','L'].forEach(c => { safeStyle(ws2, `${c}5`, { fill: { fgColor: { rgb: '2D2D2D' } } }); });
+   568→   568→
+   569→   569→    // R6: empty
+   570→   570→    cols12.forEach(c => { safeStyle(ws2, `${c}6`, { fill: { fgColor: { rgb: '2D2D2D' } } }); });
+   571→   571→
+   572→   572→    // R7: "ATTENDANCE OVERVIEW" section header (EMERALD green)
+   573→   573→    cols12.forEach(c => { safeStyle(ws2, `${c}7`, styleColHeader(EMERALD)); });
+   574→   574→
+   575→   575→    // R8: DAYS PRESENT | DAYS ABSENT | HALF DAYS | AL (label-value pairs)
+   576→   576→    const styleSectionLabel = { font: { bold: true, sz: 9, color: { rgb: '888888' } }, fill: { fgColor: { rgb: '2D2D2D' } }, alignment: { horizontal: 'center' as const, vertical: 'center' as const }, border: fullBorder('444444') };
+   577→   577→    const styleSectionValueGreen = { font: { bold: true, sz: 12, color: { rgb: EMERALD } }, fill: { fgColor: { rgb: '2D2D2D' } }, alignment: { horizontal: 'center' as const, vertical: 'center' as const }, border: fullBorder('444444') };
+   578→   578→    const styleSectionValueRed = { font: { bold: true, sz: 12, color: { rgb: RED } }, fill: { fgColor: { rgb: '2D2D2D' } }, alignment: { horizontal: 'center' as const, vertical: 'center' as const }, border: fullBorder('444444') };
+   579→   579→    const styleSectionValueAmber = { font: { bold: true, sz: 12, color: { rgb: AMBER } }, fill: { fgColor: { rgb: '2D2D2D' } }, alignment: { horizontal: 'center' as const, vertical: 'center' as const }, border: fullBorder('444444') };
+   580→   580→    const styleSectionValueSky = { font: { bold: true, sz: 12, color: { rgb: SKY } }, fill: { fgColor: { rgb: '2D2D2D' } }, alignment: { horizontal: 'center' as const, vertical: 'center' as const }, border: fullBorder('444444') };
+   581→   581→    const styleSectionValuePurple = { font: { bold: true, sz: 12, color: { rgb: PURPLE } }, fill: { fgColor: { rgb: '2D2D2D' } }, alignment: { horizontal: 'center' as const, vertical: 'center' as const }, border: fullBorder('444444') };
+   582→   582→    const styleSectionValueCyan = { font: { bold: true, sz: 12, color: { rgb: CYAN } }, fill: { fgColor: { rgb: '2D2D2D' } }, alignment: { horizontal: 'center' as const, vertical: 'center' as const }, border: fullBorder('444444') };
+   583→   583→    const styleSectionValueGold = { font: { bold: true, sz: 12, color: { rgb: GOLD } }, fill: { fgColor: { rgb: '2D2D2D' } }, alignment: { horizontal: 'center' as const, vertical: 'center' as const }, border: fullBorder('444444') };
+   584→   584→    const styleEmpty = { fill: { fgColor: { rgb: '2D2D2D' } } };
+   585→   585→
+   586→   586→    // R8: DAYS PRESENT (green) | DAYS ABSENT (red) | HALF DAYS (amber) | AL (sky)
+   587→   587→    safeStyle(ws2, 'A8', styleSectionLabel);
+   588→   588→    safeStyle(ws2, 'B8', styleSectionValueGreen);
+   589→   589→    safeStyle(ws2, 'C8', styleEmpty);
+   590→   590→    safeStyle(ws2, 'D8', styleSectionLabel);
+   591→   591→    safeStyle(ws2, 'E8', styleSectionValueRed);
+   592→   592→    safeStyle(ws2, 'F8', styleEmpty);
+   593→   593→    safeStyle(ws2, 'G8', styleSectionLabel);
+   594→   594→    safeStyle(ws2, 'H8', styleSectionValueAmber);
+   595→   595→    safeStyle(ws2, 'I8', styleEmpty);
+   596→   596→    safeStyle(ws2, 'J8', styleSectionLabel);
+   597→   597→    safeStyle(ws2, 'K8', styleSectionValueSky);
+   598→   598→    safeStyle(ws2, 'L8', styleEmpty);
+   599→   599→
+   600→   600→    // R9: UL (amber) | WORKING DAYS (emerald) | WEEKLY OFFS (sky) | SUNDAYS EARNED (emerald)
+   601→   601→    safeStyle(ws2, 'A9', styleSectionLabel);
+   602→   602→    safeStyle(ws2, 'B9', styleSectionValueAmber);
+   603→   603→    safeStyle(ws2, 'C9', styleEmpty);
+   604→   604→    safeStyle(ws2, 'D9', styleSectionLabel);
+   605→   605→    safeStyle(ws2, 'E9', styleSectionValueGreen);
+   606→   606→    safeStyle(ws2, 'F9', styleEmpty);
+   607→   607→    safeStyle(ws2, 'G9', styleSectionLabel);
+   608→   608→    safeStyle(ws2, 'H9', styleSectionValueSky);
+   609→   609→    safeStyle(ws2, 'I9', styleEmpty);
+   610→   610→    safeStyle(ws2, 'J9', styleSectionLabel);
+   611→   611→    safeStyle(ws2, 'K9', styleSectionValueGreen);
+   612→   612→    safeStyle(ws2, 'L9', styleEmpty);
+   613→   613→
+   614→   614→    // R10: SUNDAYS (sky) | LATE ENTRIES (amber) | EARLY OUTS (red) | (empty)
+   615→   615→    safeStyle(ws2, 'A10', styleSectionLabel);
+   616→   616→    safeStyle(ws2, 'B10', styleSectionValueSky);
+   617→   617→    safeStyle(ws2, 'C10', styleEmpty);
+   618→   618→    safeStyle(ws2, 'D10', styleSectionLabel);
+   619→   619→    safeStyle(ws2, 'E10', styleSectionValueAmber);
+   620→   620→    safeStyle(ws2, 'F10', styleEmpty);
+   621→   621→    safeStyle(ws2, 'G10', styleSectionLabel);
+   622→   622→    safeStyle(ws2, 'H10', styleSectionValueRed);
+   623→   623→    safeStyle(ws2, 'I10', styleEmpty);
+   624→   624→    safeStyle(ws2, 'J10', styleEmpty);
+   625→   625→    safeStyle(ws2, 'K10', styleEmpty);
+   626→   626→    safeStyle(ws2, 'L10', styleEmpty);
+   627→   627→
+   628→   628→    // R11: empty
+   629→   629→    cols12.forEach(c => { safeStyle(ws2, `${c}11`, styleEmpty); });
+   630→   630→
+   631→   631→    // R12: "HOURS OVERVIEW" section header (DEEP_BLUE)
+   632→   632→    cols12.forEach(c => { safeStyle(ws2, `${c}12`, styleColHeader(DEEP_BLUE)); });
+   633→   633→
+   634→   634→    // R13: TOTAL HRS WORKED (cyan) | OT HRS (amber) | SUNDAY HRS (sky) | (empty)
+   635→   635→    safeStyle(ws2, 'A13', styleSectionLabel);
+   636→   636→    safeStyle(ws2, 'B13', styleSectionValueCyan);
+   637→   637→    safeStyle(ws2, 'C13', styleEmpty);
+   638→   638→    safeStyle(ws2, 'D13', styleSectionLabel);
+   639→   639→    safeStyle(ws2, 'E13', styleSectionValueAmber);
+   640→   640→    safeStyle(ws2, 'F13', styleEmpty);
+   641→   641→    safeStyle(ws2, 'G13', styleSectionLabel);
+   642→   642→    safeStyle(ws2, 'H13', styleSectionValueSky);
+   643→   643→    safeStyle(ws2, 'I13', styleEmpty);
+   644→   644→    safeStyle(ws2, 'J13', styleEmpty);
+   645→   645→    safeStyle(ws2, 'K13', styleEmpty);
+   646→   646→    safeStyle(ws2, 'L13', styleEmpty);
+   647→   647→
+   648→   648→    // R14: TOTAL HRS (INCL. SUNDAY) (gold) | SHIFT HRS (cyan)
+   649→   649→    safeStyle(ws2, 'A14', styleSectionLabel);
+   650→   650→    safeStyle(ws2, 'B14', styleSectionValueGold);
+   651→   651→    safeStyle(ws2, 'C14', styleEmpty);
+   652→   652→    safeStyle(ws2, 'D14', styleSectionLabel);
+   653→   653→    safeStyle(ws2, 'E14', styleSectionValueCyan);
+   654→   654→    ['F','G','H','I','J','K','L'].forEach(c => { safeStyle(ws2, `${c}14`, styleEmpty); });
+   655→   655→
+   656→   656→    // R15: empty
+   657→   657→    cols12.forEach(c => { safeStyle(ws2, `${c}15`, styleEmpty); });
+   658→   658→
+   659→   659→    ws2['!cols'] = [
+   660→   660→      { wch: 22 },  // A: Label
+   661→   661→      { wch: 12 },  // B: Value
+   662→   662→      { wch: 3 },   // C: spacer
+   663→   663→      { wch: 18 },  // D: Label
+   664→   664→      { wch: 12 },  // E: Value
+   665→   665→      { wch: 3 },   // F: spacer
+   666→   666→      { wch: 18 },  // G: Label
+   667→   667→      { wch: 12 },  // H: Value
+   668→   668→      { wch: 3 },   // I: spacer
+   669→   669→      { wch: 16 },  // J: Label
+   670→   670→      { wch: 12 },  // K: Value
+   671→   671→      { wch: 3 },   // L: spacer
+   672→   672→    ];
+   673→   673→    ws2['!merges'] = [
+   674→   674→      { s: { r: 0, c: 0 }, e: { r: 0, c: 11 } },  // R1
+   675→   675→      { s: { r: 1, c: 0 }, e: { r: 1, c: 11 } },  // R2
+   676→   676→      { s: { r: 6, c: 0 }, e: { r: 6, c: 11 } },  // R7: ATTENDANCE OVERVIEW
+   677→   677→      { s: { r: 11, c: 0 }, e: { r: 11, c: 11 } }, // R12: HOURS OVERVIEW
+   678→   678→    ];
+   679→   679→
+   680→   680→    XLSXStyle.utils.book_append_sheet(wb, ws2, 'Summary');
+   681→   681→
+   682→   682→    // ═══════════════════════════════════════════════════════════════════
+   683→   683→    // SHEET 3: Salary Calculation (matching Excel Payroll Master)
+   684→   684→    // ═══════════════════════════════════════════════════════════════════
+   685→   685→    const round2 = (n: number) => Math.round(n * 100) / 100;
+   686→   686→    const salaryData: any[][] = [
+   687→   687→      [firmFullName],
+   688→   688→      ['SALARY CALCULATION SHEET'],
+   689→   689→      [`Employee Name:`, employee.fullName, '', 'Employee Code:', employee.employeeId, '', `Month: ${monthName} ${year}`],
+   690→   690→      [`Monthly Salary: ₹${employee.monthlySalary.toLocaleString('en-IN')}`, '', '', `Days in Month: ${daysInMonth}`, '', '', `Shift Hrs: ${employee.shiftHours}`],
+   691→   691→      [],
+   692→   692→      ['Component', 'Hours / Days', 'Rate (₹)', 'Amount (₹)'],
+   693→   693→      ['Total Worked Hrs (Base)', round2(totalBaseHours), round2(salaryHourlyRate), round2(salaryBaseSalary)],
+   694→   694→      ['OT Hours', totalOvertimeHoursDecimal, round2(salaryHourlyRate), round2(salaryOtAmount)],
+   695→   695→      ['Sunday Hours (Paid Off)', salarySundayHrs, round2(salaryHourlyRate), round2(salarySundayEarnings)],
+   696→   696→      ['Paid Leave Hours', salaryPaidLeaveHrs, round2(salaryHourlyRate), round2(salaryHourlyRate * salaryPaidLeaveHrs)],
+   697→   697→      ['Total Hours', round2(salaryTotalHrs), round2(salaryHourlyRate), round2(salaryGrossSalary)],
+   698→   698→      [],
+   699→   699→      ['Summary', '', '', ''],
+   700→   700→      ['Hourly Rate', '', '', `₹${round2(salaryHourlyRate)}`],
+   701→   701→      ['Per Day Rate', '', '', `₹${round2(salaryPerDayRate)}`],
+   702→   702→      ['Gross Salary', '', '', `₹${round2(salaryGrossSalary).toLocaleString('en-IN')}`],
+   703→   703→      ['Sundays Earned', `${sundays} × ${employee.shiftHours} = ${salarySundayHrs}h`, '', `₹${round2(salarySundayEarnings).toLocaleString('en-IN')}`],
+   704→   704→      ['Effective Present Days', effectivePresentDays, '', ''],
+   705→   705→    ];
+   706→   706→
+   707→   707→    const ws3 = XLSXStyle.utils.aoa_to_sheet(salaryData);
+   708→   708→    const cols4 = ['A','B','C','D','E','F','G'];
+   709→   709→    cols4.forEach(c => { safeStyle(ws3, `${c}1`, styleHeader()); });
+   710→   710→    cols4.forEach(c => { safeStyle(ws3, `${c}2`, styleSubHeader('2D2D2D')); });
+   711→   711→    // R3: Employee info with label-value style
+   712→   712→    safeStyle(ws3, 'A3', styleLabelCell);
+   713→   713→    safeStyle(ws3, 'B3', styleValueCell);
+   714→   714→    safeStyle(ws3, 'D3', styleLabelCell);
+   715→   715→    safeStyle(ws3, 'E3', styleValueCell);
+   716→   716→    safeStyle(ws3, 'G3', { font: { sz: 10, color: { rgb: 'CCCCCC' } }, fill: { fgColor: { rgb: '2D2D2D' } } });
+   717→   717→    ['C','F'].forEach(c => { safeStyle(ws3, `${c}3`, { fill: { fgColor: { rgb: '2D2D2D' } } }); });
+   718→   718→
+   719→   719→    safeStyle(ws3, 'A4', { font: { sz: 10, color: { rgb: 'CCCCCC' } }, fill: { fgColor: { rgb: '2D2D2D' } } });
+   720→   720→    safeStyle(ws3, 'D4', { font: { sz: 10, color: { rgb: 'CCCCCC' } }, fill: { fgColor: { rgb: '2D2D2D' } } });
+   721→   721→    safeStyle(ws3, 'G4', { font: { sz: 10, color: { rgb: 'CCCCCC' } }, fill: { fgColor: { rgb: '2D2D2D' } } });
+   722→   722→
+   723→   723→    cols4.forEach(c => { safeStyle(ws3, `${c}6`, styleColHeader(EMERALD)); });
+   724→   724→    for (let r = 7; r <= 11; r++) {
+   725→   725→      const isTotal = r === 11;
+   726→   726→      const bg = isTotal ? 'F0FDF4' : (r % 2 === 0 ? LIGHT_BG : undefined);
+   727→   727→      cols4.forEach(c => {
+   728→   728→        safeStyle(ws3, `${c}${r}`, {
+   729→   729→          font: { sz: 10, bold: isTotal, color: { rgb: isTotal ? EMERALD : '333333' } },
+   730→   730→          fill: bg ? { fgColor: { rgb: bg } } : undefined,
+   731→   731→          alignment: { horizontal: 'center' as const, vertical: 'center' as const },
+   732→   732→          border: fullBorder(isTotal ? EMERALD : 'D0D0D0', isTotal ? 'medium' : 'thin'),
+   733→   733→        });
+   734→   734→      });
+   735→   735→    }
+   736→   736→    cols4.forEach(c => { safeStyle(ws3, `${c}13`, styleColHeader('2D2D2D')); });
+   737→   737→    for (let r = 14; r <= 18; r++) {
+   738→   738→      const bg = r % 2 === 0 ? LIGHT_BG : undefined;
+   739→   739→      cols4.forEach(c => {
+   740→   740→        safeStyle(ws3, `${c}${r}`, {
+   741→   741→          font: { sz: 10, color: { rgb: '666666' } },
+   742→   742→          fill: bg ? { fgColor: { rgb: bg } } : undefined,
+   743→   743→          alignment: { horizontal: 'center' as const, vertical: 'center' as const },
+   744→   744→          border: fullBorder('D0D0D0'),
+   745→   745→        });
+   746→   746→      });
+   747→   747→    }
+   748→   748→    ws3['!cols'] = [{ wch: 24 }, { wch: 20 }, { wch: 16 }, { wch: 20 }, { wch: 12 }, { wch: 12 }, { wch: 12 }];
+   749→   749→    ws3['!merges'] = [
+   750→   750→      { s: { r: 0, c: 0 }, e: { r: 0, c: 6 } },
+   751→   751→      { s: { r: 1, c: 0 }, e: { r: 1, c: 6 } },
+   752→   752→    ];
+   753→   753→
+   754→   754→    XLSXStyle.utils.book_append_sheet(wb, ws3, 'Salary Calculation');
+   755→   755→
+   756→   756→    // Generate buffer
+   757→   757→    const buf = XLSXStyle.write(wb, { type: 'buffer', bookType: 'xlsx' });
+   758→   758→
+   759→   759→    return new NextResponse(buf, {
+   760→   760→      status: 200,
+   761→   761→      headers: {
+   762→   762→        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+   763→   763→        'Content-Disposition': `attachment; filename="Monthly_Attendance_${employee.fullName}_${monthName}_${year}.xlsx"`,
+   764→   764→      },
+   765→   765→    });
+   766→   766→  } catch (error: any) {
+   767→   767→    console.error('Monthly export error:', error);
+   768→   768→    return NextResponse.json({ error: error.message }, { status: 500 });
+   769→   769→  }
+   770→   770→}
+   771→   771→

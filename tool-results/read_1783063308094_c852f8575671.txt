@@ -1,0 +1,210 @@
+     1→====================================================================================================
+     2→FILE: /home/z/my-project/upload/Laxree Group Monthly Excel Formate.xlsx
+     3→====================================================================================================
+     4→Sheet names: ['Monthly Attdence Formate']
+     5→
+     6→SHEET: 'Monthly Attdence Formate'
+     7→Dimensions: A1:AH64, rows=64, cols=34
+     8→Merged cells (34):
+     9→  AC24:AE24
+    10→  AC2:AE2
+    11→  AC45:AE45
+    12→  AF24:AH24
+    13→  AF2:AH2
+    14→  AF45:AH45
+    15→  B1:AH1
+    16→  B24:D24
+    17→  B2:D2
+    18→  B45:D45
+    19→  E24:G24
+    20→  E2:G2
+    21→  E45:G45
+    22→  H24:J24
+    23→  H2:J2
+    24→  H45:J45
+    25→  K24:M24
+    26→  K2:M2
+    27→  K45:M45
+    28→  N24:P24
+    29→  N2:P2
+    30→  N45:P45
+    31→  Q24:S24
+    32→  Q2:S2
+    33→  Q45:S45
+    34→  T24:V24
+    35→  T2:V2
+    36→  T45:V45
+    37→  W24:Y24
+    38→  W2:Y2
+    39→  W45:Y45
+    40→  Z24:AB24
+    41→  Z2:AB2
+    42→  Z45:AB45
+    43→
+    44→Column widths:
+    45→  Col A: width=156.7109375, hidden=False
+    46→  Col B: width=21.5703125, hidden=False
+    47→  Col C: width=30.85546875, hidden=False
+    48→  Col D: width=72.7109375, hidden=False
+    49→  Col E: width=21.5703125, hidden=False
+    50→  Col F: width=30.85546875, hidden=False
+    51→  Col G: width=72.7109375, hidden=False
+    52→  Col H: width=21.5703125, hidden=False
+    53→  Col I: width=30.85546875, hidden=False
+    54→  Col J: width=72.7109375, hidden=False
+    55→  Col K: width=21.5703125, hidden=False
+    56→  Col L: width=30.85546875, hidden=False
+    57→  Col M: width=72.7109375, hidden=False
+    58→  Col N: width=21.5703125, hidden=False
+    59→  Col O: width=30.85546875, hidden=False
+    60→  Col P: width=72.7109375, hidden=False
+    61→  Col Q: width=21.5703125, hidden=False
+    62→  Col R: width=30.85546875, hidden=False
+    63→  Col S: width=72.7109375, hidden=False
+    64→  Col T: width=21.5703125, hidden=False
+    65→  Col U: width=30.85546875, hidden=False
+    66→  Col V: width=72.7109375, hidden=False
+    67→  Col W: width=21.5703125, hidden=False
+    68→  Col X: width=30.85546875, hidden=False
+    69→  Col Y: width=72.7109375, hidden=False
+    70→  Col Z: width=21.5703125, hidden=False
+    71→  Col AA: width=30.85546875, hidden=False
+    72→  Col AB: width=72.7109375, hidden=False
+    73→  Col AC: width=40.85546875, hidden=False
+    74→  Col AD: width=33.140625, hidden=False
+    75→  Col AE: width=72.7109375, hidden=False
+    76→  Col AF: width=21.5703125, hidden=False
+    77→  Col AG: width=30.85546875, hidden=False
+    78→  Col AH: width=72.7109375, hidden=False
+    79→
+    80→Row heights:
+    81→  Row 1: height=150.75, hidden=False
+    82→  Row 2: height=92.25, hidden=False
+    83→  Row 3: height=325.5, hidden=False
+    84→  Row 4: height=92.25, hidden=False
+    85→  Row 5: height=92.25, hidden=False
+    86→  Row 6: height=92.25, hidden=False
+    87→  Row 7: height=92.25, hidden=False
+    88→  Row 8: height=92.25, hidden=False
+    89→  Row 9: height=92.25, hidden=False
+    90→  Row 10: height=92.25, hidden=False
+    91→  Row 11: height=92.25, hidden=False
+    92→  Row 12: height=92.25, hidden=False
+    93→  Row 13: height=92.25, hidden=False
+    94→  Row 14: height=92.25, hidden=False
+    95→  Row 15: height=92.25, hidden=False
+    96→  Row 16: height=92.25, hidden=False
+    97→  Row 17: height=92.25, hidden=False
+    98→  Row 18: height=92.25, hidden=False
+    99→  Row 19: height=92.25, hidden=False
+   100→  Row 20: height=92.25, hidden=False
+   101→  Row 21: height=92.25, hidden=False
+   102→  Row 22: height=92.25, hidden=False
+   103→  Row 23: height=92.25, hidden=False
+   104→  Row 24: height=92.25, hidden=False
+   105→  Row 25: height=92.25, hidden=False
+   106→  Row 26: height=92.25, hidden=False
+   107→  Row 27: height=92.25, hidden=False
+   108→  Row 28: height=92.25, hidden=False
+   109→  Row 29: height=92.25, hidden=False
+   110→  Row 30: height=92.25, hidden=False
+   111→  Row 31: height=92.25, hidden=False
+   112→  Row 32: height=92.25, hidden=False
+   113→  Row 33: height=92.25, hidden=False
+   114→  Row 34: height=92.25, hidden=False
+   115→  Row 35: height=92.25, hidden=False
+   116→  Row 36: height=92.25, hidden=False
+   117→  Row 37: height=92.25, hidden=False
+   118→  Row 38: height=92.25, hidden=False
+   119→  Row 39: height=92.25, hidden=False
+   120→  Row 40: height=92.25, hidden=False
+   121→  Row 41: height=92.25, hidden=False
+   122→  Row 42: height=92.25, hidden=False
+   123→  Row 43: height=92.25, hidden=False
+   124→  Row 44: height=92.25, hidden=False
+   125→  Row 45: height=92.25, hidden=False
+   126→  Row 46: height=92.25, hidden=False
+   127→  Row 47: height=92.25, hidden=False
+   128→  Row 48: height=92.25, hidden=False
+   129→  Row 49: height=92.25, hidden=False
+   130→  Row 50: height=92.25, hidden=False
+   131→  Row 51: height=92.25, hidden=False
+   132→  Row 52: height=92.25, hidden=False
+   133→  Row 53: height=92.25, hidden=False
+   134→  Row 54: height=92.25, hidden=False
+   135→  Row 55: height=92.25, hidden=False
+   136→  Row 56: height=92.25, hidden=False
+   137→  Row 57: height=92.25, hidden=False
+   138→  Row 58: height=92.25, hidden=False
+   139→  Row 59: height=92.25, hidden=False
+   140→  Row 60: height=92.25, hidden=False
+   141→  Row 61: height=92.25, hidden=False
+   142→  Row 62: height=92.25, hidden=False
+   143→  Row 63: height=92.25, hidden=False
+   144→  Row 64: height=92.25, hidden=False
+   145→
+   146→Cell values & styling:
+   147→  Row1: A1='ATTENDENCE - 2026' font[name=Baskerville Old Face,sz=72.0,bold,color=Values must be of type <class 'str'>] align[wrap] border[left=thin,bottom=thin] | B1='SALARY SHEET OF LAXREE OF THE MONTH OF ---------  2026' font[name=Baskerville Old Face,sz=72.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[right=thin,bottom=thin]
+   148→  Row2: B2='Date ' font[sz=72.0,bold] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt[d-mmm] | E2='Date ' font[sz=72.0,bold] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt[d-mmm] | H2='Date ' font[sz=72.0,bold] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt[d-mmm] | K2='Date ' font[sz=72.0,bold] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt[d-mmm] | N2='Date ' font[sz=72.0,bold] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt[d-mmm] | Q2='Date ' font[sz=72.0,bold] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt[d-mmm] | T2='Date ' font[sz=72.0,bold] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt[d-mmm] | W2='Date ' font[sz=72.0,bold] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt[d-mmm] | Z2='Date ' font[sz=72.0,bold] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt[d-mmm] | AC2='Date ' font[sz=72.0,bold] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt[d-mmm] | AF2='Date ' font[sz=72.0,bold] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt[d-mmm]
+   149→  Row3: B3='IN ' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | C3='OUT' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | D3='TOTAL HRS' font[sz=36.0,bold,color=Values must be of type <class 'str'>] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | E3='IN ' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | F3='OUT' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | G3='TOTAL HRS' font[sz=36.0,bold,color=Values must be of type <class 'str'>] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | H3='IN ' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | I3='OUT' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | J3='TOTAL HRS' font[sz=36.0,bold,color=Values must be of type <class 'str'>] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | K3='IN ' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | L3='OUT' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | M3='TOTAL HRS' font[sz=36.0,bold,color=Values must be of type <class 'str'>] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | N3='IN ' font[sz=36.0,bold,color=Values must be of type <class 'str'>] fill[FFFFC000,solid] align=center,v=center,wrap] border[left=thin,right=thin,top=thin,bottom=thin] | O3='OUT' font[sz=36.0,bold,color=Values must be of type <class 'str'>] fill[FFFFC000,solid] align=center,v=center,wrap] border[left=thin,right=thin,top=thin,bottom=thin] | P3='TOTAL HRS' font[sz=36.0,bold,color=Values must be of type <class 'str'>] fill[FFFFC000,solid] align=center,v=center,wrap] border[left=thin,right=thin,top=thin,bottom=thin] | Q3='IN ' font[sz=36.0,bold,color=Values must be of type <class 'str'>] align=center,v=center,wrap] border[left=thin,right=thin,top=thin,bottom=thin] | R3='OUT' font[sz=36.0,bold,color=Values must be of type <class 'str'>] align=center,v=center,wrap] border[left=thin,right=thin,top=thin,bottom=thin] | S3='TOTAL HRS' font[sz=36.0,bold,color=Values must be of type <class 'str'>] fill[Values must be of type <class 'str'>,solid] align=center,v=center,wrap] border[left=thin,right=thin,top=thin,bottom=thin] | T3='IN ' font[sz=36.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | U3='OUT' font[sz=36.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | V3='TOTAL HRS' font[sz=36.0,bold,color=Values must be of type <class 'str'>] fill[Values must be of type <class 'str'>,solid] align=center,v=center,wrap] border[left=thin,right=thin,top=thin,bottom=thin] | W3='IN ' font[sz=36.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | X3='OUT' font[sz=36.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | Y3='TOTAL HRS' font[sz=36.0,bold,color=Values must be of type <class 'str'>] fill[Values must be of type <class 'str'>,solid] align=center,v=center,wrap] border[left=thin,right=thin,top=thin,bottom=thin] | Z3='IN ' font[sz=36.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | AA3='OUT' font[sz=36.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | AB3='TOTAL HRS' font[sz=36.0,bold,color=Values must be of type <class 'str'>] fill[Values must be of type <class 'str'>,solid] align=center,v=center,wrap] border[left=thin,right=thin,top=thin,bottom=thin] | AC3='IN ' font[sz=36.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | AD3='OUT' font[sz=36.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | AE3='TOTAL HRS' font[sz=36.0,bold,color=Values must be of type <class 'str'>] fill[Values must be of type <class 'str'>,solid] align=center,v=center,wrap] border[left=thin,right=thin,top=thin,bottom=thin] | AF3='IN ' font[sz=36.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | AG3='OUT' font[sz=36.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | AH3='TOTAL HRS' font[sz=36.0,bold,color=Values must be of type <class 'str'>] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm]
+   150→  Row4: A4='EMP' font[sz=72.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin]
+   151→  Row5: A5='EMP' font[sz=72.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin]
+   152→  Row6: A6='EMP' font[sz=72.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin]
+   153→  Row7: A7='EMP' font[sz=72.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin]
+   154→  Row8: A8='EMP' font[sz=72.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin]
+   155→  Row9: A9='EMP' font[sz=72.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin]
+   156→  Row10: A10='EMP' font[sz=72.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin]
+   157→  Row11: A11='EMP' font[sz=72.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin]
+   158→  Row12: A12='EMP' font[sz=72.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin]
+   159→  Row13: A13='EMP' font[sz=72.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin]
+   160→  Row14: A14='EMP' font[sz=72.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin]
+   161→  Row15: A15='EMP' font[sz=72.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin]
+   162→  Row16: A16='EMP' font[sz=72.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin]
+   163→  Row17: A17='EMP' font[sz=72.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin]
+   164→  Row18: A18='EMP' font[sz=72.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin]
+   165→  Row19: A19='EMP' font[sz=72.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin]
+   166→  Row20: A20='EMP' font[sz=72.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin]
+   167→  Row21: A21='EMP' font[sz=72.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin]
+   168→  Row22: (empty)
+   169→  Row23: (empty)
+   170→  Row24: B24='Date ' font[sz=72.0,bold] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt[d-mmm] | E24='Date ' font[sz=72.0,bold] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt[d-mmm] | H24='Date ' font[sz=72.0,bold] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt[d-mmm] | K24='Date ' font[sz=72.0,bold] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt[d-mmm] | N24='Date ' font[sz=72.0,bold] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt[d-mmm] | Q24='Date ' font[sz=72.0,bold] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt[d-mmm] | T24='Date ' font[sz=72.0,bold] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt[d-mmm] | W24='Date ' font[sz=72.0,bold] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt[d-mmm] | Z24='Date ' font[sz=72.0,bold] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt[d-mmm] | AC24='Date ' font[sz=72.0,bold] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt[d-mmm] | AF24='Date ' font[sz=72.0,bold] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt[d-mmm]
+   171→  Row25: B25='IN ' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | C25='OUT' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | D25='TOTAL HRS' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | E25='IN ' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | F25='OUT' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | G25='TOTAL HRS' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | H25='IN ' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | I25='OUT' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | J25='TOTAL HRS' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | K25='IN ' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | L25='OUT' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | M25='TOTAL HRS' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | N25='IN ' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | O25='OUT' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | P25='TOTAL HRS' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | Q25='IN ' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | R25='OUT' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | S25='TOTAL HRS' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | T25='IN ' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | U25='OUT' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | V25='TOTAL HRS' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | W25='IN ' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | X25='OUT' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | Y25='TOTAL HRS' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | Z25='IN ' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | AA25='OUT' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | AB25='TOTAL HRS' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | AC25='IN ' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | AD25='OUT' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | AE25='TOTAL HRS' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | AF25='IN ' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | AG25='OUT' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | AH25='TOTAL HRS' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm]
+   172→  Row26: A26='EMP' font[sz=72.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin]
+   173→  Row27: A27='EMP' font[sz=72.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin]
+   174→  Row28: A28='EMP' font[sz=72.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin]
+   175→  Row29: A29='EMP' font[sz=72.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin]
+   176→  Row30: A30='EMP' font[sz=72.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin]
+   177→  Row31: A31='EMP' font[sz=72.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin]
+   178→  Row32: A32='EMP' font[sz=72.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin]
+   179→  Row33: A33='EMP' font[sz=72.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin]
+   180→  Row34: A34='EMP' font[sz=72.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin]
+   181→  Row35: A35='EMP' font[sz=72.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin]
+   182→  Row36: A36='EMP' font[sz=72.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin]
+   183→  Row37: A37='EMP' font[sz=72.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin]
+   184→  Row38: A38='EMP' font[sz=72.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin]
+   185→  Row39: A39='EMP' font[sz=72.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin]
+   186→  Row40: A40='EMP' font[sz=72.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin]
+   187→  Row41: A41='EMP' font[sz=72.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin]
+   188→  Row42: A42='EMP' font[sz=72.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin]
+   189→  Row43: A43='EMP' font[sz=72.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin]
+   190→  Row44: (empty)
+   191→  Row45: B45='Date ' font[sz=72.0,bold] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt[d-mmm] | E45='Date ' font[sz=72.0,bold] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt[d-mmm] | H45='Date ' font[sz=72.0,bold] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt[d-mmm] | K45='Date ' font[sz=72.0,bold] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt[d-mmm] | N45='Date ' font[sz=72.0,bold] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt[d-mmm] | Q45='Date ' font[sz=72.0,bold] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt[d-mmm] | T45='Date ' font[sz=72.0,bold] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt[d-mmm] | W45='Date ' font[sz=72.0,bold] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt[d-mmm] | Z45='Date ' font[sz=72.0,bold] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt[d-mmm]
+   192→  Row46: B46='IN ' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | C46='OUT' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | D46='TOTAL HRS' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | E46='IN ' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | F46='OUT' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | G46='TOTAL HRS' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | H46='IN ' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | I46='OUT' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | J46='TOTAL HRS' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | K46='IN ' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | L46='OUT' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | M46='TOTAL HRS' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | N46='IN ' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | O46='OUT' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | P46='TOTAL HRS' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | Q46='IN ' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | R46='OUT' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | S46='TOTAL HRS' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | T46='IN ' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | U46='OUT' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | V46='TOTAL HRS' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | W46='IN ' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | X46='OUT' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | Y46='TOTAL HRS' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | Z46='IN ' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | AA46='OUT' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | AB46='TOTAL HRS' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | AC46='Total Working Hours' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm] | AD46='Leave' font[sz=36.0,bold] fill[Values must be of type <class 'str'>,solid] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin] numfmt:mm]
+   193→  Row47: A47='EMP' font[sz=72.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin]
+   194→  Row48: A48='EMP' font[sz=72.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin]
+   195→  Row49: A49='EMP' font[sz=72.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin]
+   196→  Row50: A50='EMP' font[sz=72.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin]
+   197→  Row51: A51='EMP' font[sz=72.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin]
+   198→  Row52: A52='EMP' font[sz=72.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin]
+   199→  Row53: A53='EMP' font[sz=72.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin]
+   200→  Row54: A54='EMP' font[sz=72.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin]
+   201→  Row55: A55='EMP' font[sz=72.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin]
+   202→  Row56: A56='EMP' font[sz=72.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin]
+   203→  Row57: A57='EMP' font[sz=72.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin]
+   204→  Row58: A58='EMP' font[sz=72.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin]
+   205→  Row59: A59='EMP' font[sz=72.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin]
+   206→  Row60: A60='EMP' font[sz=72.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin]
+   207→  Row61: A61='EMP' font[sz=72.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin]
+   208→  Row62: A62='EMP' font[sz=72.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin]
+   209→  Row63: A63='EMP' font[sz=72.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin]
+   210→  Row64: A64='EMP' font[sz=72.0,bold,color=Values must be of type <class 'str'>] align=center,v=center] border[left=thin,right=thin,top=thin,bottom=thin]
