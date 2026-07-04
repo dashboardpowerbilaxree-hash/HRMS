@@ -1,0 +1,6 @@
+1:"$Sreact.fragment"
+2:I[97367,["/_next/static/chunks/ff1a16fafef87110.js","/_next/static/chunks/41f337e232de51a5.js"],"ViewportBoundary"]
+3:I[97367,["/_next/static/chunks/ff1a16fafef87110.js","/_next/static/chunks/41f337e232de51a5.js"],"MetadataBoundary"]
+4:"$Sreact.suspense"
+5:I[27201,["/_next/static/chunks/ff1a16fafef87110.js","/_next/static/chunks/41f337e232de51a5.js"],"IconMark"]
+0:{"buildId":"UjLHi2-w78JzZ1cD7mb38","rsc":["$","$1","h",{"children":[null,["$","$L2",null,{"children":[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1"}]]}],["$","div",null,{"hidden":true,"children":["$","$L3",null,{"children":["$","$4",null,{"name":"Next.Metadata","children":[["$","title","0",{"children":"Laxree HRMS"}],["$","meta","1",{"name":"description","content":"Laxree Group of Companies — AI-Powered HR & Salary Management System with smart payroll automation, attendance tracking, and workforce analytics across LAPL, LRSL, SI, and SDF divisions."}],["$","link","2",{"rel":"icon","href":"/laxree-logo.png"}],["$","$L5","3",{}]]}]}]}],["$","meta",null,{"name":"next-size-adjust","content":""}]]}],"loading":null,"isPartial":false}

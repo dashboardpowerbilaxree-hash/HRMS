@@ -1,0 +1,3 @@
+{
+  "/api/payroll/generate-all/route": "app/api/payroll/generate-all/route.js"
+}

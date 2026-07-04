@@ -1,0 +1,3 @@
+{
+  "/api/attendance/bulk-upload/route": "app/api/attendance/bulk-upload/route.js"
+}

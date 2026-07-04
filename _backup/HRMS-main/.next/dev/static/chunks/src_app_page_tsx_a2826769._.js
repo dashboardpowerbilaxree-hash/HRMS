@@ -1,0 +1,32 @@
+(globalThis.TURBOPACK_CHUNK_LISTS || (globalThis.TURBOPACK_CHUNK_LISTS = [])).push({
+    script: typeof document === "object" ? document.currentScript : undefined,
+    chunks: [
+  "static/chunks/node_modules_xlsx_xlsx_mjs_df93b7c4._.js",
+  "static/chunks/src_components_hrms_DashboardHome_tsx_38ad168c._.js",
+  "static/chunks/src_components_hrms_EmployeeManagement_tsx_6c4b52ee._.js",
+  "static/chunks/src_components_hrms_AttendanceTracker_tsx_aef980af._.js",
+  "static/chunks/src_components_hrms_PayrollAutomation_tsx_cc3545dc._.js",
+  "static/chunks/src_components_hrms_ReportsAnalytics_tsx_fdeb838d._.js",
+  "static/chunks/src_components_hrms_AnalyticsDashboard_tsx_904aaa1b._.js",
+  "static/chunks/src_components_hrms_ScorecardDashboard_tsx_8921d2b9._.js",
+  "static/chunks/src_components_hrms_SalarySlipGenerator_tsx_9c39dd3a._.js",
+  "static/chunks/src_components_hrms_EmployeeProfile_tsx_24d56a32._.js",
+  "static/chunks/src_components_hrms_aaee3d36._.js",
+  "static/chunks/src_components_ui_bf78509f._.js",
+  "static/chunks/src_9dfa4d2b._.js",
+  "static/chunks/node_modules_tailwind-merge_dist_bundle-mjs_mjs_56b6fd65._.js",
+  "static/chunks/node_modules_next_f166ac54._.js",
+  "static/chunks/node_modules_lucide-react_dist_esm_ff0b2afa._.js",
+  "static/chunks/node_modules_motion-dom_dist_es_b195f008._.js",
+  "static/chunks/node_modules_framer-motion_dist_es_1c28304b._.js",
+  "static/chunks/node_modules_lodash_4a69034e._.js",
+  "static/chunks/node_modules_recharts_es6_c675e47f._.js",
+  "static/chunks/node_modules_xlsx_xlsx_mjs_fef98e92._.js",
+  "static/chunks/node_modules_xlsx-js-style_dist_cpexcel_d004e12a.js",
+  "static/chunks/node_modules_xlsx-js-style_dist_xlsx_min_27837d8e.js",
+  "static/chunks/node_modules_@radix-ui_6bc1db37._.js",
+  "static/chunks/node_modules_@floating-ui_1b6e7b6d._.js",
+  "static/chunks/node_modules_9f9bef44._.js"
+],
+    source: "dynamic"
+});

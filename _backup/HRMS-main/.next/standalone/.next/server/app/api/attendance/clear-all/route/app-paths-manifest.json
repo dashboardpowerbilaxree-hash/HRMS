@@ -1,0 +1,3 @@
+{
+  "/api/attendance/clear-all/route": "app/api/attendance/clear-all/route.js"
+}

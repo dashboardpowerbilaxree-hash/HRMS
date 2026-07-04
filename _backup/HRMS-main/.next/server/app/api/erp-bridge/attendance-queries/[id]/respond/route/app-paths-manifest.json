@@ -1,0 +1,3 @@
+{
+  "/api/erp-bridge/attendance-queries/[id]/respond/route": "app/api/erp-bridge/attendance-queries/[id]/respond/route.js"
+}
