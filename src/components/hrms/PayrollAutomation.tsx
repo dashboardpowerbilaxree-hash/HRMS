@@ -178,6 +178,7 @@ export function PayrollAutomation() {
   const [open, setOpen] = useState(false);
   const [generatingAll, setGeneratingAll] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [summaryExporting, setSummaryExporting] = useState(false);
   const [masterFirm, setMasterFirm] = useState('all');
 
   // ── Advance Form ──
@@ -399,6 +400,42 @@ export function PayrollAutomation() {
     setExporting(false);
   };
 
+  // ── Export Payroll Summary Sheet (Bonus column instead of Arrear) ──
+  // Calls /api/payroll/summary-export which produces a 2-sheet workbook:
+  //   Sheet 1: Payroll Register — one row per employee with all columns + TOTAL
+  //   Sheet 2: Summary — aggregate totals (Gross, OT, Bonus, Deductions, Net, etc.)
+  const handleExportSummary = async () => {
+    setSummaryExporting(true);
+    try {
+      const params = new URLSearchParams();
+      params.set('month', filterMonth);
+      params.set('year', filterYear);
+      if (masterFirm && masterFirm !== 'all') params.set('firm', masterFirm);
+
+      const res = await fetch(`/api/payroll/summary-export?${params}`);
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        toast.error(errData.error || 'Payroll summary export failed');
+        setSummaryExporting(false);
+        return;
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Payroll_Summary_${MONTHS[parseInt(filterMonth) - 1]}_${filterYear}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      toast.success('Payroll Summary downloaded successfully!');
+    } catch (err) {
+      console.error('Payroll summary export error:', err);
+      toast.error('Export failed. Please try again.');
+    }
+    setSummaryExporting(false);
+  };
+
   // ── Load advances ──
   const loadAdvances = useCallback(async () => {
     try {
@@ -577,6 +614,16 @@ export function PayrollAutomation() {
             >
               {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
               {exporting ? 'Exporting...' : 'Master Excel Sheet'}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10"
+              onClick={handleExportSummary}
+              disabled={summaryExporting}
+            >
+              {summaryExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
+              {summaryExporting ? 'Exporting...' : 'Payroll Summary'}
             </Button>
           </div>
           <Button
