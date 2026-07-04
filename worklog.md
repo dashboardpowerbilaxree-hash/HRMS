@@ -291,3 +291,40 @@ Stage Summary:
 - Modules touched: Attendance module (1 file), Payroll module (1 file)
 - No schema changes, no data changes, no other modules touched
 - Production deployment: SUCCESSFUL on https://laxree-hrms.vercel.app
+
+---
+Task ID: fix-total-hrs-worked-display
+Agent: Main Agent
+Task: Fix "Total Hrs Worked" column showing 202:16 instead of 202:26 (same double-conversion bug)
+
+Work Log:
+- User reported: Anamika (EMP-014) "Total Hrs Worked" showing 202:16, should be 202:26
+- Root cause: SAME bug as Total Hrs (Incl. Sunday) — fixed only for that column earlier
+  * Backend returns totalWorkHours as HH.MM-as-decimal (e.g., 202.26 = 202h 26m)
+  * displayHHMM() → formatHours(202.26) interpreted as TRUE decimal hours
+    Math.floor(202.26) = 202, Math.round(0.26 * 60) = 16 → "202:16" ❌
+  * Correct display: "202:26" (split on decimal, join with colon)
+- Also applied same fix to "Sunday Hrs" column (same bug pattern, but only manifests
+  for non-integer Sunday hours — currently 36 = integer so it worked by accident)
+- File: src/components/hrms/AttendanceTracker.tsx
+  - Total Hrs Worked column: displayHHMM → displayDecimalAsColon
+  - Sunday Hrs column: displayHHMM → displayDecimalAsColon
+- Verified across 12 employees (LAPL, LRSL, SI, SDF):
+  * EMP-012: 113.1 → 113:10 (was 113:06)
+  * EMP-406: 119.5 → 119:50 (was 119:30)
+  * EMP-504: 120.4 → 120:40 (was 120:24)
+  * EMP-332: 48.05 → 48:05 (was 48:03)
+- Rebuilt, deployed, verified live on https://laxree-hrms.vercel.app
+- Committed (b2d187d5) and pushed to GitHub
+- GitHub Actions "DB Sync & Seed" → SUCCESS
+- Vercel auto-deployed → production deployment successful
+
+Stage Summary:
+- Total Hrs Worked column now shows correct HH:MM (e.g., 202:26 instead of 202:16)
+- Sunday Hrs column also fixed (would have shown wrong value for non-integer hours)
+- All three hours columns now use displayDecimalAsColon consistently:
+  * Total Hrs Worked
+  * Sunday Hrs
+  * Total Hrs (Incl. Sunday)
+- Attendance module only - 1 file changed, 2 lines modified
+- Production deployment: SUCCESSFUL on https://laxree-hrms.vercel.app
