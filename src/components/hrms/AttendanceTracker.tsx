@@ -78,6 +78,16 @@ function displayHHMM(value: number | undefined | null): string {
   return formatHours(value);
 }
 
+// ── Display a TRUE decimal hours value as HH:MM-looking string ──
+// e.g. 238.43 (decimal hours) → "238:43" (NOT a time conversion — just split on decimal point)
+// This matches the user's expectation that the salary-calc decimal value
+// (base + sunday + OT + leave) is shown verbatim with a colon separator.
+function displayDecimalAsColon(value: number | undefined | null): string {
+  if (value == null || isNaN(value as number)) return '0:00';
+  const [intPart, decPart] = Number(value).toFixed(2).split('.');
+  return `${intPart}:${decPart}`;
+}
+
 // ── Get firm code from employee ID prefix ──
 function getFirmFromEmployeeId(employeeId: string): string {
   const id = employeeId.toUpperCase();
@@ -156,6 +166,7 @@ interface MonthlySummary {
   totalOvertimeHours: number;
   totalSundayHours: number;
   totalHrsInclSunday?: number;
+  totalHrs?: number;  // True decimal total = base + sunday + OT + paid leave (e.g. 238.43)
   lateEntries: number;
   earlyOuts?: number;
   records: AttendanceRecord[];
@@ -1197,7 +1208,7 @@ export function AttendanceTracker() {
                           <td className="px-3 py-3 font-bold text-cyan-600 dark:text-cyan-400 border-r border-border/30">{displayHHMM(monthlySummary.totalWorkHours)}</td>
                           <td className="px-3 py-3 font-bold text-yellow-600 dark:text-yellow-400 border-r border-border/30">{formatOT(monthlySummary.totalOvertimeHours)}</td>
                           <td className="px-3 py-3 text-blue-600 dark:text-blue-400 border-r border-border/30">{displayHHMM(monthlySummary.totalSundayHours)}</td>
-                          <td className="px-3 py-3 font-bold text-gold">{displayHHMM(monthlySummary.totalHrsInclSunday || (monthlySummary.totalWorkHours || 0))}</td>
+                          <td className="px-3 py-3 font-bold text-gold">{displayDecimalAsColon(monthlySummary.totalHrs ?? monthlySummary.totalHrsInclSunday ?? monthlySummary.totalWorkHours ?? 0)}</td>
                         </tr>
                       </tbody>
                     </table>
