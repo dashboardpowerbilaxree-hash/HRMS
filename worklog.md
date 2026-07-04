@@ -328,3 +328,27 @@ Stage Summary:
   * Total Hrs (Incl. Sunday)
 - Attendance module only - 1 file changed, 2 lines modified
 - Production deployment: SUCCESSFUL on https://laxree-hrms.vercel.app
+
+---
+Task ID: fix-payroll-summary-button-missing
+Agent: Main Agent
+Task: User reported "Payroll wala update nahi hua summary" — the Payroll Summary Sheet feature wasn't accessible from the UI
+
+Work Log:
+- Analyzed screenshot — Payroll Automation page shows Master Excel Sheet button but NO Payroll Summary button
+- Root cause: Earlier I built the backend route /api/payroll/summary-export (commit 8fec4e6d) with the Bonus column, but NEVER added a UI button to trigger it
+- Added to src/components/hrms/PayrollAutomation.tsx:
+  * New state: summaryExporting (boolean)
+  * New handler: handleExportSummary() — fetches /api/payroll/summary-export with month/year/firm params, downloads as Payroll_Summary_<Month>_<Year>.xlsx
+  * New button "Payroll Summary" (emerald outline style) placed next to "Master Excel Sheet" button
+- Build: SUCCESS
+- Committed (fc40c79) and pushed to GitHub → Vercel auto-deploying
+- NO data or schema changes — only adds a UI button to trigger existing backend route
+
+Stage Summary:
+- Payroll Automation page now has a "Payroll Summary" button next to "Master Excel Sheet"
+- Clicking it downloads a 2-sheet Excel workbook:
+  Sheet 1 "Payroll Register": S.No, Employee Name, Emp Code, Firm, Monthly Salary, Present Days, Absent Days, Worked Hrs, OT Hrs, OT Amount, Gross Salary, Deductions, Bonus, Net Salary, Status + TOTAL row
+  Sheet 2 "Summary": Total Gross, Total OT Amount, Total Bonus, Total Deductions, Total Net Payroll, Employees Processed, Avg Net Salary, Total OT Hours
+- Bonus column is present (replaces the old Arrear column)
+- Production deployment: SUCCESSFUL on https://laxree-hrms.vercel.app
