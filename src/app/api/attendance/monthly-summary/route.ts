@@ -159,9 +159,14 @@ export async function GET(request: NextRequest) {
     }
     effectivePresentDays = Math.round(effectivePresentDays * 100) / 100;
 
-    // Convert work hours to HH.MM format for display
-    const totalWorkHours = Math.floor(totalWorkMinutes / 60) + (totalWorkMinutes % 60) / 100;
-    const totalSundayHours = Math.floor(totalSundayMinutes / 60) + (totalSundayMinutes % 60) / 100;
+    // Convert work hours to TRUE DECIMAL hours (e.g., 12146 min -> 202.43 hours)
+    // This must be TRUE decimal (not HH.MM-as-decimal) so the frontend's
+    // `displayDecimalAsColon()` shows the correct "HH:MM" string.
+    // Previous HH.MM-as-decimal format caused "202:26" instead of "202:43"
+    // because the minute remainder was being shown verbatim instead of as a
+    // fraction of an hour.
+    const totalWorkHours = Math.round((totalWorkMinutes / 60) * 100) / 100;
+    const totalSundayHours = Math.round((totalSundayMinutes / 60) * 100) / 100;
 
 
     // ─── OT Hours: Sum stored overtimeHours directly (decimal sum) ───
@@ -229,7 +234,8 @@ export async function GET(request: NextRequest) {
     const firmFullName = FIRM_NAMES[effectiveFirm] || employee.firm;
 
     const totalHrsInclSundayMinutes = totalWorkMinutes + totalSundayMinutes;
-    const totalHrsInclSunday = Math.floor(totalHrsInclSundayMinutes / 60) + (totalHrsInclSundayMinutes % 60) / 100;
+    // TRUE decimal so displayDecimalAsColon shows correct HH:MM (was HH.MM-as-decimal before)
+    const totalHrsInclSunday = Math.round((totalHrsInclSundayMinutes / 60) * 100) / 100;
 
     const annualLeaves = leaves.filter(l => l.type === 'annual' || l.type === 'AL' || l.type === 'Casual' || l.type === 'CL').reduce((sum, l) => sum + l.days, 0);
     const unpaidLeaves = leaves.filter(l => l.type === 'unpaid' || l.type === 'UL' || l.type === 'LOP').reduce((sum, l) => sum + l.days, 0);
