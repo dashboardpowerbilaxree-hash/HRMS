@@ -1205,9 +1205,9 @@ export function AttendanceTracker() {
                           <td className="px-3 py-3 font-bold text-orange-500 border-r border-border/30">{monthlySummary.halfDays}</td>
                           <td className="px-3 py-3 text-blue-500 border-r border-border/30">{monthlySummary.annualLeaves || 0}</td>
                           <td className="px-3 py-3 text-amber-600 dark:text-amber-400 border-r border-border/30">{monthlySummary.unpaidLeaves || 0}</td>
-                          <td className="px-3 py-3 font-bold text-cyan-600 dark:text-cyan-400 border-r border-border/30">{displayHHMM(monthlySummary.totalWorkHours)}</td>
+                          <td className="px-3 py-3 font-bold text-cyan-600 dark:text-cyan-400 border-r border-border/30">{displayDecimalAsColon(monthlySummary.totalWorkHours)}</td>
                           <td className="px-3 py-3 font-bold text-yellow-600 dark:text-yellow-400 border-r border-border/30">{formatOT(monthlySummary.totalOvertimeHours)}</td>
-                          <td className="px-3 py-3 text-blue-600 dark:text-blue-400 border-r border-border/30">{displayHHMM(monthlySummary.totalSundayHours)}</td>
+                          <td className="px-3 py-3 text-blue-600 dark:text-blue-400 border-r border-border/30">{displayDecimalAsColon(monthlySummary.totalSundayHours)}</td>
                           <td className="px-3 py-3 font-bold text-gold">{displayDecimalAsColon(monthlySummary.totalHrs ?? monthlySummary.totalHrsInclSunday ?? monthlySummary.totalWorkHours ?? 0)}</td>
                         </tr>
                       </tbody>
