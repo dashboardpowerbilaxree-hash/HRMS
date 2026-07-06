@@ -50,13 +50,13 @@ function getFirmFromEmployeeId(employeeId: string): string {
   return '';
 }
 
-// HH.MM format (e.g. 9.5 → "9.30", 8.25 → "8.15")
-function formatHours(decimal: number): string {
-  if (!decimal || decimal === 0) return '0.00';
-  const hours = Math.floor(decimal);
-  const minutes = Math.round((decimal - hours) * 60);
-  if (minutes >= 60) return `${hours + 1}.00`;
-  return `${hours}.${String(minutes).padStart(2, '0')}`;
+// HH:MM format matching Attendance Tracker's displayDecimalAsColon (e.g. 202.43 → "202:43")
+// This treats the decimal part as the minute display (2-digit zero-padded),
+// consistent with how the Attendance Tracker UI displays the same value.
+function displayDecimalAsColon(value: number | undefined | null): string {
+  if (value == null || isNaN(value as number)) return '0:00';
+  const [intPart, decPart] = Number(value).toFixed(2).split('.');
+  return `${intPart}:${decPart}`;
 }
 
 // HH:MM format for OT hours in summary (e.g. 1.5 → "1:30")
@@ -161,13 +161,24 @@ export async function GET(request: NextRequest) {
       const presentDays = rawPresentDays;
 
       let totalBaseHours = 0;
+      let totalWorkMinutes = 0; // Sum of check-in/out durations (includes OT) — matches Attendance Tracker
       for (const a of effectiveAttendance) {
+        // Sum work minutes from check-in/check-out (includes OT)
+        if (a.checkIn && a.checkOut) {
+          const [h1, m1] = a.checkIn.split(':').map(Number);
+          const [h2, m2] = a.checkOut.split(':').map(Number);
+          const workMin = Math.max(0, (h2 * 60 + m2) - (h1 * 60 + m1));
+          totalWorkMinutes += workMin;
+        }
+        // Base hours (excludes OT) — used internally for gross calc
         if (['present', 'late', 'early-out', 'half-day', 'half_day'].includes(a.status)) {
           const baseHrs = Math.max(0, (a.totalHours || 0) - (a.overtimeHours || 0));
           totalBaseHours += baseHrs;
         }
       }
       totalBaseHours = Math.round(totalBaseHours * 100) / 100;
+      // TRUE decimal hours (includes OT) — matches Attendance Tracker's totalWorkHours exactly
+      const totalWorkHoursDecimal = Math.round((totalWorkMinutes / 60) * 100) / 100;
 
       const otHours = Math.round(
         effectiveAttendance
@@ -233,7 +244,9 @@ export async function GET(request: NextRequest) {
         monthlySalary: p.monthlySalary,
         presentDays,
         absentDays,
-        workedHrs: totalBaseHours,
+        // workedHrs now matches Attendance Tracker's "Total Hrs Worked" exactly
+        // (true decimal, includes OT). Display uses displayDecimalAsColon → "202:43"
+        workedHrs: totalWorkHoursDecimal,
         otHours,
         otAmount,
         grossSalary,
@@ -370,8 +383,8 @@ export async function GET(request: NextRequest) {
         Math.round(p.monthlySalary),                // E: Monthly Salary
         p.presentDays,                              // F: Present Days
         p.absentDays,                               // G: Absent Days
-        parseFloat(formatHours(p.workedHrs)),       // H: Worked Hrs (HH.MM)
-        parseFloat(formatHours(p.otHours)),         // I: OT Hrs (HH.MM)
+        displayDecimalAsColon(p.workedHrs),         // H: Worked Hrs (HH:MM, matches Attendance Tracker)
+        displayDecimalAsColon(p.otHours),           // I: OT Hrs (HH:MM, matches Attendance Tracker)
         Math.round(p.otAmount),                     // J: OT Amount
         Math.round(p.grossSalary),                  // K: Gross Salary
         Math.round(p.deductions),                   // L: Deductions
@@ -442,8 +455,8 @@ export async function GET(request: NextRequest) {
     XLSX.utils.sheet_add_aoa(ws1, [[
       '', 'TOTAL', '', '', Math.round(totalMonthlySalary),
       totalPresentDays, totalAbsentDays,
-      parseFloat(formatHours(totalWorkedHrs)),
-      parseFloat(formatHours(totalOTHrs)),
+      displayDecimalAsColon(totalWorkedHrs),
+      displayDecimalAsColon(totalOTHrs),
       Math.round(totalOTAmount),
       Math.round(totalGross), Math.round(totalDeduct), Math.round(totalBonus),
       Math.round(totalNet), '',
