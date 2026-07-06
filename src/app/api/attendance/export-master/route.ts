@@ -42,6 +42,19 @@ function formatHours(decimal: number): string {
   return `${hours}:${String(minutes).padStart(2, '0')}`;
 }
 
+// ── Display a TRUE-DECIMAL value as HH:MM by splitting on the decimal point ──
+// e.g., 202.43 → "202:43", 9.5 → "9:50", 238.43 → "238:43"
+// This matches Attendance Tracker's `displayDecimalAsColon` so the TOTAL row
+// of the Master Sheet shows the SAME value the user sees in the UI.
+// (The bug: `formatHours(202.43)` returned "202:26" because 0.43×60=26 min —
+// that's a real time conversion, but the user wants the verbatim decimal split
+// to match what Attendance Tracker displays.)
+function displayDecimalAsColon(value: number | undefined | null): string {
+  if (value == null || isNaN(value as number)) return '0:00';
+  const [intPart, decPart] = Number(value).toFixed(2).split('.');
+  return `${intPart}:${decPart}`;
+}
+
 // Color constants
 const GOLD = 'D4A843';
 const DARK = '1A1A1A';
@@ -329,7 +342,10 @@ export async function GET(request: NextRequest) {
           const totals = empTotals.get(emp.employeeId);
           for (const extraCol of extraCols) {
             if (extraCol === 'Total Working Hours') {
-              empRow.push(formatHours(totals?.totalWorkHrs || 0));
+              // Use displayDecimalAsColon so the Master Sheet TOTAL matches
+              // Attendance Tracker's "Total Hrs Worked" exactly (e.g., 202:43).
+              // Was: formatHours(202.43) → "202:26" (wrong time conversion).
+              empRow.push(displayDecimalAsColon(totals?.totalWorkHrs || 0));
             } else if (extraCol === 'Leave') {
               empRow.push(Math.round(totals?.absentDays || 0));
             } else {
