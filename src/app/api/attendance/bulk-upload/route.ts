@@ -91,8 +91,18 @@ export async function POST(request: NextRequest) {
           let actualShiftHours = employee.shiftHours;
           if (employee.shiftStart && employee.shiftEnd) {
             const [sH, sM] = employee.shiftStart.split(':').map(Number);
-            const [eH, eM] = employee.shiftEnd.split(':').map(Number);
-            const calculatedShift = ((eH * 60 + eM) - (sH * 60 + sM)) / 60;
+            const [eHRaw, eM] = employee.shiftEnd.split(':').map(Number);
+            let eH = eHRaw;
+            let calculatedShift = ((eH * 60 + eM) - (sH * 60 + sM)) / 60;
+            // Handle 12-hour format: if shiftEnd "earlier" than shiftStart,
+            // assume shiftEnd is PM and add 12 hours. Without this, an
+            // employee with shift 10:00-14:00 stored as "10:00"/"02:00" would
+            // get calculatedShift = -8, fall back to default shiftHours (9h),
+            // and a full 4h shift would be wrongly flagged as half-day.
+            if (calculatedShift <= 0 && eH < 12) {
+              eH = eH + 12;
+              calculatedShift = ((eH * 60 + eM) - (sH * 60 + sM)) / 60;
+            }
             if (calculatedShift > 0) actualShiftHours = calculatedShift;
           }
 

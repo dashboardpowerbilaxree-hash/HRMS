@@ -137,8 +137,15 @@ export async function POST(request: NextRequest) {
       let actualShiftHours = employee.shiftHours;
       if (employee.shiftStart && employee.shiftEnd) {
         const [sH, sM] = employee.shiftStart.split(':').map(Number);
-        const [eH, eM] = employee.shiftEnd.split(':').map(Number);
-        const calculatedShift = ((eH * 60 + eM) - (sH * 60 + sM)) / 60;
+        const [eHRaw, eM] = employee.shiftEnd.split(':').map(Number);
+        let eH = eHRaw;
+        let calculatedShift = ((eH * 60 + eM) - (sH * 60 + sM)) / 60;
+        // Handle 12-hour format: if shiftEnd "earlier" than shiftStart,
+        // assume shiftEnd is PM and add 12 hours. See bulk-upload for full note.
+        if (calculatedShift <= 0 && eH < 12) {
+          eH = eH + 12;
+          calculatedShift = ((eH * 60 + eM) - (sH * 60 + sM)) / 60;
+        }
         if (calculatedShift > 0) actualShiftHours = calculatedShift;
       }
 

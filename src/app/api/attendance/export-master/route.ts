@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import * as XLSXStyle from 'xlsx-js-style';
+import {
+  getEffectiveCutoffDay,
+  countHolidaysUpTo,
+} from '@/lib/payroll-calc';
 
 // Master Excel Sheet Export
 // Generates a single Excel file with firm-wise sheets
@@ -97,9 +101,6 @@ export async function GET(request: NextRequest) {
 
     const daysInMonth = new Date(year, month, 0).getDate();
     const monthName = MONTHS[month - 1];
-    const today = new Date();
-    const isCurrentMonth = (today.getFullYear() === year && today.getMonth() + 1 === month);
-    const effectiveCutoffDay = isCurrentMonth ? today.getDate() : daysInMonth;
 
     // Determine which firms to include
     const firms = firm && firm !== 'all' ? [firm] : ['LAPL', 'LRSL', 'SI', 'SDF'];
@@ -115,7 +116,9 @@ export async function GET(request: NextRequest) {
         select: {
           employeeId: true, fullName: true, firm: true, department: true,
           designation: true, location: true, shiftHours: true,
+          shiftStart: true, shiftEnd: true,  // <-- needed for half-day recompute
           monthlySalary: true, hourlyRate: true, overtimeRate: true,
+          relievingDate: true,  // <-- needed for cutoff-day calculation
         },
         orderBy: { fullName: 'asc' },
       });
@@ -126,13 +129,21 @@ export async function GET(request: NextRequest) {
       const startDate = new Date(year, month - 1, 1);
       const endDate = new Date(year, month, 1);
 
-      const allAttendance = await db.attendance.findMany({
-        where: {
-          employeeId: { in: employees.map(e => e.employeeId) },
-          date: { gte: startDate, lt: endDate },
-        },
-        orderBy: { date: 'asc' },
-      });
+      const [allAttendance, holidays] = await Promise.all([
+        db.attendance.findMany({
+          where: {
+            employeeId: { in: employees.map(e => e.employeeId) },
+            date: { gte: startDate, lt: endDate },
+          },
+          orderBy: { date: 'asc' },
+        }),
+        db.holiday.findMany({ where: { date: { gte: startDate, lt: endDate } } }),
+      ]);
+
+      // Build a set of holiday day-numbers for quick lookup
+      const holidayDaySet = new Set<number>(
+        holidays.map(h => new Date(h.date).getDate())
+      );
 
       // Group attendance by employeeId -> day
       const attendanceByEmp = new Map<string, Map<number, any>>();
@@ -158,12 +169,40 @@ export async function GET(request: NextRequest) {
         let absentDays = 0;
         let presentDays = 0;
 
+        // ── Per-employee cutoff: respect relieving date (Bug #1 fix) ──
+        // Without this, post-relieving days were counted as absent because
+        // there are no attendance records for them. Now we stop counting
+        // at the relieving day (inclusive).
+        const empCutoffDay = getEffectiveCutoffDay(year, month, daysInMonth, emp.relievingDate);
+
+        // ── Compute this employee's actual shift hours for half-day recompute ──
+        // Bug #2: stored halfDay flag may be wrong if shiftEnd was in 12-hour
+        // format ("02:00" PM) during upload — calculatedShift went negative,
+        // fell back to default 9h, so a full 4h shift was wrongly flagged as
+        // half-day. We recompute from shiftStart/shiftEnd with 12-hour fix-up,
+        // falling back to emp.shiftHours if parsing fails.
+        let actualShiftHours = emp.shiftHours || 9;
+        if (emp.shiftStart && emp.shiftEnd) {
+          const sParts = emp.shiftStart.split(':').map(Number);
+          const eParts = emp.shiftEnd.split(':').map(Number);
+          const sH = sParts[0] || 0, sM = sParts[1] || 0;
+          let eH = eParts[0] || 0, eM = eParts[1] || 0;
+          let calculatedShift = ((eH * 60 + eM) - (sH * 60 + sM)) / 60;
+          // Handle 12-hour format: if end "earlier" than start, assume PM and add 12h
+          if (calculatedShift <= 0 && eH < 12) {
+            calculatedShift = (((eH + 12) * 60 + eM) - (sH * 60 + sM)) / 60;
+          }
+          if (calculatedShift > 0) actualShiftHours = calculatedShift;
+        }
+
         for (let d = 1; d <= daysInMonth; d++) {
           const dateObj = new Date(year, month - 1, d);
           const isSunday = dateObj.getDay() === 0;
+          const isHoliday = holidayDaySet.has(d);
 
-          // Skip future dates for current month
-          if (isCurrentMonth && d > effectiveCutoffDay) continue;
+          // Skip future dates for current month OR days beyond the per-employee cutoff
+          // (relieving date, current date for current month, etc.)
+          if (d > empCutoffDay) continue;
 
           const rec = empAttendance?.get(d);
 
@@ -182,10 +221,21 @@ export async function GET(request: NextRequest) {
                 presentDays++;
               }
               // Holiday without checkIn doesn't count as absent
-            } else if (rec.halfDay) {
-              totalWorkHrs += rec.totalHours;
-              presentDays += 0.5;
-              absentDays += 0.5;
+            } else if (rec.halfDay || rec.status === 'half-day' || rec.status === 'half_day') {
+              // ── Bug #2 fix: recompute half-day from actual shift hours ──
+              // Stored halfDay flag may be wrong if upload logic mis-parsed
+              // shiftEnd as 12-hour format. Recompute: if worked hours >= half
+              // the actual shift, treat as FULL present (not half-day).
+              const isActuallyHalfDay = (rec.totalHours || 0) < actualShiftHours / 2;
+              if (isActuallyHalfDay) {
+                totalWorkHrs += rec.totalHours;
+                presentDays += 0.5;
+                absentDays += 0.5;
+              } else {
+                // Was incorrectly flagged as half-day — treat as full present
+                totalWorkHrs += rec.totalHours;
+                presentDays++;
+              }
             } else {
               // present, late, early-out
               totalWorkHrs += rec.totalHours;
@@ -193,10 +243,10 @@ export async function GET(request: NextRequest) {
             }
           } else {
             // No record
-            if (!isSunday) {
+            if (!isSunday && !isHoliday) {
               absentDays++;
             }
-            // Sundays without record = WO, not absent
+            // Sundays / holidays without record = WO/Holiday, not absent
           }
         }
 
@@ -287,6 +337,24 @@ export async function GET(request: NextRequest) {
           const empAttendance = attendanceByEmp.get(emp.employeeId);
           const empRow: any[] = [emp.fullName];
 
+          // Per-employee cutoff (respects relieving date) — used to blank out
+          // post-relieving day cells instead of marking them 'Absent'
+          const empCutoffDay = getEffectiveCutoffDay(year, month, daysInMonth, emp.relievingDate);
+
+          // Actual shift hours for this employee (with 12-hour format fix-up)
+          let actualShiftHours = emp.shiftHours || 9;
+          if (emp.shiftStart && emp.shiftEnd) {
+            const sParts = emp.shiftStart.split(':').map(Number);
+            const eParts = emp.shiftEnd.split(':').map(Number);
+            const sH = sParts[0] || 0, sM = sParts[1] || 0;
+            let eH = eParts[0] || 0, eM = eParts[1] || 0;
+            let calculatedShift = ((eH * 60 + eM) - (sH * 60 + sM)) / 60;
+            if (calculatedShift <= 0 && eH < 12) {
+              calculatedShift = (((eH + 12) * 60 + eM) - (sH * 60 + sM)) / 60;
+            }
+            if (calculatedShift > 0) actualShiftHours = calculatedShift;
+          }
+
           for (let d = dayStart; d <= dayEnd; d++) {
             if (d > daysInMonth) {
               empRow.push('', '', '');
@@ -296,11 +364,15 @@ export async function GET(request: NextRequest) {
             const rec = empAttendance?.get(d);
             const dateObj = new Date(year, month - 1, d);
             const isSunday = dateObj.getDay() === 0;
+            const isHoliday = holidayDaySet.has(d);
 
-            // Future dates in current month = leave blank
-            if (isCurrentMonth && d > effectiveCutoffDay) {
+            // Days beyond the per-employee cutoff (post-relieving or future)
+            // = leave blank, do NOT mark 'Absent'
+            if (d > empCutoffDay) {
               if (isSunday) {
                 empRow.push('Weekly Off', '', '');
+              } else if (isHoliday) {
+                empRow.push('Holiday', '', '');
               } else {
                 empRow.push('', '', '');
               }
@@ -322,8 +394,17 @@ export async function GET(request: NextRequest) {
                 } else {
                   empRow.push('Holiday', '', '');
                 }
-              } else if (rec.halfDay) {
-                empRow.push(rec.checkIn || 'Half Day', rec.checkOut || '', formatHours(rec.totalHours));
+              } else if (rec.halfDay || rec.status === 'half-day' || rec.status === 'half_day') {
+                // ── Bug #2 fix: recompute half-day from actual shift hours ──
+                // If the stored halfDay flag is wrong (worked >= half the actual
+                // shift), display as a normal present day cell instead.
+                const isActuallyHalfDay = (rec.totalHours || 0) < actualShiftHours / 2;
+                if (isActuallyHalfDay) {
+                  empRow.push(rec.checkIn || 'Half Day', rec.checkOut || '', formatHours(rec.totalHours));
+                } else {
+                  // Display as normal present cell (IN/OUT/TOTAL HRS)
+                  empRow.push(rec.checkIn || '', rec.checkOut || '', formatHours(rec.totalHours));
+                }
               } else {
                 // present, late, early-out
                 empRow.push(rec.checkIn || '', rec.checkOut || '', formatHours(rec.totalHours));
@@ -332,6 +413,8 @@ export async function GET(request: NextRequest) {
               // No record
               if (isSunday) {
                 empRow.push('Weekly Off', '', '');
+              } else if (isHoliday) {
+                empRow.push('Holiday', '', '');
               } else {
                 empRow.push('Absent', '', '');
               }
