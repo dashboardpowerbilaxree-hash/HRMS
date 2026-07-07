@@ -160,16 +160,19 @@ export async function GET(request: NextRequest) {
 
       const effectiveAttendance = filterAttendanceUpTo(attendance, p.year, p.month, cutoffDay);
 
-      // ── Recompute half-day status on-the-fly ──
-      // Existing DB records may have status='half-day' set wrongly due to the
-      // 12-hour format bug in upload routes. We recompute the effective status
-      // here WITHOUT modifying the DB (per user's "no data tampering" instruction).
+      // ── Recompute half-day AND early-out status on-the-fly ──
+      // Existing DB records may have status='half-day' or status='early-out'
+      // set wrongly due to (a) the 12-hour format bug in upload routes, or
+      // (b) the employee's shift being updated AFTER attendance was uploaded.
+      // We recompute the effective status here WITHOUT modifying the DB
+      // (per user's "no data tampering" instruction).
       // Records that were full shifts (worked >= half the actual shift) are
-      // treated as 'present' / 'late' / 'early-out' based on stored flags.
+      // treated as 'present' / 'late' / 'early-out' based on stored flags
+      // AND the recomputed early-out flag (with 12h fix-up + 5min grace).
       const actualShiftHours = getActualShiftHours(emp?.shiftHours, emp?.shiftStart, emp?.shiftEnd);
       const correctedAttendance = effectiveAttendance.map(a => ({
         ...a,
-        status: recomputeStatus(a, actualShiftHours),
+        status: recomputeStatus(a, actualShiftHours, emp?.shiftStart, emp?.shiftEnd),
       }));
 
       const rawPresentDays = correctedAttendance.filter(a => ['present', 'late', 'early-out'].includes(a.status)).length;

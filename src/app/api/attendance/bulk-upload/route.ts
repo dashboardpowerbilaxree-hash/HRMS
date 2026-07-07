@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { isActuallyEarlyOut } from '@/lib/payroll-calc';
 
 function calcHours(checkIn: string, checkOut: string): number {
   const [h1, m1] = checkIn.split(':').map(Number);
@@ -116,13 +117,17 @@ export async function POST(request: NextRequest) {
             lateEntry = checkInMinutes > shiftMinutes + gracePeriod;
           }
 
-          // Early out detection: if checkOut is before shift end time
+          // Early out detection: if checkOut is before shift end time.
+          // Use isActuallyEarlyOut helper so that:
+          //   1. The 12-hour-format fix-up is applied (e.g., shiftEnd "02:00"
+          //      is interpreted as 14:00, not 2 AM).
+          //   2. A 5-minute grace period is applied (leaving 1-5 min before
+          //      shift end is NOT flagged as early-out).
+          // This ensures employees with short shifts (4h, 5h, etc.) are not
+          // wrongly flagged as early-out when they leave at their actual
+          // shift end time.
           if (employee.shiftEnd) {
-            const [shiftEndH, shiftEndM] = employee.shiftEnd.split(':').map(Number);
-            const [checkOutH, checkOutM] = checkOut.split(':').map(Number);
-            const shiftEndMinutes = shiftEndH * 60 + shiftEndM;
-            const checkOutMinutes = checkOutH * 60 + checkOutM;
-            earlyOut = checkOutMinutes < shiftEndMinutes;
+            earlyOut = isActuallyEarlyOut(checkOut, employee.shiftStart, employee.shiftEnd);
           }
 
           // Half day detection: only when worked LESS than half of actual shift duration

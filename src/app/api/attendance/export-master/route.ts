@@ -209,7 +209,7 @@ export async function GET(request: NextRequest) {
         const presentDateStrs = new Set<string>();
         if (empAttendance) {
           for (const [dayNum, rec] of empAttendance.entries()) {
-            const correctedStatus = recomputeStatus(rec, actualShiftHours);
+            const correctedStatus = recomputeStatus(rec, actualShiftHours, emp.shiftStart, emp.shiftEnd);
             if (['present', 'late', 'early-out', 'half-day', 'half_day'].includes(correctedStatus)) {
               const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
               presentDateStrs.add(dateStr);
@@ -227,7 +227,7 @@ export async function GET(request: NextRequest) {
 
           const rec = empAttendance?.get(d);
           // Recompute the status on-the-fly using the shared helper
-          const correctedStatus = rec ? recomputeStatus(rec, actualShiftHours) : '';
+          const correctedStatus = rec ? recomputeStatus(rec, actualShiftHours, emp.shiftStart, emp.shiftEnd) : '';
 
           if (rec) {
             if (correctedStatus === 'absent') {
@@ -364,7 +364,7 @@ export async function GET(request: NextRequest) {
           const presentDateStrs = new Set<string>();
           if (empAttendance) {
             for (const [dayNum, rec] of empAttendance.entries()) {
-              const cs = recomputeStatus(rec, actualShiftHours);
+              const cs = recomputeStatus(rec, actualShiftHours, emp.shiftStart, emp.shiftEnd);
               if (['present', 'late', 'early-out', 'half-day', 'half_day'].includes(cs)) {
                 presentDateStrs.add(`${year}-${String(month).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`);
               }
@@ -396,8 +396,8 @@ export async function GET(request: NextRequest) {
             }
 
             if (rec) {
-              // Use recomputed status (handles wrongly-marked half-day)
-              const correctedStatus = recomputeStatus(rec, actualShiftHours);
+              // Use recomputed status (handles wrongly-marked half-day AND early-out)
+              const correctedStatus = recomputeStatus(rec, actualShiftHours, emp.shiftStart, emp.shiftEnd);
               if (correctedStatus === 'absent') {
                 empRow.push('Absent', '', '');
               } else if (correctedStatus === 'weekly-off') {

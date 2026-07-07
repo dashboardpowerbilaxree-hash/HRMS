@@ -221,20 +221,130 @@ export function isActuallyHalfDay(
   return (totalHours || 0) < actualShiftHours / 2;
 }
 
+// ════════════════════════════════════════════════════════════════
+// EARLY-OUT RECOMPUTE UTILITIES
+//
+// Problem being solved:
+//   When attendance was uploaded for employees with short shifts
+//   (e.g., 10:00-14:00 = 4h), the upload routes calculated
+//   `earlyOut` by comparing `checkOut` against `employee.shiftEnd`
+//   WITHOUT applying the 12-hour-format fix-up. So:
+//     - If shiftEnd was stored as "02:00" (12-hour, meaning 2 PM),
+//       the early-out check treated it as 2 AM → checkouts at 14:02
+//       were considered "early" by accident (the math was wrong but
+//       the result was lenient).
+//     - If the employee's shiftEnd was later updated (e.g., from
+//       "19:00" to "14:00") but attendance records were already
+//       uploaded, the stored `earlyOut=true` flag became stale —
+//       the employee is now correctly leaving at 14:00 (her actual
+//       shift end), but old records still show "Early Out".
+//
+//   Per user's strict instruction: NO data tampering, NO deletion.
+//   So we recompute the early-out status on-the-fly in every
+//   display/calculation route, using the CURRENT employee.shiftEnd
+//   (with the same 12-hour-format fix-up used for half-day).
+//
+//   A small grace period (default 5 minutes) is applied so that
+//   employees who leave 1-5 minutes before their shift end are NOT
+//   penalized as "Early Out" — this matches typical HR practice.
+// ════════════════════════════════════════════════════════════════
+
+/**
+ * Compute the effective shift-end time in minutes from midnight,
+ * with a 12-hour-format fix-up (same logic as getActualShiftHours).
+ *
+ * Examples:
+ *   shiftStart="10:00", shiftEnd="14:00" → 840  (14:00)
+ *   shiftStart="10:00", shiftEnd="02:00" → 840  (14:00, 12h fix-up)
+ *   shiftStart="10:00", shiftEnd="19:00" → 1140 (19:00)
+ *   shiftStart=null,    shiftEnd="14:00" → 840
+ *   shiftStart=null,    shiftEnd=null    → null (no early-out check)
+ */
+export function getEffectiveShiftEndMinutes(
+  shiftStart: string | null | undefined,
+  shiftEnd: string | null | undefined,
+): number | null {
+  if (!shiftEnd) return null;
+  const eParts = shiftEnd.split(':').map(Number);
+  let eH = eParts[0] || 0;
+  const eM = eParts[1] || 0;
+
+  // 12-hour format fix-up: if shiftStart is given and shiftEnd "earlier"
+  // than shiftStart, assume shiftEnd is PM and add 12 hours.
+  if (shiftStart) {
+    const sParts = shiftStart.split(':').map(Number);
+    const sH = sParts[0] || 0;
+    const sM = sParts[1] || 0;
+    const shiftStartMin = sH * 60 + sM;
+    let shiftEndMin = eH * 60 + eM;
+    if (shiftEndMin <= shiftStartMin && eH < 12) {
+      eH = eH + 12;
+      shiftEndMin = eH * 60 + eM;
+    }
+    return shiftEndMin;
+  }
+
+  return eH * 60 + eM;
+}
+
+/**
+ * Recompute whether an attendance record should be treated as an
+ * early-out, based on the employee's ACTUAL shift end time (with
+ * 12-hour fix-up) and a small grace period. Does NOT modify any data.
+ *
+ * Rule: a record is an early-out if `checkOut` is more than
+ *   `graceMinutes` BEFORE the effective shift end time.
+ *
+ * Examples (graceMinutes=5):
+ *   shiftEnd=14:00, checkOut=14:02 → 842 < 840-5=835? NO  → NOT early-out ✓
+ *   shiftEnd=14:00, checkOut=13:55 → 835 < 835?        NO  → NOT early-out (within grace) ✓
+ *   shiftEnd=14:00, checkOut=13:50 → 830 < 835?        YES → early-out ✓
+ *   shiftEnd=02:00 (=14:00 via fix-up), checkOut=14:02 → same as above ✓
+ *   shiftEnd=null → no early-out check → false
+ */
+export function isActuallyEarlyOut(
+  checkOut: string | null | undefined,
+  shiftStart: string | null | undefined,
+  shiftEnd: string | null | undefined,
+  graceMinutes: number = 5,
+): boolean {
+  if (!checkOut) return false;
+  const shiftEndMin = getEffectiveShiftEndMinutes(shiftStart, shiftEnd);
+  if (shiftEndMin == null) return false;
+
+  const parts = checkOut.split(':').map(Number);
+  const coH = parts[0] || 0;
+  const coM = parts[1] || 0;
+  const checkOutMin = coH * 60 + coM;
+
+  return checkOutMin < (shiftEndMin - graceMinutes);
+}
+
 /**
  * Get the corrected status of an attendance record, recomputing half-day
- * status on-the-fly. Does NOT modify the input record.
+ * AND early-out status on-the-fly. Does NOT modify the input record.
  *
- * - If the stored status is NOT 'half-day' / 'half_day', returns it as-is.
- * - If the stored status IS 'half-day' but the record was actually a full
- *   shift (worked >= half the actual shift), returns 'present' (or 'late'
- *   / 'early-out' based on the stored lateEntry/earlyOut flags).
- * - If the record was genuinely a half-day, returns 'half-day'.
+ * - If the stored status is 'half-day' / 'half_day' / halfDay=true:
+ *     - Recompute half-day using actual shift hours.
+ *     - If genuinely a half-day → 'half-day'.
+ *     - Else derive from lateEntry/earlyOut flags (recomputed).
+ *
+ * - If the stored status is 'early-out' OR earlyOut=true:
+ *     - Recompute early-out using actual shift end (with 12h fix-up
+ *       and 5-minute grace period).
+ *     - If NOT actually an early-out → fix to 'present' or 'late'.
+ *     - Else keep as 'early-out'.
+ *
+ * - Otherwise, return stored status as-is.
  *
  * @param rec  The attendance record. Must have: status, halfDay?,
- *             totalHours, lateEntry?, earlyOut?
+ *             totalHours, lateEntry?, earlyOut?, checkOut?
  * @param actualShiftHours  The employee's actual shift hours (from
  *                          getActualShiftHours)
+ * @param shiftStart  Optional employee.shiftStart — needed for
+ *                    early-out recompute (12h fix-up)
+ * @param shiftEnd    Optional employee.shiftEnd — needed for
+ *                    early-out recompute
  * @returns The corrected status string
  */
 export function recomputeStatus(
@@ -244,23 +354,67 @@ export function recomputeStatus(
     totalHours?: number | null;
     lateEntry?: boolean | null;
     earlyOut?: boolean | null;
+    checkOut?: string | null;
   },
   actualShiftHours: number,
+  shiftStart?: string | null | undefined,
+  shiftEnd?: string | null | undefined,
 ): string {
-  // Only recompute records currently marked as half-day
-  if (rec.status !== 'half-day' && rec.status !== 'half_day' && !rec.halfDay) {
-    return rec.status;
+  const isStoredHalfDay = rec.status === 'half-day' || rec.status === 'half_day' || !!rec.halfDay;
+
+  // ── Half-day recompute ──
+  if (isStoredHalfDay) {
+    if (isActuallyHalfDay(rec.totalHours, actualShiftHours)) {
+      return 'half-day';
+    }
+    // Was wrongly flagged as half-day. Derive correct status from
+    // lateEntry flag and recomputed early-out flag.
+    const actuallyEarlyOut =
+      shiftStart !== undefined && shiftEnd !== undefined
+        ? isActuallyEarlyOut(rec.checkOut, shiftStart, shiftEnd)
+        : !!rec.earlyOut;
+    if (rec.lateEntry) return 'late';
+    if (actuallyEarlyOut) return 'early-out';
+    return 'present';
   }
 
-  // Recompute: is this actually a half-day?
-  if (isActuallyHalfDay(rec.totalHours, actualShiftHours)) {
-    return 'half-day';
+  // ── Early-out recompute ──
+  // Only recompute if shift info is provided (otherwise fall back to stored flag).
+  const isStoredEarlyOut = rec.status === 'early-out' || !!rec.earlyOut;
+  if (isStoredEarlyOut && shiftStart !== undefined && shiftEnd !== undefined) {
+    const actuallyEarlyOut = isActuallyEarlyOut(rec.checkOut, shiftStart, shiftEnd);
+    if (!actuallyEarlyOut) {
+      // Stored early-out was wrong (employee left at/after actual shift end).
+      // Derive correct status: if lateEntry, show 'late'; otherwise 'present'.
+      if (rec.lateEntry) return 'late';
+      return 'present';
+    }
+    // Genuinely an early-out — keep the label.
+    return 'early-out';
   }
 
-  // Was wrongly flagged as half-day. Derive the correct status from the
-  // stored lateEntry / earlyOut flags so the UI shows the right label.
-  if (rec.lateEntry && rec.earlyOut) return 'late';
-  if (rec.lateEntry) return 'late';
-  if (rec.earlyOut) return 'early-out';
-  return 'present';
+  return rec.status;
+}
+
+/**
+ * Recompute the raw `earlyOut` boolean flag for an attendance record,
+ * using the employee's actual shift end (with 12h fix-up and 5-minute
+ * grace period). Use this to override the stored flag in display/export
+ * routes WITHOUT modifying the database.
+ *
+ * Returns `true` if the record should be treated as an early-out.
+ */
+export function recomputeEarlyOutFlag(
+  rec: {
+    checkOut?: string | null;
+    earlyOut?: boolean | null;
+  },
+  shiftStart: string | null | undefined,
+  shiftEnd: string | null | undefined,
+): boolean {
+  // If we have shift info, recompute; otherwise fall back to stored flag.
+  if (shiftStart !== undefined && shiftEnd !== undefined && (shiftStart || shiftEnd)) {
+    return isActuallyEarlyOut(rec.checkOut, shiftStart, shiftEnd);
+  }
+  return !!rec.earlyOut;
 }

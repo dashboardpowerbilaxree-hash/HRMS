@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { isActuallyEarlyOut, recomputeStatus, recomputeEarlyOutFlag, getActualShiftHours } from '@/lib/payroll-calc';
 
 function calcHours(checkIn: string, checkOut: string): number {
   const [h1, m1] = checkIn.split(':').map(Number);
@@ -53,28 +54,53 @@ export async function GET(request: NextRequest) {
             designation: true,
             location: true,
             shiftHours: true,
+            shiftStart: true,   // needed for half-day & early-out recompute
+            shiftEnd: true,     // needed for half-day & early-out recompute
           },
         },
       },
       orderBy: { date: 'desc' },
     });
 
-    // Monthly summary
+    // ── Recompute half-day AND early-out status on-the-fly for each record ──
+    // Existing DB records may have status='half-day' or status='early-out'
+    // set wrongly due to (a) the 12-hour format bug in upload routes, or
+    // (b) the employee's shift being updated AFTER attendance was uploaded.
+    // We recompute the effective status here WITHOUT modifying the DB
+    // (per user's "no data tampering" instruction), so the Attendance
+    // Tracker UI and other consumers see the corrected status.
+    const correctedRecords = records.map(r => {
+      const actualShiftHours = getActualShiftHours(
+        r.employee?.shiftHours,
+        r.employee?.shiftStart,
+        r.employee?.shiftEnd,
+      );
+      const correctedStatus = recomputeStatus(r, actualShiftHours, r.employee?.shiftStart, r.employee?.shiftEnd);
+      const correctedEarlyOut = recomputeEarlyOutFlag(r, r.employee?.shiftStart, r.employee?.shiftEnd);
+      return {
+        ...r,
+        status: correctedStatus,
+        earlyOut: correctedEarlyOut,
+      };
+    });
+
+    // Monthly summary — uses RECOMPUTED records so wrong early-out flags
+    // don't inflate the "Early Outs" count for employees with short shifts.
     const summary = {
-      totalRecords: records.length,
-      present: records.filter(r => ['present', 'late', 'early-out'].includes(r.status)).length,
-      absent: records.filter(r => r.status === 'absent').length,
-      late: records.filter(r => r.lateEntry).length,
-      earlyOuts: records.filter(r => r.earlyOut).length,
-      halfDay: records.filter(r => r.halfDay).length,
-      sundayWorked: records.filter(r => r.isSunday && r.totalHours > 0).length,
-      phWorked: records.filter(r => r.isPH && r.totalHours > 0).length,
-      totalSundayHours: records.reduce((sum, r) => sum + r.sundayHours, 0),
-      totalOvertimeHours: records.reduce((sum, r) => sum + r.overtimeHours, 0),
-      totalWorkHours: records.reduce((sum, r) => sum + r.totalHours, 0),
+      totalRecords: correctedRecords.length,
+      present: correctedRecords.filter(r => ['present', 'late', 'early-out'].includes(r.status)).length,
+      absent: correctedRecords.filter(r => r.status === 'absent').length,
+      late: correctedRecords.filter(r => r.lateEntry).length,
+      earlyOuts: correctedRecords.filter(r => r.earlyOut).length,
+      halfDay: correctedRecords.filter(r => r.halfDay).length,
+      sundayWorked: correctedRecords.filter(r => r.isSunday && r.totalHours > 0).length,
+      phWorked: correctedRecords.filter(r => r.isPH && r.totalHours > 0).length,
+      totalSundayHours: correctedRecords.reduce((sum, r) => sum + r.sundayHours, 0),
+      totalOvertimeHours: correctedRecords.reduce((sum, r) => sum + r.overtimeHours, 0),
+      totalWorkHours: correctedRecords.reduce((sum, r) => sum + r.totalHours, 0),
     };
 
-    return NextResponse.json({ records, summary });
+    return NextResponse.json({ records: correctedRecords, summary });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
@@ -157,12 +183,16 @@ export async function POST(request: NextRequest) {
       const checkInMinutes = checkInH * 60 + checkInM;
       lateEntry = checkInMinutes > shiftMinutes + gracePeriod;
 
-      // Early out detection: if checkOut is before shift end time
-      const [shiftEndH, shiftEndM] = employee.shiftEnd.split(':').map(Number);
-      const [checkOutH, checkOutM] = checkOut.split(':').map(Number);
-      const shiftEndMinutes = shiftEndH * 60 + shiftEndM;
-      const checkOutMinutes = checkOutH * 60 + checkOutM;
-      earlyOut = checkOutMinutes < shiftEndMinutes;
+      // Early out detection: if checkOut is before shift end time.
+      // Use isActuallyEarlyOut helper so that:
+      //   1. The 12-hour-format fix-up is applied (e.g., shiftEnd "02:00"
+      //      is interpreted as 14:00, not 2 AM).
+      //   2. A 5-minute grace period is applied (leaving 1-5 min before
+      //      shift end is NOT flagged as early-out).
+      // This ensures employees with short shifts (4h, 5h, etc.) are not
+      // wrongly flagged as early-out when they leave at their actual
+      // shift end time.
+      earlyOut = isActuallyEarlyOut(checkOut, employee.shiftStart, employee.shiftEnd);
 
       // Half day detection: only when worked LESS than half of actual shift duration
       // e.g., shift=4h, worked=4h → NOT half day; shift=9h, worked=3h → half day

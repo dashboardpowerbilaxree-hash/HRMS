@@ -8,6 +8,7 @@ import {
   filterAttendanceUpTo,
   getActualShiftHours,
   recomputeStatus,
+  recomputeEarlyOutFlag,
 } from '@/lib/payroll-calc';
 
 const FIRM_NAMES: Record<string, string> = {
@@ -194,13 +195,15 @@ export async function GET(request: NextRequest) {
     // Filter attendance defensively
     const effectiveAttendance = filterAttendanceUpTo(attendance, year, month, cutoffDay);
 
-    // ── Recompute half-day status on-the-fly ──
-    // Existing DB records may have status='half-day' set wrongly due to the
-    // 12-hour format bug in upload routes. Recompute WITHOUT modifying DB.
+    // ── Recompute half-day AND early-out status on-the-fly ──
+    // Existing DB records may have status='half-day' or status='early-out'
+    // set wrongly due to (a) the 12-hour format bug in upload routes, or
+    // (b) the employee's shift being updated AFTER attendance was uploaded.
+    // Recompute WITHOUT modifying DB.
     const actualShiftHours = getActualShiftHours(employee.shiftHours, employee.shiftStart, employee.shiftEnd);
     const correctedAttendance = effectiveAttendance.map(a => ({
       ...a,
-      status: recomputeStatus(a, actualShiftHours),
+      status: recomputeStatus(a, actualShiftHours, employee.shiftStart, employee.shiftEnd),
     }));
 
     const rawPresentDays = correctedAttendance.filter(a => ['present', 'late', 'early-out'].includes(a.status)).length;
@@ -287,7 +290,12 @@ export async function GET(request: NextRequest) {
     const totalSundayHours = formatMinutesToHHMM(totalSundayMinutes);
 
     const lateEntries = correctedAttendance.filter(a => a.lateEntry).length;
-    const earlyOuts = correctedAttendance.filter(a => a.earlyOut).length;
+    // Recompute early-out flag using actual shift end (with 12h fix-up + 5min grace)
+    // so that employees with short shifts (e.g., 10-14:00) are not wrongly counted
+    // as early-out when they leave at their actual shift end.
+    const earlyOuts = correctedAttendance.filter(a =>
+      recomputeEarlyOutFlag(a, employee.shiftStart, employee.shiftEnd)
+    ).length;
     const weeklyOffs = correctedAttendance.filter(a => a.isWeeklyOff || a.isSunday).length;
     const annualLeaves = effectivePaidLeaves;
     const unpaidLeaves = effectiveUnpaidLeaves;
@@ -456,7 +464,12 @@ export async function GET(request: NextRequest) {
           dayOTHrs,
           daySundayHrs,
           rec.lateEntry ? 'Yes' : '',
-          rec.earlyOut ? 'Yes' : '',
+          // Recompute early-out flag using actual shift end (with 12h fix-up
+          // + 5min grace) so the "Early Out" column matches the recomputed
+          // status column above. Without this, an employee with a 10-14:00
+          // shift who leaves at 14:02 would still show "Yes" here even
+          // though her status column correctly shows "Present".
+          recomputeEarlyOutFlag(rec, employee.shiftStart, employee.shiftEnd) ? 'Yes' : '',
         ]], { origin: `A${row}` });
       } else {
         XLSXStyle.utils.sheet_add_aoa(ws1, [[

@@ -7,6 +7,7 @@ import {
   filterAttendanceUpTo,
   getActualShiftHours,
   recomputeStatus,
+  recomputeEarlyOutFlag,
 } from '@/lib/payroll-calc';
 
 const FIRM_NAMES: Record<string, string> = {
@@ -105,14 +106,16 @@ export async function GET(request: NextRequest) {
     // so half-day detection uses the REAL shift duration (e.g., 4h for 10-14:00).
     const actualShiftHours = getActualShiftHours(employee.shiftHours, employee.shiftStart, employee.shiftEnd);
 
-    // ── Recompute half-day status on-the-fly for each record ──
-    // Existing DB records may have status='half-day' set wrongly due to the
-    // 12-hour format bug. We recompute the effective status here WITHOUT
-    // modifying the DB (per user's "no data tampering" instruction).
+    // ── Recompute half-day AND early-out status on-the-fly for each record ──
+    // Existing DB records may have status='half-day' or status='early-out'
+    // set wrongly due to (a) the 12-hour format bug in upload routes, or
+    // (b) the employee's shift being updated AFTER attendance was uploaded.
+    // We recompute the effective status here WITHOUT modifying the DB
+    // (per user's "no data tampering" instruction).
     // The corrected status is used for ALL display and calculation below.
     const correctedAttendance = effectiveAttendance.map(a => ({
       ...a,
-      status: recomputeStatus(a, actualShiftHours),
+      status: recomputeStatus(a, actualShiftHours, employee.shiftStart, employee.shiftEnd),
     }));
 
     // Calculate summary — use RECOMPUTED status so half-days that were
@@ -196,7 +199,12 @@ export async function GET(request: NextRequest) {
     const totalOvertimeHoursDecimal = Math.round(correctedAttendance.filter(a => ['present', 'late', 'early-out', 'half-day', 'half_day'].includes(a.status)).reduce((sum, a) => sum + (a.overtimeHours || 0), 0) * 100) / 100;
     const totalOvertimeHours = totalOvertimeHoursDecimal;
     const lateEntries = correctedAttendance.filter(a => a.lateEntry).length;
-    const earlyOuts = correctedAttendance.filter(a => a.earlyOut).length;
+    // Recompute early-out flag using actual shift end (with 12h fix-up + 5min grace)
+    // so employees with short shifts (e.g., 10-14:00) are not wrongly counted
+    // as early-out when they leave at their actual shift end.
+    const earlyOuts = correctedAttendance.filter(a =>
+      recomputeEarlyOutFlag(a, employee.shiftStart, employee.shiftEnd)
+    ).length;
 
     // Working days in month = cutoffDay - sundays - elapsedHolidays
     // (uses cutoff so current-month future days and post-relieving days are NOT counted)
