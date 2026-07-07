@@ -5,6 +5,8 @@ import {
   countSundaysUpTo,
   countHolidaysUpTo,
   filterAttendanceUpTo,
+  getActualShiftHours,
+  recomputeStatus,
 } from '@/lib/payroll-calc';
 
 const FIRM_NAMES: Record<string, string> = {
@@ -45,6 +47,8 @@ export async function GET(request: NextRequest) {
         department: true,
         designation: true,
         shiftHours: true,
+        shiftStart: true,
+        shiftEnd: true,
         employmentType: true,
         hourlyRate: true,
         monthlySalary: true,
@@ -95,22 +99,39 @@ export async function GET(request: NextRequest) {
     // (in case future-dated rows were uploaded)
     const effectiveAttendance = filterAttendanceUpTo(attendance, year, month, cutoffDay);
 
-    // Calculate summary — use cutoff-filtered attendance so future days don't count
+    // ── Compute this employee's ACTUAL shift hours ──
+    // Stored shiftHours may be wrong (default 9h) if shiftEnd was uploaded in
+    // 12-hour format. We recompute from shiftStart/shiftEnd with a 12h fix-up
+    // so half-day detection uses the REAL shift duration (e.g., 4h for 10-14:00).
+    const actualShiftHours = getActualShiftHours(employee.shiftHours, employee.shiftStart, employee.shiftEnd);
+
+    // ── Recompute half-day status on-the-fly for each record ──
+    // Existing DB records may have status='half-day' set wrongly due to the
+    // 12-hour format bug. We recompute the effective status here WITHOUT
+    // modifying the DB (per user's "no data tampering" instruction).
+    // The corrected status is used for ALL display and calculation below.
+    const correctedAttendance = effectiveAttendance.map(a => ({
+      ...a,
+      status: recomputeStatus(a, actualShiftHours),
+    }));
+
+    // Calculate summary — use RECOMPUTED status so half-days that were
+    // actually full shifts are counted as present, not half-day.
     // rawPresentDays = actual days with present/late/early-out status (working days only)
-    const rawPresentDays = effectiveAttendance.filter(a => ['present', 'late', 'early-out'].includes(a.status)).length;
-    const explicitAbsentDays = effectiveAttendance.filter(a => a.status === 'absent').length;
-    const halfDays = effectiveAttendance.filter(a => a.status === 'half-day' || a.halfDay).length;
-    const weeklyOffs = effectiveAttendance.filter(a => a.isWeeklyOff || a.isSunday).length;
+    const rawPresentDays = correctedAttendance.filter(a => ['present', 'late', 'early-out'].includes(a.status)).length;
+    const explicitAbsentDays = correctedAttendance.filter(a => a.status === 'absent').length;
+    const halfDays = correctedAttendance.filter(a => a.status === 'half-day').length;
+    const weeklyOffs = correctedAttendance.filter(a => a.isWeeklyOff || a.isSunday).length;
     // Only count holidays where the employee actually worked (totalHours > 0)
-    const holidayAttendance = effectiveAttendance.filter(a => a.isHoliday && a.totalHours > 0).length;
+    const holidayAttendance = correctedAttendance.filter(a => a.isHoliday && a.totalHours > 0).length;
     // Count Sunday/weekly-off days where employee worked
-    const weeklyOffWorked = effectiveAttendance.filter(a => a.isWeeklyOff && a.totalHours > 0).length;
+    const weeklyOffWorked = correctedAttendance.filter(a => a.isWeeklyOff && a.totalHours > 0).length;
 
     // Present days for DISPLAY = full present days only (half-days tracked separately)
     const presentDays = rawPresentDays;
 
     // Shift minutes needed for Late/Early-Out deduction
-    const shiftMinutes = Math.round(employee.shiftHours * 60);
+    const shiftMinutes = Math.round(actualShiftHours * 60);
 
     // ─── HOUR-BASED salary calculation (matching Excel Payroll Master) ───
     // Excel formula:
@@ -125,7 +146,7 @@ export async function GET(request: NextRequest) {
     let totalWorkMinutes = 0;
     let totalSundayMinutes = 0;
 
-    for (const a of effectiveAttendance) {
+    for (const a of correctedAttendance) {
       // Calculate total work minutes from check-in/check-out
       if (a.checkIn && a.checkOut) {
         const [h1, m1] = a.checkIn.split(':').map(Number);
@@ -153,7 +174,7 @@ export async function GET(request: NextRequest) {
         if (a.status === 'half-day' || a.status === 'half_day') {
           effectivePresentDays += 0.5;
         } else {
-          effectivePresentDays += Math.min(1, baseHrs / employee.shiftHours);
+          effectivePresentDays += Math.min(1, baseHrs / actualShiftHours);
         }
       }
     }
@@ -170,10 +191,12 @@ export async function GET(request: NextRequest) {
 
 
     // ─── OT Hours: Sum stored overtimeHours directly (decimal sum) ───
-    const totalOvertimeHoursDecimal = Math.round(effectiveAttendance.filter(a => ['present', 'late', 'early-out', 'half-day', 'half_day'].includes(a.status)).reduce((sum, a) => sum + (a.overtimeHours || 0), 0) * 100) / 100;
+    // Use correctedAttendance so records recomputed from half-day → present
+    // are still included in the OT sum (their overtimeHours are unchanged).
+    const totalOvertimeHoursDecimal = Math.round(correctedAttendance.filter(a => ['present', 'late', 'early-out', 'half-day', 'half_day'].includes(a.status)).reduce((sum, a) => sum + (a.overtimeHours || 0), 0) * 100) / 100;
     const totalOvertimeHours = totalOvertimeHoursDecimal;
-    const lateEntries = effectiveAttendance.filter(a => a.lateEntry).length;
-    const earlyOuts = effectiveAttendance.filter(a => a.earlyOut).length;
+    const lateEntries = correctedAttendance.filter(a => a.lateEntry).length;
+    const earlyOuts = correctedAttendance.filter(a => a.earlyOut).length;
 
     // Working days in month = cutoffDay - sundays - elapsedHolidays
     // (uses cutoff so current-month future days and post-relieving days are NOT counted)
@@ -192,7 +215,7 @@ export async function GET(request: NextRequest) {
 
     const presentDateStrs = new Set();
     const absentDateStrs = new Set();
-    for (const a of effectiveAttendance) {
+    for (const a of correctedAttendance) {
       const ad = new Date(a.date);
       const dateStr = `${ad.getFullYear()}-${String(ad.getMonth() + 1).padStart(2, '0')}-${String(ad.getDate()).padStart(2, '0')}`;
       if (['present', 'late', 'early-out', 'half-day'].includes(a.status)) {
@@ -297,7 +320,7 @@ export async function GET(request: NextRequest) {
       totalHrsInclSunday,
       lateEntries,
       earlyOuts,
-      records: attendance,
+      records: correctedAttendance,
       leaves,
       // Salary calculation fields — full precision, frontend rounds for display
       perDayRate,

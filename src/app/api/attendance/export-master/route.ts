@@ -4,6 +4,8 @@ import * as XLSXStyle from 'xlsx-js-style';
 import {
   getEffectiveCutoffDay,
   countHolidaysUpTo,
+  getActualShiftHours,
+  recomputeStatus,
 } from '@/lib/payroll-calc';
 
 // Master Excel Sheet Export
@@ -129,7 +131,7 @@ export async function GET(request: NextRequest) {
       const startDate = new Date(year, month - 1, 1);
       const endDate = new Date(year, month, 1);
 
-      const [allAttendance, holidays] = await Promise.all([
+      const [allAttendance, holidays, allLeaves] = await Promise.all([
         db.attendance.findMany({
           where: {
             employeeId: { in: employees.map(e => e.employeeId) },
@@ -138,6 +140,14 @@ export async function GET(request: NextRequest) {
           orderBy: { date: 'asc' },
         }),
         db.holiday.findMany({ where: { date: { gte: startDate, lt: endDate } } }),
+        db.leave.findMany({
+          where: {
+            employeeId: { in: employees.map(e => e.employeeId) },
+            status: 'approved',
+            startDate: { gte: startDate },
+            endDate: { lt: endDate },
+          },
+        }),
       ]);
 
       // Build a set of holiday day-numbers for quick lookup
@@ -156,6 +166,25 @@ export async function GET(request: NextRequest) {
         attendanceByEmp.get(rec.employeeId)!.set(day, rec);
       }
 
+      // Group leaves by employeeId -> set of date strings (YYYY-MM-DD)
+      // Only working-day leaves (not Sunday, not holiday, not already-present)
+      // are counted as effective leave days.
+      const leavesByEmp = new Map<string, Set<string>>();
+      for (const lv of allLeaves) {
+        if (!leavesByEmp.has(lv.employeeId)) {
+          leavesByEmp.set(lv.employeeId, new Set());
+        }
+        const set = leavesByEmp.get(lv.employeeId)!;
+        const start = new Date(lv.startDate);
+        const end = new Date(lv.endDate);
+        const cur = new Date(start);
+        while (cur <= end) {
+          const dateStr = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}-${String(cur.getDate()).padStart(2, '0')}`;
+          set.add(dateStr);
+          cur.setDate(cur.getDate() + 1);
+        }
+      }
+
       // ═══════════════════════════════════════════════════════════
       // PRE-COMPUTE full-month totals per employee
       // This ensures Total Working Hours & Leave are correct
@@ -165,34 +194,27 @@ export async function GET(request: NextRequest) {
 
       for (const emp of employees) {
         const empAttendance = attendanceByEmp.get(emp.employeeId);
+        const empLeaveDays = leavesByEmp.get(emp.employeeId) || new Set<string>();
         let totalWorkHrs = 0;
         let absentDays = 0;
         let presentDays = 0;
 
         // ── Per-employee cutoff: respect relieving date (Bug #1 fix) ──
-        // Without this, post-relieving days were counted as absent because
-        // there are no attendance records for them. Now we stop counting
-        // at the relieving day (inclusive).
         const empCutoffDay = getEffectiveCutoffDay(year, month, daysInMonth, emp.relievingDate);
 
-        // ── Compute this employee's actual shift hours for half-day recompute ──
-        // Bug #2: stored halfDay flag may be wrong if shiftEnd was in 12-hour
-        // format ("02:00" PM) during upload — calculatedShift went negative,
-        // fell back to default 9h, so a full 4h shift was wrongly flagged as
-        // half-day. We recompute from shiftStart/shiftEnd with 12-hour fix-up,
-        // falling back to emp.shiftHours if parsing fails.
-        let actualShiftHours = emp.shiftHours || 9;
-        if (emp.shiftStart && emp.shiftEnd) {
-          const sParts = emp.shiftStart.split(':').map(Number);
-          const eParts = emp.shiftEnd.split(':').map(Number);
-          const sH = sParts[0] || 0, sM = sParts[1] || 0;
-          let eH = eParts[0] || 0, eM = eParts[1] || 0;
-          let calculatedShift = ((eH * 60 + eM) - (sH * 60 + sM)) / 60;
-          // Handle 12-hour format: if end "earlier" than start, assume PM and add 12h
-          if (calculatedShift <= 0 && eH < 12) {
-            calculatedShift = (((eH + 12) * 60 + eM) - (sH * 60 + sM)) / 60;
+        // ── Compute this employee's actual shift hours (shared helper) ──
+        const actualShiftHours = getActualShiftHours(emp.shiftHours, emp.shiftStart, emp.shiftEnd);
+
+        // Build a set of present-date-strings for this employee (for leave overlap check)
+        const presentDateStrs = new Set<string>();
+        if (empAttendance) {
+          for (const [dayNum, rec] of empAttendance.entries()) {
+            const correctedStatus = recomputeStatus(rec, actualShiftHours);
+            if (['present', 'late', 'early-out', 'half-day', 'half_day'].includes(correctedStatus)) {
+              const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+              presentDateStrs.add(dateStr);
+            }
           }
-          if (calculatedShift > 0) actualShiftHours = calculatedShift;
         }
 
         for (let d = 1; d <= daysInMonth; d++) {
@@ -201,52 +223,45 @@ export async function GET(request: NextRequest) {
           const isHoliday = holidayDaySet.has(d);
 
           // Skip future dates for current month OR days beyond the per-employee cutoff
-          // (relieving date, current date for current month, etc.)
           if (d > empCutoffDay) continue;
 
           const rec = empAttendance?.get(d);
+          // Recompute the status on-the-fly using the shared helper
+          const correctedStatus = rec ? recomputeStatus(rec, actualShiftHours) : '';
 
           if (rec) {
-            if (rec.status === 'absent') {
+            if (correctedStatus === 'absent') {
               absentDays++;
-            } else if (rec.status === 'weekly-off') {
+            } else if (correctedStatus === 'weekly-off') {
               if (rec.checkIn && rec.totalHours > 0) {
                 totalWorkHrs += rec.totalHours;
                 presentDays++;
               }
               // WO without checkIn doesn't count as absent
-            } else if (rec.status === 'holiday') {
+            } else if (correctedStatus === 'holiday') {
               if (rec.checkIn && rec.totalHours > 0) {
                 totalWorkHrs += rec.totalHours;
                 presentDays++;
               }
               // Holiday without checkIn doesn't count as absent
-            } else if (rec.halfDay || rec.status === 'half-day' || rec.status === 'half_day') {
-              // ── Bug #2 fix: recompute half-day from actual shift hours ──
-              // Stored halfDay flag may be wrong if upload logic mis-parsed
-              // shiftEnd as 12-hour format. Recompute: if worked hours >= half
-              // the actual shift, treat as FULL present (not half-day).
-              const isActuallyHalfDay = (rec.totalHours || 0) < actualShiftHours / 2;
-              if (isActuallyHalfDay) {
-                totalWorkHrs += rec.totalHours;
-                presentDays += 0.5;
-                absentDays += 0.5;
-              } else {
-                // Was incorrectly flagged as half-day — treat as full present
-                totalWorkHrs += rec.totalHours;
-                presentDays++;
-              }
+            } else if (correctedStatus === 'half-day' || correctedStatus === 'half_day') {
+              // Genuinely a half-day (worked < half the actual shift)
+              totalWorkHrs += rec.totalHours;
+              presentDays += 0.5;
+              absentDays += 0.5;
             } else {
-              // present, late, early-out
+              // present, late, early-out (includes recomputed-from-half-day)
               totalWorkHrs += rec.totalHours;
               presentDays++;
             }
           } else {
-            // No record
-            if (!isSunday && !isHoliday) {
+            // No record — check if it's a leave day before counting as absent
+            const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+            const isLeaveDay = empLeaveDays.has(dateStr) && !presentDateStrs.has(dateStr);
+            if (!isSunday && !isHoliday && !isLeaveDay) {
               absentDays++;
             }
-            // Sundays / holidays without record = WO/Holiday, not absent
+            // Sundays / holidays / leave days without record = NOT absent
           }
         }
 
@@ -335,24 +350,25 @@ export async function GET(request: NextRequest) {
         // ── Employee data rows ──
         for (const emp of employees) {
           const empAttendance = attendanceByEmp.get(emp.employeeId);
+          const empLeaveDays = leavesByEmp.get(emp.employeeId) || new Set<string>();
           const empRow: any[] = [emp.fullName];
 
           // Per-employee cutoff (respects relieving date) — used to blank out
           // post-relieving day cells instead of marking them 'Absent'
           const empCutoffDay = getEffectiveCutoffDay(year, month, daysInMonth, emp.relievingDate);
 
-          // Actual shift hours for this employee (with 12-hour format fix-up)
-          let actualShiftHours = emp.shiftHours || 9;
-          if (emp.shiftStart && emp.shiftEnd) {
-            const sParts = emp.shiftStart.split(':').map(Number);
-            const eParts = emp.shiftEnd.split(':').map(Number);
-            const sH = sParts[0] || 0, sM = sParts[1] || 0;
-            let eH = eParts[0] || 0, eM = eParts[1] || 0;
-            let calculatedShift = ((eH * 60 + eM) - (sH * 60 + sM)) / 60;
-            if (calculatedShift <= 0 && eH < 12) {
-              calculatedShift = (((eH + 12) * 60 + eM) - (sH * 60 + sM)) / 60;
+          // Actual shift hours for this employee (shared helper, with 12-hour fix-up)
+          const actualShiftHours = getActualShiftHours(emp.shiftHours, emp.shiftStart, emp.shiftEnd);
+
+          // Build present-date-str set for this employee (for leave overlap check)
+          const presentDateStrs = new Set<string>();
+          if (empAttendance) {
+            for (const [dayNum, rec] of empAttendance.entries()) {
+              const cs = recomputeStatus(rec, actualShiftHours);
+              if (['present', 'late', 'early-out', 'half-day', 'half_day'].includes(cs)) {
+                presentDateStrs.add(`${year}-${String(month).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`);
+              }
             }
-            if (calculatedShift > 0) actualShiftHours = calculatedShift;
           }
 
           for (let d = dayStart; d <= dayEnd; d++) {
@@ -380,41 +396,39 @@ export async function GET(request: NextRequest) {
             }
 
             if (rec) {
-              if (rec.status === 'absent') {
+              // Use recomputed status (handles wrongly-marked half-day)
+              const correctedStatus = recomputeStatus(rec, actualShiftHours);
+              if (correctedStatus === 'absent') {
                 empRow.push('Absent', '', '');
-              } else if (rec.status === 'weekly-off') {
+              } else if (correctedStatus === 'weekly-off') {
                 if (rec.checkIn && rec.totalHours > 0) {
                   empRow.push(rec.checkIn || '', rec.checkOut || '', formatHours(rec.totalHours));
                 } else {
                   empRow.push('Weekly Off', '', '');
                 }
-              } else if (rec.status === 'holiday') {
+              } else if (correctedStatus === 'holiday') {
                 if (rec.checkIn && rec.totalHours > 0) {
                   empRow.push(rec.checkIn || '', rec.checkOut || '', formatHours(rec.totalHours));
                 } else {
                   empRow.push('Holiday', '', '');
                 }
-              } else if (rec.halfDay || rec.status === 'half-day' || rec.status === 'half_day') {
-                // ── Bug #2 fix: recompute half-day from actual shift hours ──
-                // If the stored halfDay flag is wrong (worked >= half the actual
-                // shift), display as a normal present day cell instead.
-                const isActuallyHalfDay = (rec.totalHours || 0) < actualShiftHours / 2;
-                if (isActuallyHalfDay) {
-                  empRow.push(rec.checkIn || 'Half Day', rec.checkOut || '', formatHours(rec.totalHours));
-                } else {
-                  // Display as normal present cell (IN/OUT/TOTAL HRS)
-                  empRow.push(rec.checkIn || '', rec.checkOut || '', formatHours(rec.totalHours));
-                }
+              } else if (correctedStatus === 'half-day' || correctedStatus === 'half_day') {
+                // Genuinely a half-day — display with "Half Day" label
+                empRow.push(rec.checkIn || 'Half Day', rec.checkOut || '', formatHours(rec.totalHours));
               } else {
-                // present, late, early-out
+                // present, late, early-out (includes recomputed-from-half-day)
                 empRow.push(rec.checkIn || '', rec.checkOut || '', formatHours(rec.totalHours));
               }
             } else {
-              // No record
+              // No record — check leave day before marking absent
+              const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+              const isLeaveDay = empLeaveDays.has(dateStr) && !presentDateStrs.has(dateStr);
               if (isSunday) {
                 empRow.push('Weekly Off', '', '');
               } else if (isHoliday) {
                 empRow.push('Holiday', '', '');
+              } else if (isLeaveDay) {
+                empRow.push('Leave', '', '');
               } else {
                 empRow.push('Absent', '', '');
               }

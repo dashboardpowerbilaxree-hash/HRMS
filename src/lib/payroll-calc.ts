@@ -146,3 +146,121 @@ export function filterAttendanceUpTo<T extends { date: Date }>(
     );
   });
 }
+
+// ════════════════════════════════════════════════════════════════
+// HALF-DAY RECOMPUTE UTILITIES
+//
+// Problem being solved:
+//   When attendance was uploaded for employees with short shifts
+//   (e.g., 10:00-14:00 = 4h), the upload routes calculated
+//   `actualShiftHours` from shiftStart/shiftEnd. If shiftEnd was
+//   stored as "02:00" (12-hour format) instead of "14:00" (24-hour),
+//   `calculatedShift` went negative, fell back to default `shiftHours`
+//   (often 9h), and the half-day threshold became 9/2 = 4.5h. A full
+//   4h shift was then wrongly flagged as half-day.
+//
+//   The upload routes (bulk-upload, attendance POST, attendance/[id]
+//   PUT) have been patched to handle the 12-hour format. But existing
+//   DB records still carry the wrong `status='half-day'` and
+//   `halfDay=true` flags. We must NOT modify data (per user's strict
+//   instruction). Instead, we recompute the half-day status on-the-fly
+//   in every display/calculation route.
+// ════════════════════════════════════════════════════════════════
+
+/**
+ * Compute the actual shift duration in hours from shiftStart/shiftEnd,
+ * with a 12-hour-format fix-up. Falls back to `shiftHours` (or 9) if
+ * parsing fails.
+ *
+ * Examples:
+ *   shiftStart="10:00", shiftEnd="14:00" → 4
+ *   shiftStart="10:00", shiftEnd="02:00" → 4 (12h fix-up: 02+12=14)
+ *   shiftStart="09:00", shiftEnd="18:00" → 9
+ *   shiftStart=null,    shiftEnd=null    → shiftHours || 9
+ */
+export function getActualShiftHours(
+  shiftHours: number | null | undefined,
+  shiftStart: string | null | undefined,
+  shiftEnd: string | null | undefined,
+): number {
+  let actualShiftHours = shiftHours || 9;
+  if (shiftStart && shiftEnd) {
+    const sParts = shiftStart.split(':').map(Number);
+    const eParts = shiftEnd.split(':').map(Number);
+    const sH = sParts[0] || 0, sM = sParts[1] || 0;
+    let eH = eParts[0] || 0, eM = eParts[1] || 0;
+    let calculatedShift = ((eH * 60 + eM) - (sH * 60 + sM)) / 60;
+    // 12-hour format fix-up: if end "earlier" than start, assume PM and add 12h
+    if (calculatedShift <= 0 && eH < 12) {
+      eH = eH + 12;
+      calculatedShift = ((eH * 60 + eM) - (sH * 60 + sM)) / 60;
+    }
+    if (calculatedShift > 0) actualShiftHours = calculatedShift;
+  }
+  return actualShiftHours;
+}
+
+/**
+ * Recompute whether an attendance record should be treated as a half-day,
+ * based on the employee's ACTUAL shift hours (not the stored shiftHours
+ * default). This corrects records that were wrongly flagged as half-day
+ * due to the 12-hour format bug in upload routes.
+ *
+ * Returns `true` if the record should be treated as a half-day, `false`
+ * if it should be treated as a full present day.
+ *
+ * Rule: a record is a half-day if `totalHours < actualShiftHours / 2`.
+ *   - shift=4h, worked=4h → 4 < 2 → false → full present ✓
+ *   - shift=4h, worked=1h → 1 < 2 → true  → half-day ✓
+ *   - shift=9h, worked=3h → 3 < 4.5 → true → half-day ✓
+ */
+export function isActuallyHalfDay(
+  totalHours: number | null | undefined,
+  actualShiftHours: number,
+): boolean {
+  return (totalHours || 0) < actualShiftHours / 2;
+}
+
+/**
+ * Get the corrected status of an attendance record, recomputing half-day
+ * status on-the-fly. Does NOT modify the input record.
+ *
+ * - If the stored status is NOT 'half-day' / 'half_day', returns it as-is.
+ * - If the stored status IS 'half-day' but the record was actually a full
+ *   shift (worked >= half the actual shift), returns 'present' (or 'late'
+ *   / 'early-out' based on the stored lateEntry/earlyOut flags).
+ * - If the record was genuinely a half-day, returns 'half-day'.
+ *
+ * @param rec  The attendance record. Must have: status, halfDay?,
+ *             totalHours, lateEntry?, earlyOut?
+ * @param actualShiftHours  The employee's actual shift hours (from
+ *                          getActualShiftHours)
+ * @returns The corrected status string
+ */
+export function recomputeStatus(
+  rec: {
+    status: string;
+    halfDay?: boolean | null;
+    totalHours?: number | null;
+    lateEntry?: boolean | null;
+    earlyOut?: boolean | null;
+  },
+  actualShiftHours: number,
+): string {
+  // Only recompute records currently marked as half-day
+  if (rec.status !== 'half-day' && rec.status !== 'half_day' && !rec.halfDay) {
+    return rec.status;
+  }
+
+  // Recompute: is this actually a half-day?
+  if (isActuallyHalfDay(rec.totalHours, actualShiftHours)) {
+    return 'half-day';
+  }
+
+  // Was wrongly flagged as half-day. Derive the correct status from the
+  // stored lateEntry / earlyOut flags so the UI shows the right label.
+  if (rec.lateEntry && rec.earlyOut) return 'late';
+  if (rec.lateEntry) return 'late';
+  if (rec.earlyOut) return 'early-out';
+  return 'present';
+}

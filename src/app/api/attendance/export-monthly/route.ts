@@ -6,6 +6,8 @@ import {
   countSundaysUpTo,
   countHolidaysUpTo,
   filterAttendanceUpTo,
+  getActualShiftHours,
+  recomputeStatus,
 } from '@/lib/payroll-calc';
 
 const FIRM_NAMES: Record<string, string> = {
@@ -158,6 +160,7 @@ export async function GET(request: NextRequest) {
       select: {
         fullName: true, employeeId: true, firm: true, location: true,
         department: true, designation: true, shiftHours: true,
+        shiftStart: true, shiftEnd: true,
         employmentType: true, hourlyRate: true, monthlySalary: true, overtimeRate: true,
         relievingDate: true,
       },
@@ -191,20 +194,29 @@ export async function GET(request: NextRequest) {
     // Filter attendance defensively
     const effectiveAttendance = filterAttendanceUpTo(attendance, year, month, cutoffDay);
 
-    const rawPresentDays = effectiveAttendance.filter(a => ['present', 'late', 'early-out'].includes(a.status)).length;
-    const halfDays = effectiveAttendance.filter(a => a.status === 'half-day' || a.halfDay).length;
+    // ── Recompute half-day status on-the-fly ──
+    // Existing DB records may have status='half-day' set wrongly due to the
+    // 12-hour format bug in upload routes. Recompute WITHOUT modifying DB.
+    const actualShiftHours = getActualShiftHours(employee.shiftHours, employee.shiftStart, employee.shiftEnd);
+    const correctedAttendance = effectiveAttendance.map(a => ({
+      ...a,
+      status: recomputeStatus(a, actualShiftHours),
+    }));
+
+    const rawPresentDays = correctedAttendance.filter(a => ['present', 'late', 'early-out'].includes(a.status)).length;
+    const halfDays = correctedAttendance.filter(a => a.status === 'half-day' || a.halfDay).length;
     const presentDays = rawPresentDays;
-    const shiftMinutes = Math.round(employee.shiftHours * 60);
+    const shiftMinutes = Math.round(actualShiftHours * 60);
     let totalBaseHours = 0;
     let effectivePresentDays = 0;
-    for (const a of effectiveAttendance) {
+    for (const a of correctedAttendance) {
       if (['present', 'late', 'early-out', 'half-day', 'half_day'].includes(a.status)) {
         const baseHrs = Math.max(0, (a.totalHours || 0) - (a.overtimeHours || 0));
         totalBaseHours += baseHrs;
         if (a.status === 'half-day' || a.status === 'half_day') {
           effectivePresentDays += 0.5;
         } else {
-          effectivePresentDays += Math.min(1, baseHrs / employee.shiftHours);
+          effectivePresentDays += Math.min(1, baseHrs / actualShiftHours);
         }
       }
     }
@@ -219,7 +231,7 @@ export async function GET(request: NextRequest) {
       })
     );
     const presentDateStrs = new Set();
-    for (const a of effectiveAttendance) {
+    for (const a of correctedAttendance) {
       if (['present', 'late', 'early-out', 'half-day'].includes(a.status)) {
         const ad = new Date(a.date);
         presentDateStrs.add(`${ad.getFullYear()}-${String(ad.getMonth() + 1).padStart(2, '0')}-${String(ad.getDate()).padStart(2, '0')}`);
@@ -256,7 +268,7 @@ export async function GET(request: NextRequest) {
     let totalWorkMinutes = 0;
     let totalSundayMinutes = 0;
 
-    for (const a of effectiveAttendance) {
+    for (const a of correctedAttendance) {
       if (a.checkIn && a.checkOut) {
         const [h1, m1] = a.checkIn.split(':').map(Number);
         const [h2, m2] = a.checkOut.split(':').map(Number);
@@ -270,16 +282,16 @@ export async function GET(request: NextRequest) {
     }
 
     const totalWorkHours = formatMinutesToHHMM(totalWorkMinutes);
-    const totalOvertimeHoursDecimal = Math.round(effectiveAttendance.reduce((sum, a) => sum + (a.overtimeHours || 0), 0) * 100) / 100;
+    const totalOvertimeHoursDecimal = Math.round(correctedAttendance.reduce((sum, a) => sum + (a.overtimeHours || 0), 0) * 100) / 100;
     const totalOvertimeHours = formatOT(totalOvertimeHoursDecimal);
     const totalSundayHours = formatMinutesToHHMM(totalSundayMinutes);
 
-    const lateEntries = effectiveAttendance.filter(a => a.lateEntry).length;
-    const earlyOuts = effectiveAttendance.filter(a => a.earlyOut).length;
-    const weeklyOffs = effectiveAttendance.filter(a => a.isWeeklyOff || a.isSunday).length;
+    const lateEntries = correctedAttendance.filter(a => a.lateEntry).length;
+    const earlyOuts = correctedAttendance.filter(a => a.earlyOut).length;
+    const weeklyOffs = correctedAttendance.filter(a => a.isWeeklyOff || a.isSunday).length;
     const annualLeaves = effectivePaidLeaves;
     const unpaidLeaves = effectiveUnpaidLeaves;
-    const sundaysEarned = countSundaysEarned(attendance);
+    const sundaysEarned = countSundaysEarned(correctedAttendance);
     const totalHrsInclSunday = formatMinutesToHHMM(totalWorkMinutes + totalSundayMinutes);
 
     // ─── Salary Calculation (matching Excel Payroll Master) ───
@@ -411,7 +423,7 @@ export async function GET(request: NextRequest) {
       const dayName = dayNames[dateObj.getDay()];
       const isSunday = dateObj.getDay() === 0;
 
-      const rec = attendance.find((r: any) => {
+      const rec = correctedAttendance.find((r: any) => {
         const rDate = new Date(r.date);
         return rDate.getFullYear() === year && rDate.getMonth() + 1 === month && rDate.getDate() === day;
       });

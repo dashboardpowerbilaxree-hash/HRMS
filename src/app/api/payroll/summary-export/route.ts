@@ -6,6 +6,8 @@ import {
   countSundaysUpTo,
   countHolidaysUpTo,
   filterAttendanceUpTo,
+  getActualShiftHours,
+  recomputeStatus,
 } from '@/lib/payroll-calc';
 
 // ════════════════════════════════════════════════════════════
@@ -115,6 +117,8 @@ export async function GET(request: NextRequest) {
             salaryType: true,
             hourlyRate: true,
             shiftHours: true,
+            shiftStart: true,
+            shiftEnd: true,
             monthlySalary: true,
             relievingDate: true,
           },
@@ -156,13 +160,25 @@ export async function GET(request: NextRequest) {
 
       const effectiveAttendance = filterAttendanceUpTo(attendance, p.year, p.month, cutoffDay);
 
-      const rawPresentDays = effectiveAttendance.filter(a => ['present', 'late', 'early-out'].includes(a.status)).length;
-      const halfDays = effectiveAttendance.filter(a => a.status === 'half-day' || a.status === 'half_day').length;
+      // ── Recompute half-day status on-the-fly ──
+      // Existing DB records may have status='half-day' set wrongly due to the
+      // 12-hour format bug in upload routes. We recompute the effective status
+      // here WITHOUT modifying the DB (per user's "no data tampering" instruction).
+      // Records that were full shifts (worked >= half the actual shift) are
+      // treated as 'present' / 'late' / 'early-out' based on stored flags.
+      const actualShiftHours = getActualShiftHours(emp?.shiftHours, emp?.shiftStart, emp?.shiftEnd);
+      const correctedAttendance = effectiveAttendance.map(a => ({
+        ...a,
+        status: recomputeStatus(a, actualShiftHours),
+      }));
+
+      const rawPresentDays = correctedAttendance.filter(a => ['present', 'late', 'early-out'].includes(a.status)).length;
+      const halfDays = correctedAttendance.filter(a => a.status === 'half-day' || a.status === 'half_day').length;
       const presentDays = rawPresentDays;
 
       let totalBaseHours = 0;
       let totalWorkMinutes = 0; // Sum of check-in/out durations (includes OT) — matches Attendance Tracker
-      for (const a of effectiveAttendance) {
+      for (const a of correctedAttendance) {
         // Sum work minutes from check-in/check-out (includes OT)
         if (a.checkIn && a.checkOut) {
           const [h1, m1] = a.checkIn.split(':').map(Number);
@@ -181,7 +197,7 @@ export async function GET(request: NextRequest) {
       const totalWorkHoursDecimal = Math.round((totalWorkMinutes / 60) * 100) / 100;
 
       const otHours = Math.round(
-        effectiveAttendance
+        correctedAttendance
           .filter(a => ['present', 'late', 'half-day', 'half_day', 'early-out'].includes(a.status))
           .reduce((sum, a) => sum + (a.overtimeHours || 0), 0) * 100
       ) / 100;
@@ -198,7 +214,7 @@ export async function GET(request: NextRequest) {
         })
       );
       const presentDateStrs = new Set();
-      for (const a of effectiveAttendance) {
+      for (const a of correctedAttendance) {
         if (['present', 'late', 'early-out', 'half-day', 'half_day'].includes(a.status)) {
           const ad = new Date(a.date);
           presentDateStrs.add(`${ad.getFullYear()}-${String(ad.getMonth() + 1).padStart(2, '0')}-${String(ad.getDate()).padStart(2, '0')}`);
