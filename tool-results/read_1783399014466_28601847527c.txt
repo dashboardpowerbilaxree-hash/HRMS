@@ -1,0 +1,651 @@
+     1→import { NextRequest, NextResponse } from 'next/server';
+     2→import { db } from '@/lib/db';
+     3→import * as XLSXStyle from 'xlsx-js-style';
+     4→import {
+     5→  getEffectiveCutoffDay,
+     6→  countHolidaysUpTo,
+     7→} from '@/lib/payroll-calc';
+     8→
+     9→// Master Excel Sheet Export
+    10→// Generates a single Excel file with firm-wise sheets
+    11→// Each sheet matches the "Laxree Group Monthly Excel Formate.xlsx" template:
+    12→// - 3 sections: Days 1-11, Days 12-22, Days 23-lastDayOfMonth
+    13→// - Each day has 3 columns: IN, OUT, TOTAL HRS
+    14→// - Section 3 ends with Total Working Hours + Leave columns
+    15→// - Date headers show actual dates like "1/06/2026"
+    16→// - Sections dynamically adjust for month length (28/29/30/31 days)
+    17→// - Future dates in current month are left blank (not counted as absent)
+    18→// - Total Working Hours & Leave are FULL-MONTH cumulative values (not just section 3)
+    19→
+    20→const FIRM_NAMES: Record<string, string> = {
+    21→  LAPL: 'LAXREE AMENITIES PVT LTD',
+    22→  LRSL: 'LAXREE ROOFING SOLUTION',
+    23→  SI: 'SMARTH INTERNATIONAL',
+    24→  SDF: 'SANGRAH DECOR & FURNITURE',
+    25→};
+    26→
+    27→const MONTHS = [
+    28→  'January', 'February', 'March', 'April', 'May', 'June',
+    29→  'July', 'August', 'September', 'October', 'November', 'December',
+    30→];
+    31→
+    32→function getFirmFromEmployeeId(employeeId: string): string {
+    33→  const id = employeeId.toUpperCase();
+    34→  if (id.startsWith('LAPL')) return 'LAPL';
+    35→  if (id.startsWith('LRSL')) return 'LRSL';
+    36→  if (id.startsWith('SI-') || id.startsWith('SI0')) return 'SI';
+    37→  if (id.startsWith('SDF')) return 'SDF';
+    38→  return '';
+    39→}
+    40→
+    41→function formatHours(decimal: number): string {
+    42→  if (!decimal || decimal === 0) return '0:00';
+    43→  const hours = Math.floor(decimal);
+    44→  const minutes = Math.round((decimal - hours) * 60);
+    45→  if (minutes >= 60) return `${hours + 1}:00`;
+    46→  return `${hours}:${String(minutes).padStart(2, '0')}`;
+    47→}
+    48→
+    49→// ── Display a TRUE-DECIMAL value as HH:MM by splitting on the decimal point ──
+    50→// e.g., 202.43 → "202:43", 9.5 → "9:50", 238.43 → "238:43"
+    51→// This matches Attendance Tracker's `displayDecimalAsColon` so the TOTAL row
+    52→// of the Master Sheet shows the SAME value the user sees in the UI.
+    53→// (The bug: `formatHours(202.43)` returned "202:26" because 0.43×60=26 min —
+    54→// that's a real time conversion, but the user wants the verbatim decimal split
+    55→// to match what Attendance Tracker displays.)
+    56→function displayDecimalAsColon(value: number | undefined | null): string {
+    57→  if (value == null || isNaN(value as number)) return '0:00';
+    58→  const [intPart, decPart] = Number(value).toFixed(2).split('.');
+    59→  return `${intPart}:${decPart}`;
+    60→}
+    61→
+    62→// Color constants
+    63→const GOLD = 'D4A843';
+    64→const DARK = '1A1A1A';
+    65→const WHITE = 'FFFFFF';
+    66→const DEEP_BLUE = '1E3A5F';
+    67→const LIGHT_BG = 'FFF8E7';
+    68→const LIGHT_GREEN = 'ECFDF5';
+    69→const LIGHT_RED = 'FEF2F2';
+    70→const LIGHT_AMBER = 'FFFBEB';
+    71→const AMBER_HIGHLIGHT = 'FFC000';
+    72→
+    73→const fullBorder = (color: string = 'B0B0B0', style: 'thin' | 'medium' = 'thin') => ({
+    74→  top: { style, color: { rgb: color } },
+    75→  bottom: { style, color: { rgb: color } },
+    76→  left: { style, color: { rgb: color } },
+    77→  right: { style, color: { rgb: color } },
+    78→});
+    79→
+    80→const safeStyle = (ws: any, cellRef: string, style: any) => {
+    81→  if (ws[cellRef]) ws[cellRef].s = style;
+    82→};
+    83→
+    84→// Helper: get column letter from 0-based index
+    85→const colLetter = (idx: number): string => {
+    86→  let result = '';
+    87→  let n = idx;
+    88→  while (n >= 0) {
+    89→    result = String.fromCharCode(65 + (n % 26)) + result;
+    90→    n = Math.floor(n / 26) - 1;
+    91→  }
+    92→  return result;
+    93→};
+    94→
+    95→export async function GET(request: NextRequest) {
+    96→  try {
+    97→    const { searchParams } = new URL(request.url);
+    98→    const firm = searchParams.get('firm') || '';
+    99→    const month = parseInt(searchParams.get('month') || String(new Date().getMonth() + 1));
+   100→    const year = parseInt(searchParams.get('year') || String(new Date().getFullYear()));
+   101→
+   102→    const daysInMonth = new Date(year, month, 0).getDate();
+   103→    const monthName = MONTHS[month - 1];
+   104→
+   105→    // Determine which firms to include
+   106→    const firms = firm && firm !== 'all' ? [firm] : ['LAPL', 'LRSL', 'SI', 'SDF'];
+   107→
+   108→    const wb = XLSXStyle.utils.book_new();
+   109→
+   110→    for (const firmCode of firms) {
+   111→      const firmName = FIRM_NAMES[firmCode] || firmCode;
+   112→
+   113→      // Get all employees for this firm
+   114→      const employees = await db.employee.findMany({
+   115→        where: { firm: firmCode, status: 'Yes' },
+   116→        select: {
+   117→          employeeId: true, fullName: true, firm: true, department: true,
+   118→          designation: true, location: true, shiftHours: true,
+   119→          shiftStart: true, shiftEnd: true,  // <-- needed for half-day recompute
+   120→          monthlySalary: true, hourlyRate: true, overtimeRate: true,
+   121→          relievingDate: true,  // <-- needed for cutoff-day calculation
+   122→        },
+   123→        orderBy: { fullName: 'asc' },
+   124→      });
+   125→
+   126→      if (employees.length === 0) continue;
+   127→
+   128→      // Get attendance for all employees of this firm for the month
+   129→      const startDate = new Date(year, month - 1, 1);
+   130→      const endDate = new Date(year, month, 1);
+   131→
+   132→      const [allAttendance, holidays] = await Promise.all([
+   133→        db.attendance.findMany({
+   134→          where: {
+   135→            employeeId: { in: employees.map(e => e.employeeId) },
+   136→            date: { gte: startDate, lt: endDate },
+   137→          },
+   138→          orderBy: { date: 'asc' },
+   139→        }),
+   140→        db.holiday.findMany({ where: { date: { gte: startDate, lt: endDate } } }),
+   141→      ]);
+   142→
+   143→      // Build a set of holiday day-numbers for quick lookup
+   144→      const holidayDaySet = new Set<number>(
+   145→        holidays.map(h => new Date(h.date).getDate())
+   146→      );
+   147→
+   148→      // Group attendance by employeeId -> day
+   149→      const attendanceByEmp = new Map<string, Map<number, any>>();
+   150→      for (const rec of allAttendance) {
+   151→        const recDate = new Date(rec.date);
+   152→        const day = recDate.getDate();
+   153→        if (!attendanceByEmp.has(rec.employeeId)) {
+   154→          attendanceByEmp.set(rec.employeeId, new Map());
+   155→        }
+   156→        attendanceByEmp.get(rec.employeeId)!.set(day, rec);
+   157→      }
+   158→
+   159→      // ═══════════════════════════════════════════════════════════
+   160→      // PRE-COMPUTE full-month totals per employee
+   161→      // This ensures Total Working Hours & Leave are correct
+   162→      // regardless of which section they appear in
+   163→      // ═══════════════════════════════════════════════════════════
+   164→      const empTotals = new Map<string, { totalWorkHrs: number; absentDays: number; presentDays: number }>();
+   165→
+   166→      for (const emp of employees) {
+   167→        const empAttendance = attendanceByEmp.get(emp.employeeId);
+   168→        let totalWorkHrs = 0;
+   169→        let absentDays = 0;
+   170→        let presentDays = 0;
+   171→
+   172→        // ── Per-employee cutoff: respect relieving date (Bug #1 fix) ──
+   173→        // Without this, post-relieving days were counted as absent because
+   174→        // there are no attendance records for them. Now we stop counting
+   175→        // at the relieving day (inclusive).
+   176→        const empCutoffDay = getEffectiveCutoffDay(year, month, daysInMonth, emp.relievingDate);
+   177→
+   178→        // ── Compute this employee's actual shift hours for half-day recompute ──
+   179→        // Bug #2: stored halfDay flag may be wrong if shiftEnd was in 12-hour
+   180→        // format ("02:00" PM) during upload — calculatedShift went negative,
+   181→        // fell back to default 9h, so a full 4h shift was wrongly flagged as
+   182→        // half-day. We recompute from shiftStart/shiftEnd with 12-hour fix-up,
+   183→        // falling back to emp.shiftHours if parsing fails.
+   184→        let actualShiftHours = emp.shiftHours || 9;
+   185→        if (emp.shiftStart && emp.shiftEnd) {
+   186→          const sParts = emp.shiftStart.split(':').map(Number);
+   187→          const eParts = emp.shiftEnd.split(':').map(Number);
+   188→          const sH = sParts[0] || 0, sM = sParts[1] || 0;
+   189→          let eH = eParts[0] || 0, eM = eParts[1] || 0;
+   190→          let calculatedShift = ((eH * 60 + eM) - (sH * 60 + sM)) / 60;
+   191→          // Handle 12-hour format: if end "earlier" than start, assume PM and add 12h
+   192→          if (calculatedShift <= 0 && eH < 12) {
+   193→            calculatedShift = (((eH + 12) * 60 + eM) - (sH * 60 + sM)) / 60;
+   194→          }
+   195→          if (calculatedShift > 0) actualShiftHours = calculatedShift;
+   196→        }
+   197→
+   198→        for (let d = 1; d <= daysInMonth; d++) {
+   199→          const dateObj = new Date(year, month - 1, d);
+   200→          const isSunday = dateObj.getDay() === 0;
+   201→          const isHoliday = holidayDaySet.has(d);
+   202→
+   203→          // Skip future dates for current month OR days beyond the per-employee cutoff
+   204→          // (relieving date, current date for current month, etc.)
+   205→          if (d > empCutoffDay) continue;
+   206→
+   207→          const rec = empAttendance?.get(d);
+   208→
+   209→          if (rec) {
+   210→            if (rec.status === 'absent') {
+   211→              absentDays++;
+   212→            } else if (rec.status === 'weekly-off') {
+   213→              if (rec.checkIn && rec.totalHours > 0) {
+   214→                totalWorkHrs += rec.totalHours;
+   215→                presentDays++;
+   216→              }
+   217→              // WO without checkIn doesn't count as absent
+   218→            } else if (rec.status === 'holiday') {
+   219→              if (rec.checkIn && rec.totalHours > 0) {
+   220→                totalWorkHrs += rec.totalHours;
+   221→                presentDays++;
+   222→              }
+   223→              // Holiday without checkIn doesn't count as absent
+   224→            } else if (rec.halfDay || rec.status === 'half-day' || rec.status === 'half_day') {
+   225→              // ── Bug #2 fix: recompute half-day from actual shift hours ──
+   226→              // Stored halfDay flag may be wrong if upload logic mis-parsed
+   227→              // shiftEnd as 12-hour format. Recompute: if worked hours >= half
+   228→              // the actual shift, treat as FULL present (not half-day).
+   229→              const isActuallyHalfDay = (rec.totalHours || 0) < actualShiftHours / 2;
+   230→              if (isActuallyHalfDay) {
+   231→                totalWorkHrs += rec.totalHours;
+   232→                presentDays += 0.5;
+   233→                absentDays += 0.5;
+   234→              } else {
+   235→                // Was incorrectly flagged as half-day — treat as full present
+   236→                totalWorkHrs += rec.totalHours;
+   237→                presentDays++;
+   238→              }
+   239→            } else {
+   240→              // present, late, early-out
+   241→              totalWorkHrs += rec.totalHours;
+   242→              presentDays++;
+   243→            }
+   244→          } else {
+   245→            // No record
+   246→            if (!isSunday && !isHoliday) {
+   247→              absentDays++;
+   248→            }
+   249→            // Sundays / holidays without record = WO/Holiday, not absent
+   250→          }
+   251→        }
+   252→
+   253→        empTotals.set(emp.employeeId, { totalWorkHrs, absentDays, presentDays });
+   254→      }
+   255→
+   256→      // ═══════════════════════════════════════════════════════════
+   257→      // DYNAMIC SECTION BOUNDARIES based on daysInMonth
+   258→      // Section 1: Days 1-11 (always same)
+   259→      // Section 2: Days 12-22 (always same)
+   260→      // Section 3: Days 23-lastDay (varies: 28/29/30/31)
+   261→      // ═══════════════════════════════════════════════════════════
+   262→      const section1End = 11;
+   263→      const section2End = 22;
+   264→      const section3End = daysInMonth; // 28, 29, 30, or 31
+   265→
+   266→      // Max columns: Section 1 & 2 have 11 days × 3 = 33 data cols
+   267→      // Section 3 has (daysInMonth - 22) days × 3 + 2 extra = varies
+   268→      const s3DayCount = section3End - 22;
+   269→      const s3DataCols = s3DayCount * 3 + 2; // +2 for Total Working Hours + Leave
+   270→      const maxDataCols = Math.max(1 + 11 * 3, 1 + s3DataCols) + 2; // +2 buffer
+   271→
+   272→      const aoa: any[][] = [];
+   273→      const allMerges: XLSXStyle.Range[] = [];
+   274→
+   275→      // ── Row 1: Title row ──
+   276→      const titleRow: any[] = ['ATTENDENCE - ' + year];
+   277→      for (let i = 1; i < maxDataCols; i++) titleRow.push('');
+   278→      titleRow[1] = `SALARY SHEET OF ${firmName} OF THE MONTH OF ${monthName.toUpperCase()} ${year}`;
+   279→      aoa.push(titleRow);
+   280→      allMerges.push({ s: { r: 0, c: 1 }, e: { r: 0, c: maxDataCols - 1 } });
+   281→
+   282→      // ── Helper to format date like "1/06/2026" ──
+   283→      const formatDateHeader = (day: number): string => {
+   284→        return `${day}/${String(month).padStart(2, '0')}/${year}`;
+   285→      };
+   286→
+   287→      // ── Build section function ──
+   288→      // Returns the row data and merges for a section
+   289→      const buildSection = (
+   290→        sectionIdx: number,
+   291→        dayStart: number,
+   292→        dayEnd: number,
+   293→        extraCols: string[]
+   294→      ) => {
+   295→        const numDays = dayEnd - dayStart + 1;
+   296→        const dayColCount = numDays * 3;
+   297→
+   298→        // ── Date header row ──
+   299→        const dateRow: any[] = [sectionIdx === 0 ? 'EMP' : ''];
+   300→        const merges: XLSXStyle.Range[] = [];
+   301→
+   302→        for (let d = dayStart; d <= dayEnd; d++) {
+   303→          const colOffset = 1 + (d - dayStart) * 3;
+   304→          merges.push({
+   305→            s: { r: aoa.length, c: colOffset },
+   306→            e: { r: aoa.length, c: colOffset + 2 },
+   307→          });
+   308→          dateRow.push(formatDateHeader(d));
+   309→          dateRow.push('');
+   310→          dateRow.push('');
+   311→        }
+   312→
+   313→        // Extra column headers
+   314→        for (const extraCol of extraCols) {
+   315→          dateRow.push(extraCol);
+   316→        }
+   317→
+   318→        while (dateRow.length < maxDataCols) dateRow.push('');
+   319→        aoa.push(dateRow);
+   320→        allMerges.push(...merges);
+   321→
+   322→        // ── IN/OUT/TOTAL HRS sub-header row ──
+   323→        const subRow: any[] = [''];
+   324→        for (let d = dayStart; d <= dayEnd; d++) {
+   325→          subRow.push('IN');
+   326→          subRow.push('OUT');
+   327→          subRow.push('TOTAL HRS');
+   328→        }
+   329→        for (const extraCol of extraCols) {
+   330→          subRow.push('');
+   331→        }
+   332→        while (subRow.length < maxDataCols) subRow.push('');
+   333→        aoa.push(subRow);
+   334→
+   335→        // ── Employee data rows ──
+   336→        for (const emp of employees) {
+   337→          const empAttendance = attendanceByEmp.get(emp.employeeId);
+   338→          const empRow: any[] = [emp.fullName];
+   339→
+   340→          // Per-employee cutoff (respects relieving date) — used to blank out
+   341→          // post-relieving day cells instead of marking them 'Absent'
+   342→          const empCutoffDay = getEffectiveCutoffDay(year, month, daysInMonth, emp.relievingDate);
+   343→
+   344→          // Actual shift hours for this employee (with 12-hour format fix-up)
+   345→          let actualShiftHours = emp.shiftHours || 9;
+   346→          if (emp.shiftStart && emp.shiftEnd) {
+   347→            const sParts = emp.shiftStart.split(':').map(Number);
+   348→            const eParts = emp.shiftEnd.split(':').map(Number);
+   349→            const sH = sParts[0] || 0, sM = sParts[1] || 0;
+   350→            let eH = eParts[0] || 0, eM = eParts[1] || 0;
+   351→            let calculatedShift = ((eH * 60 + eM) - (sH * 60 + sM)) / 60;
+   352→            if (calculatedShift <= 0 && eH < 12) {
+   353→              calculatedShift = (((eH + 12) * 60 + eM) - (sH * 60 + sM)) / 60;
+   354→            }
+   355→            if (calculatedShift > 0) actualShiftHours = calculatedShift;
+   356→          }
+   357→
+   358→          for (let d = dayStart; d <= dayEnd; d++) {
+   359→            if (d > daysInMonth) {
+   360→              empRow.push('', '', '');
+   361→              continue;
+   362→            }
+   363→
+   364→            const rec = empAttendance?.get(d);
+   365→            const dateObj = new Date(year, month - 1, d);
+   366→            const isSunday = dateObj.getDay() === 0;
+   367→            const isHoliday = holidayDaySet.has(d);
+   368→
+   369→            // Days beyond the per-employee cutoff (post-relieving or future)
+   370→            // = leave blank, do NOT mark 'Absent'
+   371→            if (d > empCutoffDay) {
+   372→              if (isSunday) {
+   373→                empRow.push('Weekly Off', '', '');
+   374→              } else if (isHoliday) {
+   375→                empRow.push('Holiday', '', '');
+   376→              } else {
+   377→                empRow.push('', '', '');
+   378→              }
+   379→              continue;
+   380→            }
+   381→
+   382→            if (rec) {
+   383→              if (rec.status === 'absent') {
+   384→                empRow.push('Absent', '', '');
+   385→              } else if (rec.status === 'weekly-off') {
+   386→                if (rec.checkIn && rec.totalHours > 0) {
+   387→                  empRow.push(rec.checkIn || '', rec.checkOut || '', formatHours(rec.totalHours));
+   388→                } else {
+   389→                  empRow.push('Weekly Off', '', '');
+   390→                }
+   391→              } else if (rec.status === 'holiday') {
+   392→                if (rec.checkIn && rec.totalHours > 0) {
+   393→                  empRow.push(rec.checkIn || '', rec.checkOut || '', formatHours(rec.totalHours));
+   394→                } else {
+   395→                  empRow.push('Holiday', '', '');
+   396→                }
+   397→              } else if (rec.halfDay || rec.status === 'half-day' || rec.status === 'half_day') {
+   398→                // ── Bug #2 fix: recompute half-day from actual shift hours ──
+   399→                // If the stored halfDay flag is wrong (worked >= half the actual
+   400→                // shift), display as a normal present day cell instead.
+   401→                const isActuallyHalfDay = (rec.totalHours || 0) < actualShiftHours / 2;
+   402→                if (isActuallyHalfDay) {
+   403→                  empRow.push(rec.checkIn || 'Half Day', rec.checkOut || '', formatHours(rec.totalHours));
+   404→                } else {
+   405→                  // Display as normal present cell (IN/OUT/TOTAL HRS)
+   406→                  empRow.push(rec.checkIn || '', rec.checkOut || '', formatHours(rec.totalHours));
+   407→                }
+   408→              } else {
+   409→                // present, late, early-out
+   410→                empRow.push(rec.checkIn || '', rec.checkOut || '', formatHours(rec.totalHours));
+   411→              }
+   412→            } else {
+   413→              // No record
+   414→              if (isSunday) {
+   415→                empRow.push('Weekly Off', '', '');
+   416→              } else if (isHoliday) {
+   417→                empRow.push('Holiday', '', '');
+   418→              } else {
+   419→                empRow.push('Absent', '', '');
+   420→              }
+   421→            }
+   422→          }
+   423→
+   424→          // Extra columns data - use FULL-MONTH pre-computed totals
+   425→          const totals = empTotals.get(emp.employeeId);
+   426→          for (const extraCol of extraCols) {
+   427→            if (extraCol === 'Total Working Hours') {
+   428→              // Use displayDecimalAsColon so the Master Sheet TOTAL matches
+   429→              // Attendance Tracker's "Total Hrs Worked" exactly (e.g., 202:43).
+   430→              // Was: formatHours(202.43) → "202:26" (wrong time conversion).
+   431→              empRow.push(displayDecimalAsColon(totals?.totalWorkHrs || 0));
+   432→            } else if (extraCol === 'Leave') {
+   433→              empRow.push(Math.round(totals?.absentDays || 0));
+   434→            } else {
+   435→              empRow.push('');
+   436→            }
+   437→          }
+   438→
+   439→          while (empRow.length < maxDataCols) empRow.push('');
+   440→          aoa.push(empRow);
+   441→        }
+   442→      };
+   443→
+   444→      // ── SECTION 1: Days 1-11 ──
+   445→      buildSection(0, 1, section1End, []);
+   446→
+   447→      // ── SECTION 2: Days 12-22 ──
+   448→      buildSection(1, 12, section2End, []);
+   449→
+   450→      // ── SECTION 3: Days 23-lastDay + Total Working Hours + Leave ──
+   451→      buildSection(2, 23, section3End, ['Total Working Hours', 'Leave']);
+   452→
+   453→      // ── Create worksheet ──
+   454→      const ws = XLSXStyle.utils.aoa_to_sheet(aoa);
+   455→      ws['!merges'] = allMerges;
+   456→
+   457→      // ── STYLES ──
+   458→
+   459→      // Row 1: Title row - Gold background
+   460→      for (let c = 0; c < maxDataCols; c++) {
+   461→        const addr = `${colLetter(c)}1`;
+   462→        if (!ws[addr]) {
+   463→          ws[addr] = { t: 's', v: '', s: {} };
+   464→        }
+   465→        ws[addr].s = {
+   466→          font: { bold: true, color: { rgb: WHITE }, sz: 14 },
+   467→          fill: { fgColor: { rgb: GOLD } },
+   468→          alignment: { horizontal: 'center' as const, vertical: 'center' as const },
+   469→          border: fullBorder(GOLD, 'medium'),
+   470→        };
+   471→      }
+   472→
+   473→      // Style each section
+   474→      let currentRow = 2;
+   475→
+   476→      const styleSectionRows = (
+   477→        dayStart: number,
+   478→        dayEnd: number,
+   479→        numEmployees: number,
+   480→        extraCols: string[]
+   481→      ) => {
+   482→        const numDays = dayEnd - dayStart + 1;
+   483→        const dayColCount = numDays * 3;
+   484→
+   485→        // ── Date header row ── Dark background, white text
+   486→        for (let c = 0; c < maxDataCols; c++) {
+   487→          const addr = `${colLetter(c)}${currentRow}`;
+   488→          if (!ws[addr]) {
+   489→            ws[addr] = { t: 's', v: '', s: {} };
+   490→          }
+   491→
+   492→          const dayIdx = (c > 0 && c <= dayColCount) ? dayStart + Math.floor((c - 1) / 3) : -1;
+   493→          const isSunday = dayIdx > 0 && dayIdx <= daysInMonth && new Date(year, month - 1, dayIdx).getDay() === 0;
+   494→
+   495→          ws[addr].s = {
+   496→            font: { bold: true, color: { rgb: isSunday ? AMBER_HIGHLIGHT : WHITE }, sz: 11 },
+   497→            fill: { fgColor: { rgb: DARK } },
+   498→            alignment: { horizontal: 'center' as const, vertical: 'center' as const },
+   499→            border: fullBorder(WHITE, 'medium'),
+   500→          };
+   501→        }
+   502→        currentRow++;
+   503→
+   504→        // ── Sub-header row (IN/OUT/TOTAL HRS) ── Deep blue
+   505→        for (let c = 0; c < maxDataCols; c++) {
+   506→          const addr = `${colLetter(c)}${currentRow}`;
+   507→          if (!ws[addr]) {
+   508→            ws[addr] = { t: 's', v: '', s: {} };
+   509→          }
+   510→
+   511→          const dayIdx = (c > 0 && c <= dayColCount) ? dayStart + Math.floor((c - 1) / 3) : -1;
+   512→          const isSunday = dayIdx > 0 && dayIdx <= daysInMonth && new Date(year, month - 1, dayIdx).getDay() === 0;
+   513→
+   514→          ws[addr].s = {
+   515→            font: { bold: true, color: { rgb: isSunday ? AMBER_HIGHLIGHT : WHITE }, sz: 9 },
+   516→            fill: { fgColor: { rgb: DEEP_BLUE } },
+   517→            alignment: { horizontal: 'center' as const, vertical: 'center' as const },
+   518→            border: fullBorder(DEEP_BLUE),
+   519→          };
+   520→        }
+   521→        currentRow++;
+   522→
+   523→        // ── Employee data rows ──
+   524→        for (let eIdx = 0; eIdx < numEmployees; eIdx++) {
+   525→          const isEven = eIdx % 2 === 0;
+   526→          const bg = isEven ? LIGHT_BG : WHITE;
+   527→
+   528→          for (let c = 0; c < maxDataCols; c++) {
+   529→            const addr = `${colLetter(c)}${currentRow}`;
+   530→            const cell = ws[addr];
+   531→            if (!cell) continue;
+   532→
+   533→            const val = String(cell.v || '');
+   534→            const dayIdx = (c > 0 && c <= dayColCount) ? dayStart + Math.floor((c - 1) / 3) : -1;
+   535→            const isSundayCol = dayIdx > 0 && dayIdx <= daysInMonth && new Date(year, month - 1, dayIdx).getDay() === 0;
+   536→
+   537→            if (c === 0) {
+   538→              // Employee name column
+   539→              cell.s = {
+   540→                font: { bold: true, sz: 10, color: { rgb: WHITE } },
+   541→                fill: { fgColor: { rgb: DEEP_BLUE } },
+   542→                alignment: { horizontal: 'left' as const, vertical: 'center' as const },
+   543→                border: fullBorder('FFFFFF', 'thin'),
+   544→              };
+   545→            } else if (val === 'Absent') {
+   546→              // Absent - red on light red
+   547→              cell.s = {
+   548→                font: { bold: true, sz: 9, color: { rgb: 'DC2626' } },
+   549→                fill: { fgColor: { rgb: LIGHT_RED } },
+   550→                alignment: { horizontal: 'center' as const, vertical: 'center' as const },
+   551→                border: fullBorder('D0D0D0'),
+   552→              };
+   553→            } else if (val === 'Weekly Off') {
+   554→              // Weekly Off - teal/emerald on light green
+   555→              cell.s = {
+   556→                font: { bold: true, sz: 9, color: { rgb: '0D9488' } },
+   557→                fill: { fgColor: { rgb: LIGHT_GREEN } },
+   558→                alignment: { horizontal: 'center' as const, vertical: 'center' as const },
+   559→                border: fullBorder('D0D0D0'),
+   560→              };
+   561→            } else if (val === 'Holiday') {
+   562→              // Holiday - purple on light purple
+   563→              cell.s = {
+   564→                font: { bold: true, sz: 9, color: { rgb: '7C3AED' } },
+   565→                fill: { fgColor: { rgb: 'F5F3FF' } },
+   566→                alignment: { horizontal: 'center' as const, vertical: 'center' as const },
+   567→                border: fullBorder('D0D0D0'),
+   568→              };
+   569→            } else if (val === 'Half Day' || val.startsWith('Half Day')) {
+   570→              // Half Day - amber on light amber
+   571→              cell.s = {
+   572→                font: { bold: true, sz: 9, color: { rgb: 'D97706' } },
+   573→                fill: { fgColor: { rgb: LIGHT_AMBER } },
+   574→                alignment: { horizontal: 'center' as const, vertical: 'center' as const },
+   575→                border: fullBorder('D0D0D0'),
+   576→              };
+   577→            } else if (isSundayCol && val) {
+   578→              // Sunday with data - green text on light green
+   579→              cell.s = {
+   580→                font: { sz: 9, color: { rgb: '059669' } },
+   581→                fill: { fgColor: { rgb: LIGHT_GREEN } },
+   582→                alignment: { horizontal: 'center' as const, vertical: 'center' as const },
+   583→                border: fullBorder('D0D0D0'),
+   584→              };
+   585→            } else {
+   586→              // Default data cell - normal text on alternating bg
+   587→              cell.s = {
+   588→                font: { sz: 9, color: { rgb: '333333' } },
+   589→                fill: { fgColor: { rgb: bg } },
+   590→                alignment: { horizontal: 'center' as const, vertical: 'center' as const },
+   591→                border: fullBorder('D0D0D0'),
+   592→              };
+   593→            }
+   594→          }
+   595→          currentRow++;
+   596→        }
+   597→      };
+   598→
+   599→      // Style section 1
+   600→      styleSectionRows(1, section1End, employees.length, []);
+   601→      // Style section 2
+   602→      styleSectionRows(12, section2End, employees.length, []);
+   603→      // Style section 3
+   604→      styleSectionRows(23, section3End, employees.length, ['Total Working Hours', 'Leave']);
+   605→
+   606→      // ── Column widths ──
+   607→      const colWidths: { wch: number }[] = [{ wch: 22 }];
+   608→      const sectionBoundaries = [
+   609→        { start: 1, end: section1End, extras: [] },
+   610→        { start: 12, end: section2End, extras: [] },
+   611→        { start: 23, end: section3End, extras: ['Total Working Hours', 'Leave'] },
+   612→      ];
+   613→
+   614→      for (const sec of sectionBoundaries) {
+   615→        for (let d = sec.start; d <= sec.end; d++) {
+   616→          colWidths.push({ wch: 8 });  // IN
+   617→          colWidths.push({ wch: 8 });  // OUT
+   618→          colWidths.push({ wch: 12 }); // TOTAL HRS
+   619→        }
+   620→        for (const extra of sec.extras) {
+   621→          colWidths.push({ wch: extra === 'Total Working Hours' ? 16 : 8 });
+   622→        }
+   623→      }
+   624→
+   625→      while (colWidths.length < maxDataCols) colWidths.push({ wch: 8 });
+   626→      ws['!cols'] = colWidths;
+   627→
+   628→      // Sheet name (max 31 chars for Excel)
+   629→      const sheetName = firmCode.length <= 31 ? firmCode : firmCode.substring(0, 31);
+   630→      XLSXStyle.utils.book_append_sheet(wb, ws, sheetName);
+   631→    }
+   632→
+   633→    if (wb.SheetNames.length === 0) {
+   634→      return NextResponse.json({ error: 'No employees found for the selected firm(s)' }, { status: 400 });
+   635→    }
+   636→
+   637→    const buf = XLSXStyle.write(wb, { type: 'buffer', bookType: 'xlsx' });
+   638→
+   639→    return new NextResponse(buf, {
+   640→      status: 200,
+   641→      headers: {
+   642→        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+   643→        'Content-Disposition': `attachment; filename="Master_Sheet_${monthName}_${year}.xlsx"`,
+   644→      },
+   645→    });
+   646→  } catch (error: any) {
+   647→    console.error('Master export error:', error);
+   648→    return NextResponse.json({ error: error.message }, { status: 500 });
+   649→  }
+   650→}
+   651→

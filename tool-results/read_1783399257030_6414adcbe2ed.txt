@@ -1,0 +1,629 @@
+     1→import { NextRequest, NextResponse } from 'next/server';
+     2→import * as XLSX from 'xlsx-js-style';
+     3→import { db } from '@/lib/db';
+     4→import {
+     5→  getEffectiveCutoffDay,
+     6→  countSundaysUpTo,
+     7→  countHolidaysUpTo,
+     8→  filterAttendanceUpTo,
+     9→} from '@/lib/payroll-calc';
+    10→
+    11→// ════════════════════════════════════════════════════════════
+    12→// Payroll Summary Export — matches Payroll_July_2026.xlsx format
+    13→// Sheet 1: "Payroll Register" — one row per employee with all
+    14→//          payroll columns + TOTAL row at the bottom.
+    15→// Sheet 2: "Summary" — aggregate totals (Total Gross, OT, Bonus,
+    16→//          Deductions, Net Payroll, Employees Processed, Avg Net,
+    17→//          Total OT Hours).
+    18→// ════════════════════════════════════════════════════════════
+    19→
+    20→const MONTHS = [
+    21→  'January', 'February', 'March', 'April', 'May', 'June',
+    22→  'July', 'August', 'September', 'October', 'November', 'December',
+    23→];
+    24→
+    25→// ── Theme colors ──
+    26→const GOLD       = 'D4A843';
+    27→const DARK       = '1A1A1A';
+    28→const WHITE      = 'FFFFFF';
+    29→const EMERALD    = '059669';
+    30→const DEEP_BLUE  = '1E3A5F';
+    31→const LIGHT_BG   = 'FFF8E7';
+    32→const LIGHT_GREEN = 'ECFDF5';
+    33→const LIGHT_AMBER = 'FFFBEB';
+    34→const LIGHT_RED   = 'FEF2F2';
+    35→const LIGHT_BLUE  = 'DBEAFE';
+    36→const RED         = 'DC2626';
+    37→const AMBER       = 'D97706';
+    38→const CYAN        = '0891B2';
+    39→const PURPLE      = '7C3AED';
+    40→const SKY         = '0284C7';
+    41→
+    42→// ── Helpers ──
+    43→
+    44→function getFirmFromEmployeeId(employeeId: string): string {
+    45→  const id = employeeId.toUpperCase();
+    46→  if (id.startsWith('LAPL')) return 'LAPL';
+    47→  if (id.startsWith('LRSL')) return 'LRSL';
+    48→  if (id.startsWith('SI-') || id.startsWith('SI0')) return 'SI';
+    49→  if (id.startsWith('SDF')) return 'SDF';
+    50→  return '';
+    51→}
+    52→
+    53→// HH:MM format matching Attendance Tracker's displayDecimalAsColon (e.g. 202.43 → "202:43")
+    54→// This treats the decimal part as the minute display (2-digit zero-padded),
+    55→// consistent with how the Attendance Tracker UI displays the same value.
+    56→function displayDecimalAsColon(value: number | undefined | null): string {
+    57→  if (value == null || isNaN(value as number)) return '0:00';
+    58→  const [intPart, decPart] = Number(value).toFixed(2).split('.');
+    59→  return `${intPart}:${decPart}`;
+    60→}
+    61→
+    62→// HH:MM format for OT hours in summary (e.g. 1.5 → "1:30")
+    63→function formatOTHHMM(decimal: number): string {
+    64→  if (!decimal || decimal === 0) return '0:00';
+    65→  const hours = Math.floor(decimal);
+    66→  const minutes = Math.round((decimal - hours) * 60);
+    67→  if (minutes >= 60) return `${hours + 1}:00`;
+    68→  return `${hours}:${String(minutes).padStart(2, '0')}`;
+    69→}
+    70→
+    71→function fullBorder(color: string = 'B0B0B0', style: 'thin' | 'medium' = 'thin') {
+    72→  return {
+    73→    top:    { style, color: { rgb: color } },
+    74→    bottom: { style, color: { rgb: color } },
+    75→    left:   { style, color: { rgb: color } },
+    76→    right:  { style, color: { rgb: color } },
+    77→  };
+    78→}
+    79→
+    80→const ss = (ws: XLSX.WorkSheet, cellRef: string, style: any) => {
+    81→  if (ws[cellRef]) ws[cellRef]!.s = style;
+    82→};
+    83→
+    84→// ════════════════════════════════════════════════════════════
+    85→// GET /api/payroll/summary-export?month=7&year=2026&firm=LAPL
+    86→// ════════════════════════════════════════════════════════════
+    87→export async function GET(request: NextRequest) {
+    88→  try {
+    89→    const { searchParams } = new URL(request.url);
+    90→    const month = parseInt(searchParams.get('month') || String(new Date().getMonth() + 1));
+    91→    const year  = parseInt(searchParams.get('year')  || String(new Date().getFullYear()));
+    92→    const firm  = searchParams.get('firm') || '';
+    93→
+    94→    // ── Build query ──
+    95→    const where: any = { month, year };
+    96→    if (firm) {
+    97→      const emps = await db.employee.findMany({
+    98→        where: { firm },
+    99→        select: { employeeId: true },
+   100→      });
+   101→      where.employeeId = { in: emps.map(e => e.employeeId) };
+   102→    }
+   103→
+   104→    const payrolls = await db.payroll.findMany({
+   105→      where,
+   106→      include: {
+   107→        employee: {
+   108→          select: {
+   109→            fullName: true,
+   110→            employeeId: true,
+   111→            firm: true,
+   112→            department: true,
+   113→            designation: true,
+   114→            location: true,
+   115→            salaryType: true,
+   116→            hourlyRate: true,
+   117→            shiftHours: true,
+   118→            monthlySalary: true,
+   119→            relievingDate: true,
+   120→          },
+   121→        },
+   122→      },
+   123→      orderBy: { employeeId: 'asc' },
+   124→    });
+   125→
+   126→    const monthName = MONTHS[month - 1];
+   127→    const generatedDate = new Date().toLocaleString('en-IN', {
+   128→      day: '2-digit', month: 'numeric', year: 'numeric',
+   129→      hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true,
+   130→    });
+   131→
+   132→    // ── Recompute live values for each payroll (so the export is always current) ──
+   133→    const enriched = await Promise.all(payrolls.map(async (p) => {
+   134→      const daysInMonth = new Date(p.year, p.month, 0).getDate();
+   135→      const emp = p.employee;
+   136→      const shiftHrs = emp?.shiftHours || 9;
+   137→
+   138→      const cutoffDay = getEffectiveCutoffDay(p.year, p.month, daysInMonth, emp?.relievingDate);
+   139→
+   140→      const hourlyRate = Math.round((p.monthlySalary / (daysInMonth * shiftHrs)) * 100) / 100;
+   141→
+   142→      // ── Attendance recalculation ──
+   143→      const startDate = new Date(p.year, p.month - 1, 1);
+   144→      const endDate = new Date(p.year, p.month, 1);
+   145→
+   146→      const [attendance, holidays] = await Promise.all([
+   147→        db.attendance.findMany({
+   148→          where: { employeeId: p.employeeId, date: { gte: startDate, lt: endDate } },
+   149→        }),
+   150→        db.holiday.findMany({ where: { date: { gte: startDate, lt: endDate } } }),
+   151→      ]);
+   152→
+   153→      const elapsedHolidays = countHolidaysUpTo(holidays, cutoffDay);
+   154→      const sundays = countSundaysUpTo(p.year, p.month, cutoffDay);
+   155→      const totalWorkingDays = Math.max(0, cutoffDay - sundays - elapsedHolidays);
+   156→
+   157→      const effectiveAttendance = filterAttendanceUpTo(attendance, p.year, p.month, cutoffDay);
+   158→
+   159→      const rawPresentDays = effectiveAttendance.filter(a => ['present', 'late', 'early-out'].includes(a.status)).length;
+   160→      const halfDays = effectiveAttendance.filter(a => a.status === 'half-day' || a.status === 'half_day').length;
+   161→      const presentDays = rawPresentDays;
+   162→
+   163→      let totalBaseHours = 0;
+   164→      let totalWorkMinutes = 0; // Sum of check-in/out durations (includes OT) — matches Attendance Tracker
+   165→      for (const a of effectiveAttendance) {
+   166→        // Sum work minutes from check-in/check-out (includes OT)
+   167→        if (a.checkIn && a.checkOut) {
+   168→          const [h1, m1] = a.checkIn.split(':').map(Number);
+   169→          const [h2, m2] = a.checkOut.split(':').map(Number);
+   170→          const workMin = Math.max(0, (h2 * 60 + m2) - (h1 * 60 + m1));
+   171→          totalWorkMinutes += workMin;
+   172→        }
+   173→        // Base hours (excludes OT) — used internally for gross calc
+   174→        if (['present', 'late', 'early-out', 'half-day', 'half_day'].includes(a.status)) {
+   175→          const baseHrs = Math.max(0, (a.totalHours || 0) - (a.overtimeHours || 0));
+   176→          totalBaseHours += baseHrs;
+   177→        }
+   178→      }
+   179→      totalBaseHours = Math.round(totalBaseHours * 100) / 100;
+   180→      // TRUE decimal hours (includes OT) — matches Attendance Tracker's totalWorkHours exactly
+   181→      const totalWorkHoursDecimal = Math.round((totalWorkMinutes / 60) * 100) / 100;
+   182→
+   183→      const otHours = Math.round(
+   184→        effectiveAttendance
+   185→          .filter(a => ['present', 'late', 'half-day', 'half_day', 'early-out'].includes(a.status))
+   186→          .reduce((sum, a) => sum + (a.overtimeHours || 0), 0) * 100
+   187→      ) / 100;
+   188→
+   189→      // Leaves
+   190→      const leaves = await db.leave.findMany({
+   191→        where: { employeeId: p.employeeId, status: 'approved', startDate: { gte: startDate }, endDate: { lt: endDate } },
+   192→      });
+   193→
+   194→      const holidayDateStrs = new Set(
+   195→        holidays.map(h => {
+   196→          const hd = new Date(h.date);
+   197→          return `${hd.getFullYear()}-${String(hd.getMonth() + 1).padStart(2, '0')}-${String(hd.getDate()).padStart(2, '0')}`;
+   198→        })
+   199→      );
+   200→      const presentDateStrs = new Set();
+   201→      for (const a of effectiveAttendance) {
+   202→        if (['present', 'late', 'early-out', 'half-day', 'half_day'].includes(a.status)) {
+   203→          const ad = new Date(a.date);
+   204→          presentDateStrs.add(`${ad.getFullYear()}-${String(ad.getMonth() + 1).padStart(2, '0')}-${String(ad.getDate()).padStart(2, '0')}`);
+   205→        }
+   206→      }
+   207→
+   208→      let effectivePaidLeaves = 0;
+   209→      let effectiveUnpaidLeaves = 0;
+   210→      const cutoffDate = new Date(p.year, p.month - 1, cutoffDay);
+   211→      for (const leave of leaves) {
+   212→        const isUnpaid = leave.type === 'unpaid' || leave.type === 'UL' || leave.type === 'LOP';
+   213→        let d = new Date(leave.startDate);
+   214→        const end = new Date(leave.endDate);
+   215→        const effectiveEnd = end > cutoffDate ? cutoffDate : end;
+   216→        while (d <= effectiveEnd) {
+   217→          const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+   218→          const isSunday = d.getDay() === 0;
+   219→          const isHoliday = holidayDateStrs.has(dateStr);
+   220→          if (!isSunday && !isHoliday && !presentDateStrs.has(dateStr)) {
+   221→            if (isUnpaid) effectiveUnpaidLeaves++;
+   222→            else effectivePaidLeaves++;
+   223→          }
+   224→          d.setDate(d.getDate() + 1);
+   225→        }
+   226→      }
+   227→
+   228→      const absentDays = Math.max(0, totalWorkingDays - presentDays - halfDays - effectivePaidLeaves - effectiveUnpaidLeaves);
+   229→
+   230→      const sundayHrs = sundays * shiftHrs;
+   231→      const paidLeaveHrs = effectivePaidLeaves * shiftHrs;
+   232→      const totalHrs = Math.round((totalBaseHours + sundayHrs + otHours + paidLeaveHrs) * 100) / 100;
+   233→      const grossSalary = Math.round(hourlyRate * totalHrs * 100) / 100;
+   234→      const otAmount = Math.round(otHours * hourlyRate * 100) / 100;
+   235→      const netSalary = Math.round((grossSalary + (p.bonus || 0) + (p.incentive || 0) + (p.arrear || 0) - (p.totalDeductions || 0)) * 100) / 100;
+   236→
+   237→      const firmCode = getFirmFromEmployeeId(p.employeeId) || emp?.firm || emp?.department || '';
+   238→      const firmDisplay = firmCode;
+   239→
+   240→      return {
+   241→        employeeId: p.employeeId,
+   242→        fullName: emp?.fullName || p.employeeId,
+   243→        firm: firmDisplay,
+   244→        monthlySalary: p.monthlySalary,
+   245→        presentDays,
+   246→        absentDays,
+   247→        // workedHrs now matches Attendance Tracker's "Total Hrs Worked" exactly
+   248→        // (true decimal, includes OT). Display uses displayDecimalAsColon → "202:43"
+   249→        workedHrs: totalWorkHoursDecimal,
+   250→        otHours,
+   251→        otAmount,
+   252→        grossSalary,
+   253→        deductions: p.totalDeductions || 0,
+   254→        bonus: p.bonus || 0,
+   255→        netSalary,
+   256→        status: p.status || 'generated',
+   257→      };
+   258→    }));
+   259→
+   260→    // ── Aggregate totals ──
+   261→    const totalGross    = enriched.reduce((s, p) => s + p.grossSalary, 0);
+   262→    const totalOTAmount = enriched.reduce((s, p) => s + p.otAmount, 0);
+   263→    const totalBonus    = enriched.reduce((s, p) => s + p.bonus, 0);
+   264→    const totalDeduct   = enriched.reduce((s, p) => s + p.deductions, 0);
+   265→    const totalNet      = enriched.reduce((s, p) => s + p.netSalary, 0);
+   266→    const totalOTHrs    = enriched.reduce((s, p) => s + p.otHours, 0);
+   267→    const empProcessed  = enriched.length;
+   268→    const avgNet        = empProcessed > 0 ? totalNet / empProcessed : 0;
+   269→
+   270→    // ════════════════════════════════════════════════════════════
+   271→    // SHEET 1: Payroll Register
+   272→    // ════════════════════════════════════════════════════════════
+   273→    const cols = ['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O'];
+   274→
+   275→    const headerRows: any[][] = [
+   276→      // Row 1
+   277→      ['LAXREE GROUP OF COMPANIES', ...Array(14).fill('')],
+   278→      // Row 2
+   279→      [`Payroll Register — ${monthName} ${year}`, ...Array(14).fill('')],
+   280→      // Row 3 — meta row: Generated date | (blank,blank) | Total Employees: X | (blank,blank) | Total Net Payroll: ₹Y
+   281→      [`Generated: ${generatedDate}`, '', '', `Total Employees: ${empProcessed}`, '', '', `Total Net Payroll: ₹${totalNet.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`, ...Array(8).fill('')],
+   282→      // Row 4 — column letters (matches template)
+   283→      [...cols],
+   284→      // Row 5 — column headers
+   285→      [
+   286→        'S.No', 'Employee Name', 'Emp Code', 'Firm', 'Monthly Salary',
+   287→        'Present Days', 'Absent Days', 'Worked Hrs', 'OT Hrs', 'OT Amount',
+   288→        'Gross Salary', 'Deductions', 'Bonus', 'Net Salary', 'Status',
+   289→      ],
+   290→    ];
+   291→
+   292→    const ws1 = XLSX.utils.aoa_to_sheet(headerRows);
+   293→
+   294→    // ── Shared style definitions ──
+   295→    const styleCompanyHeader = {
+   296→      font: { bold: true, color: { rgb: GOLD }, sz: 18, name: 'Calibri' },
+   297→      fill: { fgColor: { rgb: DARK } },
+   298→      alignment: { horizontal: 'center' as const, vertical: 'center' as const },
+   299→      border: {
+   300→        top:    { style: 'medium' as const, color: { rgb: GOLD } },
+   301→        bottom: { style: 'medium' as const, color: { rgb: GOLD } },
+   302→        left:   { style: 'medium' as const, color: { rgb: GOLD } },
+   303→        right:  { style: 'medium' as const, color: { rgb: GOLD } },
+   304→      },
+   305→    };
+   306→
+   307→    const styleReportTitle = {
+   308→      font: { bold: true, color: { rgb: WHITE }, sz: 13, name: 'Calibri' },
+   309→      fill: { fgColor: { rgb: DEEP_BLUE } },
+   310→      alignment: { horizontal: 'center' as const, vertical: 'center' as const },
+   311→      border: fullBorder('4472C4', 'thin'),
+   312→    };
+   313→
+   314→    const styleMetaLabel = {
+   315→      font: { bold: true, color: { rgb: WHITE }, sz: 10, name: 'Calibri' },
+   316→      fill: { fgColor: { rgb: '2D2D2D' } },
+   317→      alignment: { horizontal: 'left' as const, vertical: 'center' as const },
+   318→      border: fullBorder('444444', 'thin'),
+   319→    };
+   320→
+   321→    const styleColLetter = {
+   322→      font: { bold: true, color: { rgb: GOLD }, sz: 9, name: 'Calibri' },
+   323→      fill: { fgColor: { rgb: '2D2D2D' } },
+   324→      alignment: { horizontal: 'center' as const, vertical: 'center' as const },
+   325→      border: fullBorder('444444', 'thin'),
+   326→    };
+   327→
+   328→    const styleColHeader = {
+   329→      font: { bold: true, color: { rgb: WHITE }, sz: 10, name: 'Calibri' },
+   330→      fill: { fgColor: { rgb: EMERALD } },
+   331→      alignment: { horizontal: 'center' as const, vertical: 'center' as const, wrapText: true },
+   332→      border: fullBorder(WHITE, 'thin'),
+   333→    };
+   334→
+   335→    const styleTotals = {
+   336→      font: { bold: true, color: { rgb: WHITE }, sz: 10, name: 'Calibri' },
+   337→      fill: { fgColor: { rgb: DARK } },
+   338→      alignment: { horizontal: 'center' as const, vertical: 'center' as const },
+   339→      border: {
+   340→        top:    { style: 'medium' as const, color: { rgb: GOLD } },
+   341→        bottom: { style: 'medium' as const, color: { rgb: GOLD } },
+   342→        left:   { style: 'thin'  as const, color: { rgb: GOLD } },
+   343→        right:  { style: 'thin'  as const, color: { rgb: GOLD } },
+   344→      },
+   345→    };
+   346→
+   347→    // ── Row 1: Company name ──
+   348→    cols.forEach(c => { ss(ws1, `${c}1`, styleCompanyHeader); });
+   349→
+   350→    // ── Row 2: Report title ──
+   351→    cols.forEach(c => { ss(ws1, `${c}2`, styleReportTitle); });
+   352→
+   353→    // ── Row 3: Meta row (Generated date | Total Employees | Total Net Payroll) ──
+   354→    // A:C — Generated date
+   355→    ['A','B','C'].forEach(c => {
+   356→      ss(ws1, `${c}3`, styleMetaLabel);
+   357→    });
+   358→    // D:F — Total Employees
+   359→    ['D','E','F'].forEach(c => {
+   360→      ss(ws1, `${c}3`, styleMetaLabel);
+   361→    });
+   362→    // G:O — Total Net Payroll
+   363→    ['G','H','I','J','K','L','M','N','O'].forEach(c => {
+   364→      ss(ws1, `${c}3`, styleMetaLabel);
+   365→    });
+   366→
+   367→    // ── Row 4: Column letters ──
+   368→    cols.forEach(c => { ss(ws1, `${c}4`, styleColLetter); });
+   369→
+   370→    // ── Row 5: Column headers ──
+   371→    cols.forEach(c => { ss(ws1, `${c}5`, styleColHeader); });
+   372→
+   373→    // ── Data rows starting at row 6 ──
+   374→    enriched.forEach((p, idx) => {
+   375→      const row = idx + 6;
+   376→      const status = p.status;
+   377→      const statusLabel = status.charAt(0).toUpperCase() + status.slice(1);
+   378→      const dataRow = [
+   379→        idx + 1,                                    // A: S.No
+   380→        p.fullName,                                 // B: Employee Name
+   381→        p.employeeId,                               // C: Emp Code
+   382→        p.firm,                                     // D: Firm
+   383→        Math.round(p.monthlySalary),                // E: Monthly Salary
+   384→        p.presentDays,                              // F: Present Days
+   385→        p.absentDays,                               // G: Absent Days
+   386→        displayDecimalAsColon(p.workedHrs),         // H: Worked Hrs (HH:MM, matches Attendance Tracker)
+   387→        displayDecimalAsColon(p.otHours),           // I: OT Hrs (HH:MM, matches Attendance Tracker)
+   388→        Math.round(p.otAmount),                     // J: OT Amount
+   389→        Math.round(p.grossSalary),                  // K: Gross Salary
+   390→        Math.round(p.deductions),                   // L: Deductions
+   391→        Math.round(p.bonus),                        // M: Bonus
+   392→        Math.round(p.netSalary),                    // N: Net Salary
+   393→        statusLabel,                                // O: Status
+   394→      ];
+   395→
+   396→      XLSX.utils.sheet_add_aoa(ws1, [dataRow], { origin: `A${row}` });
+   397→
+   398→      // Alternating row colors
+   399→      const bgColor = idx % 2 === 0 ? LIGHT_BG : WHITE;
+   400→      const styleDataRow = {
+   401→        font: { sz: 10, color: { rgb: '333333' }, name: 'Calibri' },
+   402→        fill: { fgColor: { rgb: bgColor } },
+   403→        alignment: { horizontal: 'center' as const, vertical: 'center' as const },
+   404→        border: fullBorder('D0D0D0', 'thin'),
+   405→      };
+   406→      cols.forEach(c => { ss(ws1, `${c}${row}`, styleDataRow); });
+   407→
+   408→      // Employee name = left aligned
+   409→      ss(ws1, `B${row}`, { ...styleDataRow, alignment: { horizontal: 'left' as const, vertical: 'center' as const } });
+   410→
+   411→      // Net Salary = gold bold
+   412→      ss(ws1, `N${row}`, {
+   413→        ...styleDataRow,
+   414→        font: { bold: true, color: { rgb: GOLD }, sz: 10, name: 'Calibri' },
+   415→      });
+   416→
+   417→      // Status color coding
+   418→      const statusCol = 'O';
+   419→      if (status === 'paid') {
+   420→        ss(ws1, `${statusCol}${row}`, {
+   421→          ...styleDataRow,
+   422→          font: { bold: true, color: { rgb: EMERALD }, sz: 10, name: 'Calibri' },
+   423→          fill: { fgColor: { rgb: LIGHT_GREEN } },
+   424→        });
+   425→      } else if (status === 'approved') {
+   426→        ss(ws1, `${statusCol}${row}`, {
+   427→          ...styleDataRow,
+   428→          font: { bold: true, color: { rgb: SKY }, sz: 10, name: 'Calibri' },
+   429→          fill: { fgColor: { rgb: LIGHT_BLUE } },
+   430→        });
+   431→      } else {
+   432→        ss(ws1, `${statusCol}${row}`, {
+   433→          ...styleDataRow,
+   434→          font: { bold: true, color: { rgb: AMBER }, sz: 10, name: 'Calibri' },
+   435→          fill: { fgColor: { rgb: LIGHT_AMBER } },
+   436→        });
+   437→      }
+   438→    });
+   439→
+   440→    // ── Footer row: Repeat column headers + TOTAL row (matches template) ──
+   441→    const headerRepeatRow = enriched.length + 6;
+   442→    XLSX.utils.sheet_add_aoa(ws1, [[
+   443→      'S.No', 'Employee Name', 'Emp Code', 'Firm', 'Monthly Salary',
+   444→      'Present Days', 'Absent Days', 'Worked Hrs', 'OT Hrs', 'OT Amount',
+   445→      'Gross Salary', 'Deductions', 'Bonus', 'Net Salary', 'Status',
+   446→    ]], { origin: `A${headerRepeatRow}` });
+   447→    cols.forEach(c => { ss(ws1, `${c}${headerRepeatRow}`, styleColHeader); });
+   448→
+   449→    const totalRow = enriched.length + 7;
+   450→    const totalMonthlySalary = enriched.reduce((s, p) => s + p.monthlySalary, 0);
+   451→    const totalPresentDays   = enriched.reduce((s, p) => s + p.presentDays, 0);
+   452→    const totalAbsentDays    = enriched.reduce((s, p) => s + p.absentDays, 0);
+   453→    const totalWorkedHrs     = enriched.reduce((s, p) => s + p.workedHrs, 0);
+   454→
+   455→    XLSX.utils.sheet_add_aoa(ws1, [[
+   456→      '', 'TOTAL', '', '', Math.round(totalMonthlySalary),
+   457→      totalPresentDays, totalAbsentDays,
+   458→      displayDecimalAsColon(totalWorkedHrs),
+   459→      displayDecimalAsColon(totalOTHrs),
+   460→      Math.round(totalOTAmount),
+   461→      Math.round(totalGross), Math.round(totalDeduct), Math.round(totalBonus),
+   462→      Math.round(totalNet), '',
+   463→    ]], { origin: `A${totalRow}` });
+   464→    cols.forEach(c => { ss(ws1, `${c}${totalRow}`, styleTotals); });
+   465→
+   466→    // ── Merges ──
+   467→    if (!ws1['!merges']) ws1['!merges'] = [];
+   468→    ws1['!merges'].push({ s: { r: 0, c: 0 }, e: { r: 0, c: 14 } }); // Row 1: A1:O1
+   469→    ws1['!merges'].push({ s: { r: 1, c: 0 }, e: { r: 1, c: 14 } }); // Row 2: A2:O2
+   470→    ws1['!merges'].push({ s: { r: 2, c: 0 }, e: { r: 2, c: 2 } });  // A3:C3 (Generated)
+   471→    ws1['!merges'].push({ s: { r: 2, c: 3 }, e: { r: 2, c: 5 } });  // D3:F3 (Total Employees)
+   472→    ws1['!merges'].push({ s: { r: 2, c: 6 }, e: { r: 2, c: 14 } }); // G3:O3 (Total Net Payroll)
+   473→
+   474→    // ── Column widths ──
+   475→    ws1['!cols'] = [
+   476→      { wch: 6 },   // A: S.No
+   477→      { wch: 26 },  // B: Employee Name
+   478→      { wch: 14 },  // C: Emp Code
+   479→      { wch: 8 },   // D: Firm
+   480→      { wch: 14 },  // E: Monthly Salary
+   481→      { wch: 12 },  // F: Present Days
+   482→      { wch: 12 },  // G: Absent Days
+   483→      { wch: 11 },  // H: Worked Hrs
+   484→      { wch: 9 },   // I: OT Hrs
+   485→      { wch: 12 },  // J: OT Amount
+   486→      { wch: 14 },  // K: Gross Salary
+   487→      { wch: 13 },  // L: Deductions
+   488→      { wch: 11 },  // M: Bonus
+   489→      { wch: 14 },  // N: Net Salary
+   490→      { wch: 12 },  // O: Status
+   491→    ];
+   492→
+   493→    // ════════════════════════════════════════════════════════════
+   494→    // SHEET 2: Summary
+   495→    // ════════════════════════════════════════════════════════════
+   496→    const sumRows: any[][] = [
+   497→      // Row 1
+   498→      ['Payroll Summary', ''],
+   499→      // Row 2 (spacer)
+   500→      ['', ''],
+   501→      // Row 3 — section header
+   502→      ['Category', 'Amount (₹)'],
+   503→      // Row 4
+   504→      ['Total Gross Salary', Math.round(totalGross)],
+   505→      // Row 5
+   506→      ['Total OT Amount', Math.round(totalOTAmount)],
+   507→      // Row 6
+   508→      ['Total Bonus', Math.round(totalBonus)],
+   509→      // Row 7
+   510→      ['Total Deductions', Math.round(totalDeduct)],
+   511→      // Row 8
+   512→      ['Total Net Payroll', Math.round(totalNet)],
+   513→      // Row 9 (spacer)
+   514→      ['', ''],
+   515→      // Row 10 — second section header
+   516→      ['Metric', 'Value'],
+   517→      // Row 11
+   518→      ['Employees Processed', empProcessed],
+   519→      // Row 12
+   520→      ['Average Net Salary', Math.round(avgNet)],
+   521→      // Row 13
+   522→      ['Total OT Hours', formatOTHHMM(totalOTHrs)],
+   523→    ];
+   524→    const ws2 = XLSX.utils.aoa_to_sheet(sumRows);
+   525→    const cols2 = ['A','B'];
+   526→
+   527→    // Row 1: Title
+   528→    cols2.forEach(c => {
+   529→      ss(ws2, `${c}1`, {
+   530→        font: { bold: true, color: { rgb: GOLD }, sz: 16, name: 'Calibri' },
+   531→        fill: { fgColor: { rgb: DARK } },
+   532→        alignment: { horizontal: 'center' as const, vertical: 'center' as const },
+   533→        border: {
+   534→          top:    { style: 'medium' as const, color: { rgb: GOLD } },
+   535→          bottom: { style: 'medium' as const, color: { rgb: GOLD } },
+   536→          left:   { style: 'medium' as const, color: { rgb: GOLD } },
+   537→          right:  { style: 'medium' as const, color: { rgb: GOLD } },
+   538→        },
+   539→      });
+   540→    });
+   541→
+   542→    // Row 3 & Row 10: Section headers (Category | Amount / Metric | Value)
+   543→    ['A3','B3','A10','B10'].forEach(ref => {
+   544→      ss(ws2, ref, {
+   545→        font: { bold: true, color: { rgb: WHITE }, sz: 11, name: 'Calibri' },
+   546→        fill: { fgColor: { rgb: EMERALD } },
+   547→        alignment: { horizontal: 'center' as const, vertical: 'center' as const },
+   548→        border: fullBorder(WHITE, 'thin'),
+   549→      });
+   550→    });
+   551→
+   552→    // Amount rows (4-8): styling per category
+   553→    const amountRowStyles: Record<number, { color: string; bg: string }> = {
+   554→      4: { color: CYAN,   bg: LIGHT_BLUE },   // Total Gross Salary
+   555→      5: { color: AMBER,  bg: LIGHT_AMBER },  // Total OT Amount
+   556→      6: { color: PURPLE, bg: LIGHT_BG },     // Total Bonus
+   557→      7: { color: RED,    bg: LIGHT_RED },    // Total Deductions
+   558→      8: { color: GOLD,   bg: LIGHT_BG },     // Total Net Payroll
+   559→    };
+   560→
+   561→    for (let r = 4; r <= 8; r++) {
+   562→      const style = amountRowStyles[r];
+   563→      ss(ws2, `A${r}`, {
+   564→        font: { bold: true, color: { rgb: '333333' }, sz: 11, name: 'Calibri' },
+   565→        fill: { fgColor: { rgb: style.bg } },
+   566→        alignment: { horizontal: 'left' as const, vertical: 'center' as const },
+   567→        border: fullBorder('D0D0D0', 'thin'),
+   568→      });
+   569→      ss(ws2, `B${r}`, {
+   570→        font: { bold: true, color: { rgb: style.color }, sz: 12, name: 'Calibri' },
+   571→        fill: { fgColor: { rgb: style.bg } },
+   572→        alignment: { horizontal: 'right' as const, vertical: 'center' as const },
+   573→        border: fullBorder('D0D0D0', 'thin'),
+   574→      });
+   575→    }
+   576→
+   577→    // Metric rows (11-13)
+   578→    const metricRowStyles: Record<number, { color: string; bg: string }> = {
+   579→      11: { color: EMERALD, bg: LIGHT_GREEN }, // Employees Processed
+   580→      12: { color: GOLD,    bg: LIGHT_BG },    // Average Net Salary
+   581→      13: { color: AMBER,   bg: LIGHT_AMBER }, // Total OT Hours
+   582→    };
+   583→
+   584→    for (let r = 11; r <= 13; r++) {
+   585→      const style = metricRowStyles[r];
+   586→      ss(ws2, `A${r}`, {
+   587→        font: { bold: true, color: { rgb: '333333' }, sz: 11, name: 'Calibri' },
+   588→        fill: { fgColor: { rgb: style.bg } },
+   589→        alignment: { horizontal: 'left' as const, vertical: 'center' as const },
+   590→        border: fullBorder('D0D0D0', 'thin'),
+   591→      });
+   592→      ss(ws2, `B${r}`, {
+   593→        font: { bold: true, color: { rgb: style.color }, sz: 12, name: 'Calibri' },
+   594→        fill: { fgColor: { rgb: style.bg } },
+   595→        alignment: { horizontal: 'right' as const, vertical: 'center' as const },
+   596→        border: fullBorder('D0D0D0', 'thin'),
+   597→      });
+   598→    }
+   599→
+   600→    // ── Merges for Summary sheet ──
+   601→    if (!ws2['!merges']) ws2['!merges'] = [];
+   602→    ws2['!merges'].push({ s: { r: 0, c: 0 }, e: { r: 0, c: 1 } }); // A1:B1
+   603→
+   604→    ws2['!cols'] = [{ wch: 28 }, { wch: 20 }];
+   605→
+   606→    // ════════════════════════════════════════════════════════════
+   607→    // Build workbook & return
+   608→    // ════════════════════════════════════════════════════════════
+   609→    const wb = XLSX.utils.book_new();
+   610→    XLSX.utils.book_append_sheet(wb, ws1, 'Payroll Register');
+   611→    XLSX.utils.book_append_sheet(wb, ws2, 'Summary');
+   612→
+   613→    const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' }) as ArrayBuffer;
+   614→    const filename = `Payroll_${monthName}_${year}.xlsx`;
+   615→
+   616→    return new NextResponse(buf, {
+   617→      status: 200,
+   618→      headers: {
+   619→        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+   620→        'Content-Disposition': `attachment; filename="${filename}"`,
+   621→        'Content-Length': String(buf.byteLength),
+   622→      },
+   623→    });
+   624→  } catch (error: any) {
+   625→    console.error('Payroll summary export error:', error);
+   626→    return NextResponse.json({ error: error.message || 'Export failed' }, { status: 500 });
+   627→  }
+   628→}
+   629→
