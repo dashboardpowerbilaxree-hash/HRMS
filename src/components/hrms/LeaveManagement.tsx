@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { CalendarDays, Check, X, Clock, RefreshCw } from 'lucide-react';
+import { CalendarDays, Clock, RefreshCw } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -73,33 +73,10 @@ export function LeaveManagement() {
     loadData();
   };
 
-  // ─── ERP Integration: When approving/rejecting, also push status back to ERP ───
-  // SAFE: if the leave is not ERP-originated, erp-push returns success with synced=false
-  const handleAction = async (id: string, status: string) => {
-    // 1. Update HRMS Leave status (existing flow — UNCHANGED)
-    await fetch('/api/leaves', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, status }),
-    });
-    toast.success(`Leave ${status}`);
-
-    // 2. Best-effort push to ERP (non-blocking — won't break HRMS flow if ERP is down)
-    try {
-      const pushRes = await fetch('/api/leaves/erp-push', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ leaveId: id, status, approvedBy: 'HR' }),
-      });
-      const pushData = await pushRes.json();
-      if (pushData.synced) {
-        toast.success(`ERP updated: ${pushData.message || 'synced'}`);
-      }
-    } catch {
-      // Silent fail — ERP sync is best-effort
-    }
-    loadData();
-  };
+  // Note: Approve/Reject action buttons have been removed from this view.
+  // Leave approval is now handled by the Founder via the Tasks workflow.
+  // The HRMS Leave Management screen remains read-only with respect to approval status.
+  // All leave data is preserved — no records are modified or deleted by this change.
 
   const pending = leaves.filter(l => l.status === 'pending').length;
   const approved = leaves.filter(l => l.status === 'approved').length;
@@ -110,7 +87,7 @@ export function LeaveManagement() {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
           <h2 className="text-xl font-bold">Leave Management</h2>
-          <p className="text-sm text-muted-foreground">{pending} pending approvals</p>
+          <p className="text-sm text-muted-foreground">{pending} pending approvals &middot; Approvals handled by Founder via Tasks</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={handleSyncErp} disabled={syncingErp}>
@@ -160,7 +137,7 @@ export function LeaveManagement() {
         <CardContent className="p-0">
           <ScrollArea className="max-h-[55vh]">
             <Table>
-              <TableHeader><TableRow><TableHead>Employee</TableHead><TableHead>Type</TableHead><TableHead>Duration</TableHead><TableHead>Days</TableHead><TableHead>Status</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader>
+              <TableHeader><TableRow><TableHead>Employee</TableHead><TableHead>Type</TableHead><TableHead>Duration</TableHead><TableHead>Days</TableHead><TableHead>Status</TableHead></TableRow></TableHeader>
               <TableBody>
                 {leaves.map((l) => {
                   const isErpOriginated = !!(l.reason && l.reason.includes('[ERP:'));
@@ -172,14 +149,6 @@ export function LeaveManagement() {
                     <TableCell className="text-sm whitespace-nowrap">{l.days}</TableCell>
                     <TableCell>
                       <Badge variant={l.status === 'approved' ? 'default' : l.status === 'rejected' ? 'destructive' : 'secondary'} className="text-[10px] whitespace-nowrap shrink-0">{l.status}</Badge>
-                    </TableCell>
-                    <TableCell>
-                      {l.status === 'pending' && (
-                        <div className="flex gap-1">
-                          <Button size="icon" variant="ghost" className="h-7 w-7 text-green-500" onClick={() => handleAction(l.id, 'approved')}><Check className="w-4 h-4" /></Button>
-                          <Button size="icon" variant="ghost" className="h-7 w-7 text-red-500" onClick={() => handleAction(l.id, 'rejected')}><X className="w-4 h-4" /></Button>
-                        </div>
-                      )}
                     </TableCell>
                   </TableRow>
                   );

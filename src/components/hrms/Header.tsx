@@ -39,8 +39,6 @@ export function Header() {
     holidays: 'Holiday Calendar',
     overtime: 'Overtime Management',
     departments: 'Department Management',
-    reports: 'Reports & Analytics',
-    'ai-assistant': 'AI HR Assistant',
     'salary-slip': 'Salary Slip Generator',
     settings: 'Settings',
     'employee-profile': 'Employee Profile',

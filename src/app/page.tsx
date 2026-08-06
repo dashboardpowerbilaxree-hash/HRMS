@@ -9,15 +9,10 @@ import { AttendanceTracker } from '@/components/hrms/AttendanceTracker';
 import { PayrollAutomation } from '@/components/hrms/PayrollAutomation';
 import { LeaveManagement } from '@/components/hrms/LeaveManagement';
 import { HolidayCalendar } from '@/components/hrms/HolidayCalendar';
-import { ReportsAnalytics } from '@/components/hrms/ReportsAnalytics';
-import { AnalyticsDashboard } from '@/components/hrms/AnalyticsDashboard';
-import { ScorecardDashboard } from '@/components/hrms/ScorecardDashboard';
-import { AIAssistant } from '@/components/hrms/AIAssistant';
 import { SalarySlipGenerator } from '@/components/hrms/SalarySlipGenerator';
 import { SettingsPanel } from '@/components/hrms/SettingsPanel';
 
 import { EmployeeProfile } from '@/components/hrms/EmployeeProfile';
-import { AttendanceQueries } from '@/components/hrms/AttendanceQueries';
 import { Header } from '@/components/hrms/Header';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Lock, User, Eye, EyeOff, Loader2, Crown, Sparkles } from 'lucide-react';
@@ -252,14 +247,9 @@ export default function Home() {
       case 'payroll': return <PayrollAutomation />;
       case 'leaves': return <LeaveManagement />;
       case 'holidays': return <HolidayCalendar />;
-      case 'reports': return <ReportsAnalytics />;
-      case 'analytics': return <AnalyticsDashboard />;
-      case 'scorecard': return <ScorecardDashboard />;
-      case 'ai-assistant': return <AIAssistant />;
       case 'salary-slip': return <SalarySlipGenerator />;
       case 'settings': return <SettingsPanel />;
       case 'employee-profile': return <EmployeeProfile />;
-      case 'erp-queries': return <AttendanceQueries />;
       default: return <DashboardHome />;
     }
   };
