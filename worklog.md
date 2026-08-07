@@ -352,3 +352,70 @@ Stage Summary:
   Sheet 2 "Summary": Total Gross, Total OT Amount, Total Bonus, Total Deductions, Total Net Payroll, Employees Processed, Avg Net Salary, Total OT Hours
 - Bonus column is present (replaces the old Arrear column)
 - Production deployment: SUCCESSFUL on https://laxree-hrms.vercel.app
+
+---
+Task ID: fix-master-leave-zero-v2
+Agent: Main Agent
+Task: Fix Master Excel Leave column showing 0 for everyone (previous fix broke it). User instruction: ONLY fix master excel, payroll is fine.
+
+Work Log:
+
+ROOT CAUSE (why previous fix showed 0 leaves for everyone)
+==========================================================
+The bulk-upload route (src/app/api/attendance/bulk-upload/route.ts)
+creates an attendance record with status='absent' whenever an employee
+doesn't punch in. So when an employee takes a full-day leave (no punch
+in), there are TWO records for the same day:
+  1. A Leave table record (approved leave)
+  2. An Attendance table record with status='absent'
+
+The previous fix (commit e17b5f5) only counted a leave when there was
+NO attendance record. But because bulk-upload ALWAYS creates an 'absent'
+record for no-show days, the leave check never matched — every leave
+day was being treated as a plain absent day, and the Leave column
+showed 0 for everyone.
+
+THE FIX
+=======
+In export-master/route.ts, when an attendance record exists AND its
+corrected status is 'absent':
+  - Check if that day is in the employee's approved-leave set
+  - If yes (and not Sunday/holiday): count as LEAVE, display 'Leave'
+  - If no: count as ABSENT, display 'Absent' (unchanged behavior)
+
+Half-days are STILL not counted as leaves — they remain 0.5 present +
+0.5 absent, matching the user's expectation:
+  2 full-day leaves + 1 half-day = 2 leaves (not 3, not 0)
+
+Files changed:
+- src/app/api/attendance/export-master/route.ts ONLY
+  (3 changes: calculation loop, display branch, Leave cell styling)
+- Payroll route untouched (per user instruction)
+- No data was modified, deleted, or tampered with
+
+Commit: 63eafdb (local only)
+
+DEPLOYMENT ISSUE
+================
+The GitHub PAT in the remote URL (github_pat_11CD...sfzrd) has expired
+or been revoked — both REST API and git push return HTTP 401 "Bad
+credentials". git fetch still works ONLY because the repo is public
+(no auth needed for read).
+
+Could NOT push commit 63eafdb to GitHub/Vercel automatically. User
+needs to:
+  1. Generate a new GitHub PAT (Settings → Developer settings →
+     Personal access tokens → Fine-grained tokens → Repository access:
+     HRMS → Permissions: Contents = Read and write)
+  2. Update the remote URL:
+     git remote set-url origin https://dashboardpowerbilaxree-hash:<NEW_PAT>@github.com/dashboardpowerbilaxree-hash/HRMS.git
+  3. Push:
+     git push origin main
+  4. Vercel will auto-deploy from the push
+
+Stage Summary:
+- Fix is complete locally and committed (63eafdb).
+- The fix correctly handles: full-day leaves (counted as 1 leave each),
+  half-days (NOT counted as leaves, just 0.5 present + 0.5 absent),
+  genuine absents (counted as absent, not leave).
+- Cannot deploy without a valid GitHub PAT — token in remote URL is expired.
