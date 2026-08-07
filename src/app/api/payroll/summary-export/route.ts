@@ -194,28 +194,38 @@ async function enrichPayroll(p: any) {
 
   let effectivePaidLeaves = 0;
   let effectiveUnpaidLeaves = 0;
-  const cutoffDate = new Date(p.year, p.month - 1, cutoffDay);
+  const cutoffDate = new Date(p.year, p.month - 1, cutoffDay, 23, 59, 59);
   for (const leave of leaves) {
     const isUnpaid = leave.type === 'unpaid' || leave.type === 'UL' || leave.type === 'LOP';
     let d = new Date(leave.startDate);
     const end = new Date(leave.endDate);
     const effectiveEnd = end > cutoffDate ? cutoffDate : end;
     while (d <= effectiveEnd) {
-      const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-      const isSunday = d.getDay() === 0;
-      const isHoliday = holidayDateStrs.has(dateStr);
-      if (!isSunday && !isHoliday && !presentDateStrs.has(dateStr)) {
-        if (isUnpaid) effectiveUnpaidLeaves++;
-        else effectivePaidLeaves++;
+      // ═══ BUG FIX ═══
+      // Only count leave days that fall WITHIN the current payroll month/year.
+      // Previously, a leave spanning June 27 → July 1 would count June 27, 29, 30
+      // as July paid leaves (wrong!). Now we skip any day outside the current month.
+      if (d.getFullYear() === p.year && d.getMonth() + 1 === p.month) {
+        const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        const isSunday = d.getDay() === 0;
+        const isHoliday = holidayDateStrs.has(dateStr);
+        if (!isSunday && !isHoliday && !presentDateStrs.has(dateStr)) {
+          if (isUnpaid) effectiveUnpaidLeaves++;
+          else effectivePaidLeaves++;
+        }
       }
       d.setDate(d.getDate() + 1);
     }
   }
 
-  const absentDays = Math.max(0, totalWorkingDays - presentDays - halfDays - effectivePaidLeaves - effectiveUnpaidLeaves);
+  // ═══ COMPANY POLICY: NO PAID LEAVES ═══
+  // All leaves are unpaid — they do NOT contribute to totalHrs or grossSalary.
+  // Leave days are still counted (for records) but excluded from salary.
+  const totalLeaveDays = effectivePaidLeaves + effectiveUnpaidLeaves;
+  const absentDays = Math.max(0, totalWorkingDays - presentDays - halfDays - totalLeaveDays);
 
   const sundayHrs = sundays * shiftHrs;
-  const paidLeaveHrs = effectivePaidLeaves * shiftHrs;
+  const paidLeaveHrs = 0;  // ← NO PAID LEAVES per company policy
   const totalHrs = Math.round((totalBaseHours + sundayHrs + otHours + paidLeaveHrs) * 100) / 100;
   const grossSalary = Math.round(hourlyRate * totalHrs * 100) / 100;
 

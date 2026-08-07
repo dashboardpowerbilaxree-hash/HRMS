@@ -173,14 +173,35 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        // Absent days = totalWorkingDays - fullPresentDays - halfDays - effectivePaidLeaves - effectiveUnpaidLeaves
-        const absentDays = Math.max(0, totalWorkingDays - presentDays - halfDays - effectivePaidLeaves - effectiveUnpaidLeaves);
+        // ═══ COMPANY POLICY: NO PAID LEAVES ═══
+        // Per company policy, employees do NOT get paid for any leave days.
+        // All leaves (whether type 'casual', 'sick', 'earned', or anything else)
+        // are treated as UNPAID — they reduce the salary proportionally.
+        //
+        // We still COUNT the leave days (for Master Excel display & records),
+        // but they do NOT contribute to totalHrs or grossSalary.
+        //
+        // For salary calculation:
+        //   - paidLeaveHrs = 0  (no pay for leaves)
+        //   - Leave days are NOT added to absentDays either, because the
+        //     Master Excel shows them in a separate "Leave" column. Adding
+        //     them to absentDays would double-count them in the UI.
+        //
+        // The payroll.paidLeaves field is kept as the leave COUNT (for
+        // display purposes), but it does NOT affect salary.
+
+        // Absent days = totalWorkingDays - presentDays - halfDays - leaveDays
+        // (leaves are unpaid but tracked separately, so we don't add them
+        //  to absentDays — they appear in their own column)
+        const totalLeaveDays = effectivePaidLeaves + effectiveUnpaidLeaves;
+        const absentDays = Math.max(0, totalWorkingDays - presentDays - halfDays - totalLeaveDays);
 
         // ─── HOUR-BASED SALARY CALCULATION (matching Excel) ───
-        const earnedDays = effectivePresentDays + effectivePaidLeaves;
+        // NO paidLeaveHrs in totalHrs — leaves are unpaid
+        const earnedDays = effectivePresentDays;
         const sundayCount = sundays;
         const sundayHrs = sundayCount * emp.shiftHours;
-        const paidLeaveHrs = effectivePaidLeaves * emp.shiftHours;
+        const paidLeaveHrs = 0;  // ← NO PAID LEAVES per company policy
         const totalHrs = totalBaseHours + sundayHrs + otHoursDecimal + paidLeaveHrs;
         const baseSalary = hourlyRate * totalBaseHours;
         const sundayEarnings = hourlyRate * sundayHrs;
@@ -216,7 +237,7 @@ export async function POST(request: NextRequest) {
           presentDays: presentDays,
           absentDays,
           holidayDays,
-          paidLeaves: effectivePaidLeaves,
+          paidLeaves: totalLeaveDays,  // total leave days (all unpaid, for display)
           grossSalary: Math.round(grossSalary * 100) / 100,
           tdsDeduction: 0,
           loanDeduction: 0,
