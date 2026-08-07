@@ -232,7 +232,19 @@ export async function GET(request: NextRequest) {
 
           if (rec) {
             if (correctedStatus === 'absent') {
-              absentDays++;
+              // The bulk-upload route creates an attendance record with
+              // status='absent' when an employee doesn't punch in. So a
+              // full-day leave (no punch in) ALSO has an 'absent' record.
+              // We must check the Leave table to decide whether this is
+              // a genuine absent or an approved leave.
+              const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+              const isLeaveDay = empLeaveDays.has(dateStr) && !presentDateStrs.has(dateStr);
+              if (isLeaveDay && !isSunday && !isHoliday) {
+                // Full-day leave (no punch in, but leave record exists)
+                leaveDays++;
+              } else {
+                absentDays++;
+              }
             } else if (correctedStatus === 'weekly-off') {
               if (rec.checkIn && rec.totalHours > 0) {
                 totalWorkHrs += rec.totalHours;
@@ -407,7 +419,17 @@ export async function GET(request: NextRequest) {
               // Use recomputed status (handles wrongly-marked half-day AND early-out)
               const correctedStatus = recomputeStatus(rec, actualShiftHours, emp.shiftStart, emp.shiftEnd);
               if (correctedStatus === 'absent') {
-                empRow.push('Absent', '', '');
+                // The bulk-upload route creates an 'absent' attendance record
+                // when an employee doesn't punch in. So a full-day leave also
+                // has an 'absent' record. Check the Leave table to decide
+                // whether to display 'Leave' or 'Absent'.
+                const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                const isLeaveDay = empLeaveDays.has(dateStr) && !presentDateStrs.has(dateStr);
+                if (isLeaveDay && !isSunday && !isHoliday) {
+                  empRow.push('Leave', '', '');
+                } else {
+                  empRow.push('Absent', '', '');
+                }
               } else if (correctedStatus === 'weekly-off') {
                 if (rec.checkIn && rec.totalHours > 0) {
                   empRow.push(rec.checkIn || '', rec.checkOut || '', formatHours(rec.totalHours));
@@ -571,6 +593,14 @@ export async function GET(request: NextRequest) {
               cell.s = {
                 font: { bold: true, sz: 9, color: { rgb: 'DC2626' } },
                 fill: { fgColor: { rgb: LIGHT_RED } },
+                alignment: { horizontal: 'center' as const, vertical: 'center' as const },
+                border: fullBorder('D0D0D0'),
+              };
+            } else if (val === 'Leave') {
+              // Leave - blue on light blue (distinct from Absent)
+              cell.s = {
+                font: { bold: true, sz: 9, color: { rgb: '1D4ED8' } },
+                fill: { fgColor: { rgb: 'EFF6FF' } },
                 alignment: { horizontal: 'center' as const, vertical: 'center' as const },
                 border: fullBorder('D0D0D0'),
               };
