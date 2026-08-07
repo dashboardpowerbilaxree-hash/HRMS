@@ -193,7 +193,11 @@ export async function GET(request: NextRequest) {
     // because the minute remainder was being shown verbatim instead of as a
     // fraction of an hour.
     const totalWorkHours = Math.round((totalWorkMinutes / 60) * 100) / 100;
-    const totalSundayHours = Math.round((totalSundayMinutes / 60) * 100) / 100;
+    // totalSundayHours = PAID Sunday hours (sundays × shiftHours), NOT actual worked
+    // hours. The dashboard uses this for the "Sunday Hrs" stat tile, and it must
+    // reconcile with Total Hrs including Sunday Hrs. For Kamlesh (didn't work
+    // Sundays) this shows 36:00 (4 × 9h), not 0:00.
+    const totalSundayHours = Math.round(sundays * employee.shiftHours * 100) / 100;
 
 
     // ─── OT Hours: Sum stored overtimeHours directly (decimal sum) ───
@@ -269,17 +273,23 @@ export async function GET(request: NextRequest) {
 
     // ═══ COMPANY POLICY: NO PAID LEAVES ═══
     // All leaves are unpaid — they do NOT contribute to totalHrs or grossSalary.
-    // Leave days are still counted (for records) but excluded from salary.
-    // absentDays = working days NOT covered by present/half-day/leave
+    // Absent = any working day the employee did NOT show up, regardless of
+    // whether an approved leave exists for that day. Leave days are still
+    // counted (in `totalLeaveDays` for display) but do NOT reduce absent.
+    // (Matches user expectation: Kamlesh absent=3 even though Jul 1 has leave.)
     const totalLeaveDays = effectivePaidLeaves + effectiveUnpaidLeaves;
-    const absentDays = Math.max(0, totalWorkingDays - presentDays - halfDays - totalLeaveDays);
+    const absentDays = Math.max(0, totalWorkingDays - presentDays - halfDays);
 
     const firmFromId = getFirmFromEmployeeId(employeeId);
     const effectiveFirm = firmFromId || employee.firm;
     const firmFullName = FIRM_NAMES[effectiveFirm] || employee.firm;
 
     const totalHrsInclSundayMinutes = totalWorkMinutes + totalSundayMinutes;
-    // TRUE decimal so displayDecimalAsColon shows correct HH:MM (was HH.MM-as-decimal before)
+    // TRUE decimal so displayDecimalAsColon shows correct HH:MM
+    // (Note: totalHrsInclSunday here uses ACTUAL Sunday worked minutes,
+    //  but the dashboard's "Total Hrs including Sunday Hrs" column
+    //  prefers `totalHrs` (computed below with PAID Sunday hrs) — see
+    //  AttendanceTracker.tsx line 1211 fallback chain.)
     const totalHrsInclSunday = Math.round((totalHrsInclSundayMinutes / 60) * 100) / 100;
 
     const annualLeaves = leaves.filter(l => l.type === 'annual' || l.type === 'AL' || l.type === 'Casual' || l.type === 'CL').reduce((sum, l) => sum + l.days, 0);

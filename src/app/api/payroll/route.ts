@@ -200,8 +200,12 @@ export async function GET(request: NextRequest) {
       }
 
       // ═══ COMPANY POLICY: NO PAID LEAVES ═══
+      // Absent = any working day the employee did NOT show up, regardless of
+      // whether an approved leave exists for that day. The leave is still
+      // recorded (in `paidLeaves` field, for display only) but does NOT
+      // reduce the absent count. (See POST route for full rationale.)
       const totalLeaveDays = effectivePaidLeaves + effectiveUnpaidLeaves;
-      const absentDays = Math.max(0, totalWorkingDays - presentDays - halfDays - totalLeaveDays);
+      const absentDays = Math.max(0, totalWorkingDays - presentDays - halfDays);
 
       // Recalculate OT from stored values (use cutoff-filtered attendance)
       const otHours = Math.round(effectiveAttendance.filter(a => ['present', 'late', 'half-day', 'half_day', 'early-out'].includes(a.status)).reduce((sum, a) => sum + (a.overtimeHours || 0), 0) * 100) / 100;
@@ -223,6 +227,7 @@ export async function GET(request: NextRequest) {
         daysInMonth,
         cutoffDay,
         sundayCount,
+        sundayHrs,           // ← OVERRIDE stale DB value with computed paid Sunday hrs
         sundayEarnings: Math.round(sundayEarnings * 100) / 100,
         earnedSundayHrs,
         baseSalary: Math.round(baseSalary * 100) / 100,
@@ -377,8 +382,14 @@ export async function POST(request: NextRequest) {
     }
 
     // ═══ COMPANY POLICY: NO PAID LEAVES ═══
+    // Absent = any working day the employee did NOT show up, regardless of
+    // whether an approved leave exists for that day. The leave is still
+    // recorded (in `paidLeaves` field, for display only) but does NOT
+    // reduce the absent count. This matches the user's expectation that
+    // Kamlesh (who has 3 days without attendance — Jul 1, 27, 31) shows
+    // absent=3 even though Jul 1 has an approved casual leave.
     const totalLeaveDays = effectivePaidLeaves + effectiveUnpaidLeaves;
-    const absentDays = Math.max(0, totalWorkingDays - presentDays - halfDays - totalLeaveDays);
+    const absentDays = Math.max(0, totalWorkingDays - presentDays - halfDays);
 
     // ─── HOUR-BASED SALARY CALCULATION (matching Excel) ───
     // Total Hrs = baseHrs + sundayHrs + otHrs (NO paid leaves — company policy)
@@ -424,7 +435,7 @@ export async function POST(request: NextRequest) {
       otHours,
       otRate: hourlyRate,
       otAmount: Math.round(otAmount * 100) / 100,
-      sundayHrs: sundayWorkedHrs,
+      sundayHrs: sundayHrs,         // ← PAID Sunday hrs (sundayCount × shiftHrs), not actual worked
       sundayCount,
       sundayEarnings: Math.round(sundayEarnings * 100) / 100,
       totalHrs: Math.round(totalHrs * 100) / 100,

@@ -220,9 +220,12 @@ async function enrichPayroll(p: any) {
 
   // ═══ COMPANY POLICY: NO PAID LEAVES ═══
   // All leaves are unpaid — they do NOT contribute to totalHrs or grossSalary.
-  // Leave days are still counted (for records) but excluded from salary.
+  // Absent = any working day the employee did NOT show up, regardless of
+  // whether an approved leave exists for that day. Leave days are still
+  // counted (in `totalLeaveDays` for display) but do NOT reduce absent.
+  // (Matches user expectation: Kamlesh absent=3 even though Jul 1 has leave.)
   const totalLeaveDays = effectivePaidLeaves + effectiveUnpaidLeaves;
-  const absentDays = Math.max(0, totalWorkingDays - presentDays - halfDays - totalLeaveDays);
+  const absentDays = Math.max(0, totalWorkingDays - presentDays - halfDays);
 
   const sundayHrs = sundays * shiftHrs;
   const paidLeaveHrs = 0;  // ← NO PAID LEAVES per company policy
@@ -245,14 +248,15 @@ async function enrichPayroll(p: any) {
     hourlyRate,            // E: Sl/Hr
     presentDays,           // F
     absentDays,            // G
-    workedHrs: totalBaseHours, // H: Worked Hrs (base, excludes OT)
-    additionalHrs: otHours,    // I: Additional hrs (OT)
-    totalHrs,             // J: Total Hrs
+    workedHrs: Math.round((totalBaseHours + otHours) * 100) / 100,  // H: Worked Hrs INCLUDING OT (base + OT)
+    additionalHrs: sundayHrs,   // I: Additional hrs = PAID Sunday hrs (sundays × shiftHrs)
+    totalHrs,             // J: Total Hrs including Sunday Hrs (= workedHrs_incl_OT + sundayHrs)
     grossSalary,           // K
     sdRefund: p.securityDeposit || 0,    // L: SD Refund
     salaryAdvance: p.advanceDeduction || 0, // M: Salary Advance
     netSalary,             // N
     otAmount: Math.round(otHours * hourlyRate * 100) / 100,
+    otHours,               // (kept for record — not shown in column I anymore)
     bonus: p.bonus || 0,
     deductions: p.totalDeductions || 0,
     status: p.status || 'generated',
@@ -285,7 +289,7 @@ function buildFirmSheet(
     // Row 4: Column headers
     [
       'S.No', 'Employee Name', 'Monthly Salary', 'Working Hrs', 'Sl/Hr',
-      'Present Days', 'Absent Days', 'Worked Hrs', 'Additional hrs', 'Total Hrs including Sunday Hrs',
+      'Present Days', 'Absent Days', 'Worked Hrs including OT', 'Additional hrs', 'Total Hrs including Sunday Hrs',
       'Gross Salary', 'SD Refund', 'Salary Advance', 'Net Salary',
     ],
   ];
