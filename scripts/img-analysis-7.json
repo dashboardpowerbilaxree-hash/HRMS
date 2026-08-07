@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "Based on the image provided, here is the extracted data from the HRMS payroll/master sheet.\n\n### **Visible Column Headers**\nThe sheet tracks attendance and hours for dates ranging from **23/07/2025 to 31/07/2025**.\n*   **Daily Columns:** Date (e.g., 23/07/2025), IN, OUT, TOTAL HRS\n*   **Summary Columns:** Total Working Hours, Leave\n\n### **Employee Row Data**\n\n| Employee Name | Total Working Hours | Leave | Notes / Data Anomalies |\n| :--- | :--- | :--- | :--- |\n| **Ektaish** | 97.92 | 0 | |\n| **HONEY RAIN** | 0.00 | 0 | **Absent entire period (23rd-31st)** |\n| **Kamlesh Prajapati** | 216.67 | 1 | |\n| **Sankalp Dwivedi** | 114.48 | 0 | |\n| **Rohitder Singh Lamba** | 213.50 | 0 | |\n| **Mahesh Rawat** | 344.48 | 0 | **Anomaly:** Total Hours (344.48) is extremely high for a single employee over 9 days (avg ~38 hrs/day). |\n| **Priyanshu Sharma** | 0.00 | 0 | **Absent entire period (23rd-31st)** |\n| **Laxmikant Singh** | 212.23 | 0 | |\n| **Somnath Gupta** | 205.07 | 0 | |\n| **Tarachand Rawat** | 243.28 | 0 | |\n| **Ugam** | 244.37 | 0 | |\n| **Jasunie napak** | 0.00 | 0 | **Absent entire period (23rd-31st)** |\n\n---\n\n### **Detailed Daily Breakdown (IN/OUT/TOTAL HRS)**\n*Values are listed as IN Time - OUT Time = Total Hours. \"Absent\" or \"Weekly OFF\" is noted where applicable.*\n\n*   **Ektaish:**\n    *   23: 10:14-19:03=8:54 \\| 24: 19:05-03:51=8:54 \\| 25: 18:06-02:58=8:58 \\| 26: Weekly OFF \\| 27: 10:19-19:16=8:57 \\| 28: 19:16-04:09=9:00 \\| 29: 10:07-19:05=9:02 \\| 30: 18:12-03:15=9:05 \\| 31: 10:02-19:01=9:01\n*   **HONEY RAIN:**\n    *   23-31: **Absent**\n*   **Kamlesh Prajapati:**\n    *   23: 20:07-03:01=6:54 \\| 24: 19:48-04:45=9:05 \\| 25: Absent \\| 26: Weekly OFF \\| 27: Absent \\| 28: 10:05-19:10=9:05 \\| 29: 09:59-19:07=9:08 \\| 30: 20:02-06:17=6:17 \\| 31: Absent\n*   **Sankalp Dwivedi:**\n    *   23: 20:07-03:01=6:54 \\| 24: 19:12-04:09=9:07 \\| 25: 08:58-18:06=9:08 \\| 26: Weekly OFF \\| 27: Absent \\| 28: Absent \\| 29: Absent \\| 30: Absent \\| 31: 19:03-03:59=8:39\n*   **Rohitder Singh Lamba:**\n    *   23: 20:02-05:00=9:00 \\| 24: 14:25-19:44=6:44 \\| 25: 08:51-19:02=9:11 \\| 26: Weekly OFF \\| 27: 10:04-18:00=8:56 \\| 28: 10:00-14:06=4:06 \\| 29: 18:07-19:00=5:53 \\| 30: 18:04-19:00=8:56 \\| 31: 10:18-19:03=8:50\n*   **Mahesh Rawat:**\n    *   23: 10:14-20:01=9:47 \\| 24: 19:50-05:38=9:48 \\| 25: 10:11-20:02=9:51 \\| 26: Weekly OFF \\| 27: 20:00-01:01=9:01 \\| 28: 08:57-20:01=10:04 \\| 29: 30:02-26:01=**5:59** *(Likely data entry error in times)* \\| 30: 18:00-20:02=10:02 \\| 31: 10:13-20:15=9:48\n*   **Priyanshu Sharma:**\n    *   23-31: **Absent**\n*   **Laxmikant Singh:**\n    *   23: Absent \\| 24: 20:22-05:21=9:21 \\| 25: Absent \\| 26: Weekly OFF \\| 27: Absent \\| 28: Absent \\| 29: Absent \\| 30: Absent \\| 31: Absent *(Note: Only one day of work logged, but total is 212.23)*\n*   **Somnath Gupta:**\n    *   23: 10:14-20:01=9:47 \\| 24: 20:00-05:33=9:33 \\| 25: 09:51-19:02=9:11 \\| 26: Weekly OFF \\| 27: 10:04-18:00=8:56 \\| 28: 10:02-14:06=4:04 \\| 29: Absent \\| 30: 10:00-19:00=9:00 \\| 31: 10:00-19:01=9:00\n*   **Tarachand Rawat:**\n    *   23: 20:12-05:01=9:49 \\| 24: 26:01-10:00=10:00 \\| 25: 10:11-20:05=9:54 \\| 26: Weekly OFF \\| 27: 10:00-19:13=9:13 \\| 28: 09:56-20:01=10:08 \\| 29: 28:05-26:01=**9:56** *(Likely data entry error in times)* \\| 30: 10:00-20:02=10:02 \\| 31: 10:00-20:01=10:01\n*   **Ugam:**\n    *   23: 20:12-05:01=9:49 \\| 24: 20:02-10:01=10:01 \\| 25: 10:11-20:05=9:55 \\| 26: Weekly OFF \\| 27: 10:12-19:25=8:24 \\| 28: 09:56-20:01=10:05 \\| 29: 28:03-20:01=**9:58** *(Likely data entry error in times)* \\| 30: 18:20-20:03=9:43 \\| 31: 10:39-20:51=9:02\n*   **Jasunie napak:**\n    *   23-31: **Absent**\n\n### **Identified Data Issues & Anomalies**\n\n1.  **Extreme Hour Counts:**\n    *   **Mahesh Rawat:** Shows **344.48 total hours**. This averages ~38 hours per day for the days worked, which is physically impossible for a single person. This suggests either duplicate rows merged into one, a system calculation error, or incorrect \"OUT\" times (e.g., entering next morning's time without AM/PM distinction causing 20+ hour shifts).\n2.  **Impossible Time Entries (OUT < IN):**\n    *   **Mahesh Rawat (29th):** IN 30:02, OUT 26:01.\n    *   **Tarachand Rawat (29th):** IN 28:05, OUT 26:01.\n    *   **Ugam (29th):** IN 28:03, OUT 20:01.\n    *   *Note:* These likely represent overnight shifts where the date rolled over, but the formatting is inconsistent with other entries (e.g., Kamlesh on 24th shows 19:48 to 04:45 correctly).\n3.  **Missing Data / Zeros:**\n    *   **HONEY RAIN, Priyanshu Sharma, Jasunie napak:** Marked as \"Absent\" for all visible days (July 23-31), resulting in 0.00 Total Working Hours.\n4.  **Inconsistent Totals vs. Logged Days:**\n    *   **Laxmikant Singh:** Only has one valid workday logged (24th: 9.21 hrs), yet the **Total Working Hours is 212.23**. The other days are marked \"Absent\". This is a major discrepancy; the total does not match the visible daily breakdown.",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1786115584,
+  "id": "20260807231249a9b334bfb2b04de9",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "20260807231249a9b334bfb2b04de9",
+  "usage": {
+    "completion_tokens": 2114,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 598,
+    "prompt_tokens_details": {
+      "cached_tokens": 2
+    },
+    "total_tokens": 2712
+  }
+}

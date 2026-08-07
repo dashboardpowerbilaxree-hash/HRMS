@@ -1,0 +1,28 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "Based on the image provided, here are the details you requested:\n\n**Title/Header of the Sheet:**\nThere is no explicit main title or header visible at the top of the data grid (e.g., \"Attendance Report\" or similar). The sheet appears to be a raw attendance timesheet without a formal document title.\n\n**File Name / Tab Name:**\nNo file name (e.g., `.xlsx`) or tab name is visible in the screenshot. The view shows only the spreadsheet grid area.\n\n**Date Range:**\nThe columns show dates from **July 23, 2025 to July 31, 2025** (specifically: **23/07/2025 through 31/07/2025**).\n\n**Source (Web Browser vs. Excel):**\nThis appears to be from a **web browser (HRMS application)** rather than a standard Excel file. This is indicated by:\n*   The visual styling (blue headers, specific font rendering)\n*   The presence of status labels like \"**Weekly OFF**\" and \"**Absent**\" in colored text within the cells\n*   The layout resembles a typical HR Management System (HRMS) dashboard/report export\n\n**EXACT Column Header Names Visible:**\nThe visible column headers (reading left to right) are:\n\n1.  *(First column - Employee Names)* — **No header text visible** (appears blank or cut off)\n2.  **23/07/2025** (with sub-headers: **IN**, **OUT**, **TOTAL HRS**)\n3.  **24/07/2025** (with sub-headers: **IN**, **OUT**, **TOTAL HRS**)\n4.  **25/07/2025** (with sub-headers: **IN**, **OUT**, **TOTAL HRS**)\n5.  **26/07/2025** (with sub-headers: **IN**, **OUT**, **TOTAL HRS**) — *Note: This date header and its sub-headers appear highlighted in yellow/gold*\n6.  **27/07/2025** (with sub-headers: **IN**, **OUT**, **TOTAL HRS**)\n7.  **28/07/2025** (with sub-headers: **IN**, **OUT**, **TOTAL HRS**)\n8.  **29/07/2025** (with sub-headers: **IN**, **OUT**, **TOTAL HRS**)\n9.  **30/07/2025** (with sub-headers: **IN**, **OUT**, **TOTAL HRS**)\n10. **31/07/2025** (with sub-headers: **IN**, **OUT**, **TOTAL HRS**)\n11. **Total Working Hours**\n12. **Leave**\n\n*(Note: There appear to be additional empty columns to the right of \"Leave\" that are partially visible but contain no headers.)*",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1786115662,
+  "id": "20260807231401ce91f2af4f604d87",
+  "model": "glm-5v-turbo",
+  "object": "chat.completion",
+  "request_id": "20260807231401ce91f2af4f604d87",
+  "usage": {
+    "completion_tokens": 604,
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "prompt_tokens": 603,
+    "prompt_tokens_details": {
+      "cached_tokens": 2
+    },
+    "total_tokens": 1207
+  }
+}
