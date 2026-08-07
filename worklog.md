@@ -498,3 +498,87 @@ Stage Summary:
 - When user selects "All Firms" in the dropdown, they get 5 sheets
   (LAPL, LRSL, SI, SDF, Summary). When a specific firm is selected,
   they get 2 sheets (that firm + Summary).
+
+---
+Task ID: fix-leaves-overlap-query
+Agent: Main Agent
+Task: Production Master Excel still showing 0 leaves for everyone in July. Payroll Summary format also not updated. Fix without data tampering.
+
+ROOT CAUSE FOUND
+================
+Discovered a THIRD bug (beyond the two previous fixes):
+
+The leave database query in 6 API routes used:
+  startDate: { gte: startOfMonth }, endDate: { lt: endOfMonth }
+
+This MISSED leaves that span month boundaries. Example:
+- Production has a leave for EMP-021 from June 27 to July 1 (5 days)
+- The July query required leave.startDate >= July 1
+- But this leave's startDate is June 27 (< July 1)
+- So the leave was EXCLUDED from July entirely
+- Result: July Master Excel showed 0 leaves for EMP-021
+
+This is why production showed 0 leaves for everyone — the only July
+leave was a month-spanning one that the query missed.
+
+THE FIX
+=======
+Changed the leave query in all 6 affected routes to an OVERLAP query:
+  startDate: { lt: endOfMonth }, endDate: { gte: startOfMonth }
+
+This catches any leave that overlaps the target month, including
+leaves starting in the previous month or ending in the next month.
+
+Files fixed (commit 7f4a01e):
+- src/app/api/attendance/export-master/route.ts (Master Excel)
+- src/app/api/attendance/export-monthly/route.ts
+- src/app/api/attendance/monthly-summary/route.ts (Attendance Tracker UI)
+- src/app/api/payroll/route.ts
+- src/app/api/payroll/generate-all/route.ts
+- src/app/api/payroll/summary-export/route.ts (Payroll Summary)
+- src/app/api/external/salary-slip/route.ts
+
+VERIFICATION
+============
+Tested locally by adding a test leave for EMP-021 spanning June 27 to
+July 1 (simulating production data), then generating July Master Excel:
+- BEFORE fix: Leave = 0 for EMP-021 (wrong — July 1 was a leave day)
+- AFTER fix: Leave = 1 for EMP-021 (correct — only July 1 counted)
+
+Test leave was deleted after verification. NO production data was
+touched.
+
+PAYROLL SUMMARY FORMAT
+======================
+Also confirmed the Payroll Summary per-firm format (commit f14a1b4)
+is working locally:
+- Generates separate sheets for LAPL, LRSL, SI, SDF + Summary
+- Each sheet's title shows the company's FULL NAME (not "LAXREE GROUP")
+- 14 columns matching the user's template exactly
+- TOTAL row with SUM formulas
+
+DEPLOYMENT BLOCKED
+==================
+All 3 fixes are committed locally:
+- 63eafdb: Master Excel — count leave when attendance is 'absent'
+- f14a1b4: Payroll Summary — per-firm sheets with company names
+- 7f4a01e: Leave query — overlap fix for month-spanning leaves
+
+CANNOT deploy because:
+- GitHub PAT in remote URL returns 401 "Bad credentials" (expired)
+- No Vercel token available for direct deploy
+- vercel login requires interactive authentication
+
+User MUST provide one of:
+1. A new GitHub PAT (Settings → Developer settings → Personal access
+   tokens → Fine-grained → Repository: HRMS → Contents: Read and write)
+   Then run:
+   git remote set-url origin https://dashboardpowerbilaxree-hash:<NEW_PAT>@github.com/dashboardpowerbilaxree-hash/HRMS.git
+   git push origin main
+2. A Vercel token (vercel.com/account/tokens) for direct deploy:
+   vercel --token <VERCEL_TOKEN> --prod --yes
+
+Stage Summary:
+- All 3 leave-related bugs fixed locally and committed.
+- Payroll Summary per-firm format also committed.
+- Deployment blocked by expired credentials — user action required.
