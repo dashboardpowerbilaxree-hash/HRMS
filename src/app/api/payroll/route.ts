@@ -26,6 +26,10 @@ export async function GET(request: NextRequest) {
       where.employeeId = { in: emps.map(e => e.employeeId) };
     }
 
+    // ── Performance: Single payroll query with all needed employee fields ──
+    // Previously this query was followed by a per-payroll db.employee.findUnique
+    // call inside the map (N+1 query pattern). Now we include shiftHours and
+    // relievingDate directly in the employee select, eliminating N queries.
     const payrolls = await db.payroll.findMany({
       where,
       include: {
@@ -39,22 +43,78 @@ export async function GET(request: NextRequest) {
             location: true,
             salaryType: true,
             hourlyRate: true,
+            shiftHours: true,       // <-- added (was fetched separately per row)
+            relievingDate: true,    // <-- added (was fetched separately per row)
+            shiftStart: true,       // <-- added (needed for half-day recompute)
+            shiftEnd: true,         // <-- added (needed for half-day recompute)
           },
         },
       },
       orderBy: { employeeId: 'asc' },
     });
 
-    // Enrich with computed fields — ALWAYS recalculate dynamically for consistency
-    // This ensures Late/Early-Out deductions and hourly rate are always correct
-    const enrichedPayrolls = await Promise.all(payrolls.map(async (p) => {
-      const daysInMonth = new Date(p.year, p.month, 0).getDate();
+    // ── Performance: Batch-fetch ALL attendance, leaves, and holidays ONCE ──
+    // Previously each payroll row triggered separate attendance/leave/holiday
+    // queries (4 queries × N employees = 4N queries). Now we fetch everything
+    // for the whole month in 3 queries and filter in memory.
+    const startDate = new Date(year, month - 1, 1);
+    const endDate = new Date(year, month, 1);
+    const daysInMonth = new Date(year, month, 0).getDate();
 
-      // Fetch employee for shift hours AND relievingDate
-      const emp = await db.employee.findUnique({
-        where: { employeeId: p.employeeId },
-        select: { shiftHours: true, relievingDate: true },
-      });
+    const payrollEmployeeIds = payrolls.map(p => p.employeeId);
+
+    const [allAttendance, allLeaves, allHolidays] = await Promise.all([
+      // All attendance for these employees in this month
+      db.attendance.findMany({
+        where: {
+          employeeId: { in: payrollEmployeeIds },
+          date: { gte: startDate, lt: endDate },
+        },
+      }),
+      // All approved leaves for these employees in this month
+      db.leave.findMany({
+        where: {
+          employeeId: { in: payrollEmployeeIds },
+          status: 'approved',
+          startDate: { gte: startDate },
+          endDate: { lt: endDate },
+        },
+      }),
+      // All holidays in this month (same for all employees)
+      db.holiday.findMany({
+        where: { date: { gte: startDate, lt: endDate } },
+      }),
+    ]);
+
+    // Group attendance by employeeId for fast lookup
+    const attendanceByEmp = new Map<string, typeof allAttendance>();
+    for (const a of allAttendance) {
+      if (!attendanceByEmp.has(a.employeeId)) {
+        attendanceByEmp.set(a.employeeId, []);
+      }
+      attendanceByEmp.get(a.employeeId)!.push(a);
+    }
+
+    // Group leaves by employeeId for fast lookup
+    const leavesByEmp = new Map<string, typeof allLeaves>();
+    for (const l of allLeaves) {
+      if (!leavesByEmp.has(l.employeeId)) {
+        leavesByEmp.set(l.employeeId, []);
+      }
+      leavesByEmp.get(l.employeeId)!.push(l);
+    }
+
+    // Holiday date strings (same for all employees)
+    const holidayDateStrs = new Set(
+      allHolidays.map(h => {
+        const hd = new Date(h.date);
+        return `${hd.getFullYear()}-${String(hd.getMonth() + 1).padStart(2, '0')}-${String(hd.getDate()).padStart(2, '0')}`;
+      })
+    );
+
+    // Enrich with computed fields — uses pre-fetched data (NO per-row DB calls)
+    const enrichedPayrolls = payrolls.map((p) => {
+      const emp = p.employee;
       const shiftHrs = emp?.shiftHours || 9;
 
       // ── Cutoff day: caps all calculations at today (current month) or relievingDate ──
@@ -70,18 +130,11 @@ export async function GET(request: NextRequest) {
       const sundayEarnings = hourlyRate * sundayHrs;
       const earnedSundayHrs = sundayHrs;
 
-      // ─── Recalculate base salary from attendance (HOUR-BASED, matching Excel) ───
-      const startDate = new Date(p.year, p.month - 1, 1);
-      const endDate = new Date(p.year, p.month, 1);
+      // ── Use pre-fetched attendance for this employee (no DB call) ──
+      const attendance = attendanceByEmp.get(p.employeeId) || [];
 
-      const attendance = await db.attendance.findMany({
-        where: { employeeId: p.employeeId, date: { gte: startDate, lt: endDate } },
-      });
-
-      // Get holidays
-      const holidays = await db.holiday.findMany({ where: { date: { gte: startDate, lt: endDate } } });
       // Only count holidays that fall on/before the cutoff day
-      const elapsedHolidays = countHolidaysUpTo(holidays, cutoffDay);
+      const elapsedHolidays = countHolidaysUpTo(allHolidays, cutoffDay);
       const holidayDays = elapsedHolidays;
       // Working days = cutoffDay - sundays - elapsedHolidays (caps future days)
       const totalWorkingDays = Math.max(0, cutoffDay - sundays - elapsedHolidays);
@@ -112,16 +165,8 @@ export async function GET(request: NextRequest) {
       }
       effectivePresentDays = Math.round(effectivePresentDays * 100) / 100;
 
-      // Get paid leaves
-      const leaves = await db.leave.findMany({
-        where: { employeeId: p.employeeId, status: 'approved', startDate: { gte: startDate }, endDate: { lt: endDate } },
-      });
-      const holidayDateStrs = new Set(
-        holidays.map(h => {
-          const hd = new Date(h.date);
-          return `${hd.getFullYear()}-${String(hd.getMonth() + 1).padStart(2, '0')}-${String(hd.getDate()).padStart(2, '0')}`;
-        })
-      );
+      // ── Use pre-fetched leaves for this employee (no DB call) ──
+      const leaves = leavesByEmp.get(p.employeeId) || [];
       const presentDateStrs = new Set();
       for (const a of effectiveAttendance) {
         if (['present', 'late', 'early-out', 'half-day', 'half_day'].includes(a.status)) {
@@ -189,7 +234,7 @@ export async function GET(request: NextRequest) {
         totalBaseHours: Math.round(totalBaseHours * 100) / 100,
         totalHrs: Math.round(totalHrs * 100) / 100,
       };
-    }));
+    });
 
     return NextResponse.json(enrichedPayrolls);
   } catch (error: any) {

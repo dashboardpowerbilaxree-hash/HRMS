@@ -224,14 +224,29 @@ export default function Home() {
   const { currentPage, sidebarOpen, isLoggedIn } = useHRMSStore();
   const [seeded, setSeeded] = useState(false);
 
+  // ── Performance: Only seed ONCE per browser session ──
+  // Previously this ran on every page mount, causing 2 extra API calls
+  // (including 4 upserts in /api/firms/seed) every time the user navigated
+  // back to the app. Now we use sessionStorage to skip re-seeding within
+  // the same browser session. The /api/seed endpoint already short-circuits
+  // if an admin exists, but /api/firms/seed always does 4 upserts — this
+  // change eliminates that waste.
   const seedDB = useCallback(async () => {
     if (seeded) return;
+    // Skip if already seeded in this browser session
+    if (typeof window !== 'undefined' && sessionStorage.getItem('hrms-seeded') === '1') {
+      setSeeded(true);
+      return;
+    }
     try {
       await fetch('/api/seed', { method: 'POST' });
     } catch {}
     try {
       await fetch('/api/firms/seed', { method: 'POST' });
     } catch {}
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('hrms-seeded', '1');
+    }
     setSeeded(true);
   }, [seeded]);
 

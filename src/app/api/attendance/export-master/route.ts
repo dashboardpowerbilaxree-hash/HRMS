@@ -190,7 +190,7 @@ export async function GET(request: NextRequest) {
       // This ensures Total Working Hours & Leave are correct
       // regardless of which section they appear in
       // ═══════════════════════════════════════════════════════════
-      const empTotals = new Map<string, { totalWorkHrs: number; absentDays: number; presentDays: number }>();
+      const empTotals = new Map<string, { totalWorkHrs: number; absentDays: number; presentDays: number; leaveDays: number }>();
 
       for (const emp of employees) {
         const empAttendance = attendanceByEmp.get(emp.employeeId);
@@ -198,6 +198,7 @@ export async function GET(request: NextRequest) {
         let totalWorkHrs = 0;
         let absentDays = 0;
         let presentDays = 0;
+        let leaveDays = 0;
 
         // ── Per-employee cutoff: respect relieving date (Bug #1 fix) ──
         const empCutoffDay = getEffectiveCutoffDay(year, month, daysInMonth, emp.relievingDate);
@@ -245,7 +246,10 @@ export async function GET(request: NextRequest) {
               }
               // Holiday without checkIn doesn't count as absent
             } else if (correctedStatus === 'half-day' || correctedStatus === 'half_day') {
-              // Genuinely a half-day (worked < half the actual shift)
+              // Genuinely a half-day (worked < half the actual shift).
+              // IMPORTANT: A half-day is NOT a leave. It counts as 0.5 present day
+              // and 0.5 absent day, but NOT as a leave. Only full-day leaves
+              // (from the Leave table) are counted in the Leave column.
               totalWorkHrs += rec.totalHours;
               presentDays += 0.5;
               absentDays += 0.5;
@@ -258,14 +262,18 @@ export async function GET(request: NextRequest) {
             // No record — check if it's a leave day before counting as absent
             const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
             const isLeaveDay = empLeaveDays.has(dateStr) && !presentDateStrs.has(dateStr);
-            if (!isSunday && !isHoliday && !isLeaveDay) {
+            if (isSunday || isHoliday) {
+              // Sundays / holidays without record = NOT absent, NOT leave
+            } else if (isLeaveDay) {
+              // Full-day leave (from Leave table) — count ONLY these as leave
+              leaveDays++;
+            } else {
               absentDays++;
             }
-            // Sundays / holidays / leave days without record = NOT absent
           }
         }
 
-        empTotals.set(emp.employeeId, { totalWorkHrs, absentDays, presentDays });
+        empTotals.set(emp.employeeId, { totalWorkHrs, absentDays, presentDays, leaveDays });
       }
 
       // ═══════════════════════════════════════════════════════════
@@ -444,7 +452,9 @@ export async function GET(request: NextRequest) {
               // Was: formatHours(202.43) → "202:26" (wrong time conversion).
               empRow.push(displayDecimalAsColon(totals?.totalWorkHrs || 0));
             } else if (extraCol === 'Leave') {
-              empRow.push(Math.round(totals?.absentDays || 0));
+              // Only count FULL-DAY leaves (from Leave table) as Leave.
+              // Half-days are NOT leaves — they are 0.5 present + 0.5 absent.
+              empRow.push(totals?.leaveDays || 0);
             } else {
               empRow.push('');
             }
