@@ -233,7 +233,8 @@ for firm in firms:
 
     r = 5
     for idx, emp in enumerate(firm_emps, 1):
-        # All values: H, I, L, M as numeric hours; J=G (OT rate = Sl/Hr); K=I*J; N=H+I+L+M; O=N*G; T=SUM(P:S); W=O-T+V
+        # All values: H, I, L, M as numeric hours; J=G (OT rate = Sl/Hr); K=I*J; N=H+L+M (WorkedHrs incl OT + Sunday + PH); O=N*G; T=SUM(P:S); W=O-T+V
+        # NOTE: Total Hrs = H+L+M (NOT +I). H already includes OT, so adding I separately would double-count OT.
         vals = [
             idx,                                                        # A: S.No
             emp['employeeId'],                                          # B: Emp Code
@@ -280,7 +281,7 @@ for firm in firms:
         ws.cell(r, 10).number_format = '0.00'
         ws.cell(r, 11).value = f"=I{r}*J{r}"                  # K: OT Amount
         ws.cell(r, 11).number_format = '0.00'
-        ws.cell(r, 14).value = f"=H{r}+I{r}+L{r}+M{r}"        # N: Total Hrs
+        ws.cell(r, 14).value = f"=H{r}+L{r}+M{r}"          # N: Total Hrs (WorkedHrs incl OT + Sunday + PH — NO separate OT, H already has it)
         ws.cell(r, 14).number_format = '0.00'
         ws.cell(r, 15).value = f"=N{r}*G{r}"                  # O: Gross Salary
         ws.cell(r, 15).number_format = '#,##0.00'
