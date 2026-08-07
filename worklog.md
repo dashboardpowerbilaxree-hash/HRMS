@@ -419,3 +419,82 @@ Stage Summary:
   half-days (NOT counted as leaves, just 0.5 present + 0.5 absent),
   genuine absents (counted as absent, not leave).
 - Cannot deploy without a valid GitHub PAT — token in remote URL is expired.
+
+---
+Task ID: payroll-summary-per-firm-template
+Agent: Main Agent
+Task: Payroll Summary format must match the user's shared template. Each company (LAPL, LRSL, SI, SDF) should have separate sheet in ONE Excel file. Replace 'LAXREE GROUP OF COMPANIES' with the actual company name on each sheet.
+
+Work Log:
+
+TEMPLATE ANALYSIS
+=================
+Examined the user's uploaded template
+(Payroll_Summary_July_2026_LAXREE GROUP OF COMPANIES.xlsx):
+- Sheet 1 "Payroll Register": 14 columns (A..N), 1 title row + 1
+  subtitle row + 1 meta row + 1 header row + N data rows + 1 TOTAL row
+- Sheet 2 "Summary": 2-column aggregate (Category | Amount, Metric | Value)
+- Column headers: S.No, Employee Name, Monthly Salary, Working Hrs,
+  Sl/Hr, Present Days, Absent Days, Worked Hrs, Additional hrs,
+  Total Hrs, Gross Salary, SD Refund, Salary Advance, Net Salary
+
+CHANGES (src/app/api/payroll/summary-export/route.ts)
+====================================================
+1. Refactored into per-firm sheet generator (buildFirmSheet function).
+   Each firm sheet:
+   - Row 1: COMPANY FULL NAME (Calibri 18 bold, gold on dark)
+   - Row 2: "Payroll Register — <Month> <Year>"
+   - Row 3: meta row (Generated, Total Employees, Total Net Payroll)
+   - Row 4: 14 column headers (matches template exactly)
+   - Row 5+: per-employee data (cream/white alternating)
+   - Last row: TOTAL with SUM formulas
+
+2. Per-firm routing:
+   - firm=ALL → LAPL + LRSL + SI + SDF + Summary (5 sheets)
+   - firm=LAPL → LAPL + Summary (2 sheets)
+   - Empty firms are skipped (no empty sheet)
+
+3. Firm → full name mapping:
+   - LAPL → 'LAXREE AMENITIES PVT LTD'
+   - LRSL → 'LAXREE ROOFING SOLUTION'
+   - SI   → 'SMARTH INTERNATIONAL'
+   - SDF  → 'SANGRAH DECOR & FURNITURE'
+
+4. Column mapping:
+   - D: Working Hrs = daysInMonth × shiftHours (capacity)
+   - E: Sl/Hr = monthlySalary / Working Hrs
+   - H: Worked Hrs = totalBaseHours (excludes OT)
+   - I: Additional hrs = OT hours
+   - J: Total Hrs = Worked + Sunday + Paid Leave + OT
+   - L: SD Refund = payroll.securityDeposit
+   - M: Salary Advance = payroll.advanceDeduction
+
+5. TOTAL row uses Excel SUM formulas (=SUM(C5:C15)) matching template.
+
+6. Filename includes firm suffix:
+   - firm=ALL  → Payroll_Summary_<Month>_<Year>_ALL.xlsx
+   - firm=LAPL → Payroll_Summary_<Month>_<Year>_LAPL.xlsx
+
+VERIFICATION
+============
+- Tested locally with dev server (June 2026 data, 35 payrolls).
+- Generated file has 5 sheets: LAPL, LRSL, SI, SDF, Summary
+- Column headers match template 14/14 (verified by comparing row 4
+  cell-by-cell)
+- A1 of each firm sheet shows correct company full name (NOT
+  'LAXREE GROUP OF COMPANIES')
+- TOTAL row has SUM formulas (e.g., =SUM(C5:C15), =SUM(N5:N15))
+- Sample file saved at: /home/z/my-project/download/Payroll_Summary_June_2026_ALL.xlsx
+
+NO data was modified, deleted, or tampered with. Only display/export
+logic changed. Payroll route (payroll/route.ts) is untouched.
+
+Commit: f14a1b4 (local only — same PAT expiration issue as before)
+
+Stage Summary:
+- Payroll Summary export now generates ONE Excel with separate sheet
+  per firm, exactly matching the user's template format.
+- Each sheet's title shows that firm's full company name.
+- When user selects "All Firms" in the dropdown, they get 5 sheets
+  (LAPL, LRSL, SI, SDF, Summary). When a specific firm is selected,
+  they get 2 sheets (that firm + Summary).
