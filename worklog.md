@@ -582,3 +582,27 @@ Stage Summary:
 - All 3 leave-related bugs fixed locally and committed.
 - Payroll Summary per-firm format also committed.
 - Deployment blocked by expired credentials — user action required.
+
+---
+Task ID: deploy-vercel
+Agent: main
+Task: Deploy both fixes (leave calculation + payroll summary format) to Vercel production using Vercel CLI token
+
+Work Log:
+- User provided Vercel CLI token (vcp_...) as alternative to expired GitHub PAT
+- Verified token works with Vercel API (project: laxree-hrms, team: team_DkqpH02gdxgdj4Q4eWYJ0dN7)
+- Confirmed both fixes are in local commits:
+  * 7f4a01e - leave calculation fix (full-day leave counted, half-day NOT)
+  * f14a1b4 - payroll summary per-firm sheets matching template
+- Created .vercel/project.json linking local repo to Vercel project
+- Ran: vercel deploy --prod --yes --token <TOKEN>
+- Build completed successfully (59s), deployed to production
+- Verified via Vercel API: deployment f8968f2 is READY and aliased to hrms.laxree.com
+- Verified site responds with HTTP 200
+
+Stage Summary:
+- Production URL: https://hrms.laxree.com (HTTP 200)
+- Deployment URL: https://laxree-hrms-55pa2ebln-laxree.vercel.app
+- Deployed commit: f8968f2 (contains both fixes)
+- Both fixes are now LIVE in production
+- User can now test: July Master Excel download + Payroll Summary export
