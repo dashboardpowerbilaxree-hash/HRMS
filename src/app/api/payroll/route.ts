@@ -176,7 +176,7 @@ export async function GET(request: NextRequest) {
       }
       let effectivePaidLeaves = 0;
       let effectiveUnpaidLeaves = 0;
-      const cutoffDate = new Date(p.year, p.month - 1, cutoffDay);
+      const cutoffDate = new Date(p.year, p.month - 1, cutoffDay, 23, 59, 59);
       for (const leave of leaves) {
         const isUnpaid = leave.type === 'unpaid' || leave.type === 'UL' || leave.type === 'LOP';
         let d = new Date(leave.startDate);
@@ -184,25 +184,31 @@ export async function GET(request: NextRequest) {
         // Cap leave iteration at cutoff day — don't count future leave days
         const effectiveEnd = end > cutoffDate ? cutoffDate : end;
         while (d <= effectiveEnd) {
-          const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-          const isSunday = d.getDay() === 0;
-          const isHoliday = holidayDateStrs.has(dateStr);
-          if (!isSunday && !isHoliday && !presentDateStrs.has(dateStr)) {
-            if (isUnpaid) effectiveUnpaidLeaves++;
-            else effectivePaidLeaves++;
+          // ═══ BUG FIX ═══
+          // Only count leave days that fall WITHIN the current payroll month/year.
+          if (d.getFullYear() === p.year && d.getMonth() + 1 === p.month) {
+            const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            const isSunday = d.getDay() === 0;
+            const isHoliday = holidayDateStrs.has(dateStr);
+            if (!isSunday && !isHoliday && !presentDateStrs.has(dateStr)) {
+              if (isUnpaid) effectiveUnpaidLeaves++;
+              else effectivePaidLeaves++;
+            }
           }
           d.setDate(d.getDate() + 1);
         }
       }
 
-      const absentDays = Math.max(0, totalWorkingDays - presentDays - halfDays - effectivePaidLeaves - effectiveUnpaidLeaves);
+      // ═══ COMPANY POLICY: NO PAID LEAVES ═══
+      const totalLeaveDays = effectivePaidLeaves + effectiveUnpaidLeaves;
+      const absentDays = Math.max(0, totalWorkingDays - presentDays - halfDays - totalLeaveDays);
 
       // Recalculate OT from stored values (use cutoff-filtered attendance)
       const otHours = Math.round(effectiveAttendance.filter(a => ['present', 'late', 'half-day', 'half_day', 'early-out'].includes(a.status)).reduce((sum, a) => sum + (a.overtimeHours || 0), 0) * 100) / 100;
       const otAmount = otHours * hourlyRate;
 
-      // HOUR-BASED salary: Total Hrs = baseHrs + sundayHrs + otHrs + paidLeaveHrs
-      const paidLeaveHrs = effectivePaidLeaves * shiftHrs;
+      // HOUR-BASED salary: Total Hrs = baseHrs + sundayHrs + otHrs (NO paid leaves)
+      const paidLeaveHrs = 0;  // ← NO PAID LEAVES per company policy
       const totalHrs = totalBaseHours + sundayHrs + otHours + paidLeaveHrs;
       const baseSalary = hourlyRate * totalBaseHours;
       const grossSalary = hourlyRate * totalHrs;
@@ -228,7 +234,7 @@ export async function GET(request: NextRequest) {
         absentDays,
         halfDays,
         holidayDays,
-        paidLeaves: effectivePaidLeaves,
+        paidLeaves: totalLeaveDays,  // total leave count (all unpaid, for display)
         totalWorkingDays,
         effectivePresentDays,
         totalBaseHours: Math.round(totalBaseHours * 100) / 100,
@@ -347,7 +353,7 @@ export async function POST(request: NextRequest) {
 
     let effectivePaidLeaves = 0;
     let effectiveUnpaidLeaves = 0;
-    const cutoffDate = new Date(year, month - 1, cutoffDay);
+    const cutoffDate = new Date(year, month - 1, cutoffDay, 23, 59, 59);
     for (const leave of leaves) {
       const isUnpaid = leave.type === 'unpaid' || leave.type === 'UL' || leave.type === 'LOP';
       let d = new Date(leave.startDate);
@@ -355,24 +361,30 @@ export async function POST(request: NextRequest) {
       // Cap leave iteration at cutoff day — don't count future leave days
       const effectiveEnd = end > cutoffDate ? cutoffDate : end;
       while (d <= effectiveEnd) {
-        const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-        const isSunday = d.getDay() === 0;
-        const isHoliday = holidayDateStrs.has(dateStr);
-        if (!isSunday && !isHoliday && !presentDateStrs.has(dateStr)) {
-          if (isUnpaid) effectiveUnpaidLeaves++;
-          else effectivePaidLeaves++;
+        // ═══ BUG FIX ═══
+        // Only count leave days that fall WITHIN the current payroll month/year.
+        if (d.getFullYear() === year && d.getMonth() + 1 === month) {
+          const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+          const isSunday = d.getDay() === 0;
+          const isHoliday = holidayDateStrs.has(dateStr);
+          if (!isSunday && !isHoliday && !presentDateStrs.has(dateStr)) {
+            if (isUnpaid) effectiveUnpaidLeaves++;
+            else effectivePaidLeaves++;
+          }
         }
         d.setDate(d.getDate() + 1);
       }
     }
 
-    const absentDays = Math.max(0, totalWorkingDays - presentDays - halfDays - effectivePaidLeaves - effectiveUnpaidLeaves);
+    // ═══ COMPANY POLICY: NO PAID LEAVES ═══
+    const totalLeaveDays = effectivePaidLeaves + effectiveUnpaidLeaves;
+    const absentDays = Math.max(0, totalWorkingDays - presentDays - halfDays - totalLeaveDays);
 
     // ─── HOUR-BASED SALARY CALCULATION (matching Excel) ───
-    // Total Hrs = baseHrs + sundayHrs + otHrs + paidLeaveHrs
+    // Total Hrs = baseHrs + sundayHrs + otHrs (NO paid leaves — company policy)
     const sundayCount = sundays;
     const sundayHrs = sundayCount * employee.shiftHours;
-    const paidLeaveHrs = effectivePaidLeaves * employee.shiftHours;
+    const paidLeaveHrs = 0;  // ← NO PAID LEAVES per company policy
     const totalHrs = totalBaseHours + sundayHrs + otHoursDecimal + paidLeaveHrs;
     const baseSalary = hourlyRate * totalBaseHours;
     const sundayEarnings = hourlyRate * sundayHrs;
@@ -419,7 +431,7 @@ export async function POST(request: NextRequest) {
       presentDays: presentDays,
       absentDays,
       holidayDays,
-      paidLeaves: effectivePaidLeaves,
+      paidLeaves: totalLeaveDays,  // total leave count (all unpaid, for display)
       grossSalary: Math.round(grossSalary * 100) / 100,
       tdsDeduction,
       loanDeduction,
@@ -435,7 +447,7 @@ export async function POST(request: NextRequest) {
     };
 
     const existing = await db.payroll.findFirst({ where: { employeeId, month, year } });
-    const earnedDays = effectivePresentDays + effectivePaidLeaves;
+    const earnedDays = effectivePresentDays;  // NO paid leaves
     if (existing) {
       const updated = await db.payroll.update({
         where: { id: existing.id },

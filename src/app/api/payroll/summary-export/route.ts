@@ -285,7 +285,7 @@ function buildFirmSheet(
     // Row 4: Column headers
     [
       'S.No', 'Employee Name', 'Monthly Salary', 'Working Hrs', 'Sl/Hr',
-      'Present Days', 'Absent Days', 'Worked Hrs', 'Additional hrs', 'Total Hrs',
+      'Present Days', 'Absent Days', 'Worked Hrs', 'Additional hrs', 'Total Hrs including Sunday Hrs',
       'Gross Salary', 'SD Refund', 'Salary Advance', 'Net Salary',
     ],
   ];
@@ -451,7 +451,7 @@ function buildFirmSheet(
     { wch: 12 },  // G: Absent Days
     { wch: 11 },  // H: Worked Hrs
     { wch: 13 },  // I: Additional hrs
-    { wch: 11 },  // J: Total Hrs
+    { wch: 18 },  // J: Total Hrs including Sunday Hrs (wider for longer label)
     { wch: 14 },  // K: Gross Salary
     { wch: 11 },  // L: SD Refund
     { wch: 14 },  // M: Salary Advance

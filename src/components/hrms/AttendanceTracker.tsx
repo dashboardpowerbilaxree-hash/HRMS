@@ -1195,7 +1195,7 @@ export function AttendanceTracker() {
                           <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider border-r border-emerald-600/30">Total Hrs Worked</th>
                           <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider border-r border-emerald-600/30">OT Hrs</th>
                           <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider border-r border-emerald-600/30">Sunday Hrs</th>
-                          <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider">Total Hrs (incl. Sunday)</th>
+                          <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider">Total Hrs including Sunday Hrs</th>
                         </tr>
                       </thead>
                       <tbody>
