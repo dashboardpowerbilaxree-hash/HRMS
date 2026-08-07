@@ -72,9 +72,12 @@ export async function GET(request: NextRequest) {
       orderBy: { date: 'asc' },
     });
 
-    // Get approved leaves
+    // Get approved leaves — use OVERLAP query so leaves spanning month
+    // boundaries (e.g., June 27 to July 1) are correctly included in both
+    // months. The previous query (startDate >= startOfMonth AND endDate <
+    // endOfMonth) missed leaves that cross month boundaries.
     const leaves = await db.leave.findMany({
-      where: { employeeId, status: 'approved', startDate: { gte: startDate }, endDate: { lt: endDate } },
+      where: { employeeId, status: 'approved', startDate: { lt: endDate }, endDate: { gte: startDate } },
     });
     const leaveDays = leaves.reduce((sum, l) => sum + l.days, 0);
 

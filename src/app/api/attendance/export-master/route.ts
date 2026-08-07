@@ -144,8 +144,13 @@ export async function GET(request: NextRequest) {
           where: {
             employeeId: { in: employees.map(e => e.employeeId) },
             status: 'approved',
-            startDate: { gte: startDate },
-            endDate: { lt: endDate },
+            // Use OVERLAP query: a leave overlaps the month if
+            // leave.startDate < endOfMonth AND leave.endDate >= startOfMonth.
+            // The previous query (startDate >= startOfMonth AND endDate < endOfMonth)
+            // MISSED leaves that span month boundaries (e.g., June 27 to July 1
+            // was excluded from July because leave.startDate < July 1).
+            startDate: { lt: endDate },
+            endDate: { gte: startDate },
           },
         }),
       ]);

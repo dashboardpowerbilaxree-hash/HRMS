@@ -172,9 +172,10 @@ async function enrichPayroll(p: any) {
       .reduce((sum, a) => sum + (a.overtimeHours || 0), 0) * 100
   ) / 100;
 
-  // Leaves
+  // Leaves — use OVERLAP query so leaves spanning month boundaries
+  // (e.g., June 27 to July 1) are correctly included in both months.
   const leaves = await db.leave.findMany({
-    where: { employeeId: p.employeeId, status: 'approved', startDate: { gte: startDate }, endDate: { lt: endDate } },
+    where: { employeeId: p.employeeId, status: 'approved', startDate: { lt: endDate }, endDate: { gte: startDate } },
   });
 
   const holidayDateStrs = new Set(

@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
         const presentDays = rawPresentDays;
 
         const leaves = await db.leave.findMany({
-          where: { employeeId: emp.employeeId, status: 'approved', startDate: { gte: startDate }, endDate: { lt: endDate } },
+          where: { employeeId: emp.employeeId, status: 'approved', startDate: { lt: endDate }, endDate: { gte: startDate } },
         });
 
         // Build sets for effective leave calculation

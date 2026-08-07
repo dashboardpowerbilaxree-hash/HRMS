@@ -328,7 +328,7 @@ export async function POST(request: NextRequest) {
 
     // Approved leaves
     const leaves = await db.leave.findMany({
-      where: { employeeId, status: 'approved', startDate: { gte: startDate }, endDate: { lt: endDate } },
+      where: { employeeId, status: 'approved', startDate: { lt: endDate }, endDate: { gte: startDate } },
     });
 
     const holidayDateStrs = new Set(

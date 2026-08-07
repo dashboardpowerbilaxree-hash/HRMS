@@ -181,7 +181,7 @@ export async function GET(request: NextRequest) {
     });
 
     const leaves = await db.leave.findMany({
-      where: { employeeId, status: 'approved', startDate: { gte: startDate }, endDate: { lt: endDate } },
+      where: { employeeId, status: 'approved', startDate: { lt: endDate }, endDate: { gte: startDate } },
     });
 
     const holidays = await db.holiday.findMany({ where: { date: { gte: startDate, lt: endDate } } });
