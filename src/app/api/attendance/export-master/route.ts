@@ -479,9 +479,12 @@ export async function GET(request: NextRequest) {
               // Was: formatHours(202.43) → "202:26" (wrong time conversion).
               empRow.push(displayDecimalAsColon(totals?.totalWorkHrs || 0));
             } else if (extraCol === 'Leave') {
-              // Only count FULL-DAY leaves (from Leave table) as Leave.
-              // Half-days are NOT leaves — they are 0.5 present + 0.5 absent.
-              empRow.push(totals?.leaveDays || 0);
+              // Show TOTAL non-working days = absentDays + leaveDays.
+              // Per user expectation: an employee with 3 raw absents (whether
+              // or not some have approved Leave records) should show Leave=3.
+              // Half-days contribute 0.5 each via absentDays (already counted).
+              const totalLeave = (totals?.absentDays || 0) + (totals?.leaveDays || 0);
+              empRow.push(totalLeave);
             } else {
               empRow.push('');
             }
