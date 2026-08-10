@@ -958,3 +958,40 @@ Stage Summary:
   * Payroll_Master_July_2026.xlsx (Master + 4 firm sheets, Kamlesh Leave=3)
   * Attendance_Tracker_Monthly_July_2026.xlsx (4 firm daily grids)
   * FINAL_Verification_Report_July_2026.xlsx (comprehensive verification report)
+
+---
+Task ID: 9
+Agent: main-agent
+Task: Fix Mukul & Ashish Bhatnagar payslip showing wrong salary — verify all 42 employees, deploy fix, no data loss.
+
+Work Log:
+- Pulled live Employee salaries from production API /api/employees?status=Yes (42 employees)
+- Pulled live Payroll records from production API /api/payroll?month=8&year=2026 (42 records)
+- Found root cause: Payroll records were generated on Aug 6, 2026 with OLD salaries.
+  Employee salaries were UPDATED AFTER Aug 6, so Payroll rows became stale.
+    Mukul Sharma (EMP-428): stored sal=5250 (old)  vs live sal=15000 (new)
+    Ashish Bhatnagar (EMP-436): stored sal=25000 (old) vs live sal=60000 (new)
+- Called POST /api/payroll/generate-all {month:8, year:2026} to regenerate ALL 42
+  payroll records with current salaries. All 42 succeeded, 0 errors.
+- Verified post-regen: 0 mismatches between live Employee.monthlySalary and
+  Payroll.monthlySalary across all 42 employees.
+- Applied code fix in /api/employees/[employeeId]/route.ts:
+    Added `regenerateCurrentMonthPayroll(employeeId)` helper that recomputes
+    the current month's Payroll row using the same logic as generate-all.
+    Called automatically after Employee PUT when monthlySalary OR shiftHours
+    changes. Prevents future stale Payroll records.
+- Safety: uses update on existing row (no data loss), silent on error,
+  only triggers for CURRENT month (historical months keep their values).
+- Committed as de964d1, pushed to GitHub main.
+- Vercel auto-deployed (~90s).
+- Final live verification:
+    Mukul (EMP-428): sal=15000, hourlyRate=53.76, gross=₹967.68 ✓
+    Ashish (EMP-436): sal=60000, hourlyRate=215.05, gross=₹3870.90 ✓
+
+Stage Summary:
+- ROOT CAUSE: Stale Payroll records — salaries updated after payroll generation
+- IMMEDIATE FIX: Regenerated all 42 employees' August 2026 payroll via API
+- LONG-TERM FIX: Employee PUT route now auto-regenerates current month's payroll
+  whenever salary or shiftHours changes (commit de964d1, deployed to Vercel)
+- DATA LOSS: Zero. Used `update` on existing rows, no deletes.
+- All 42 employees verified — 0 mismatches between live and stored salaries.
