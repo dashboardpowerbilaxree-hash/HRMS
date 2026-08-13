@@ -5,6 +5,9 @@ import {
   countSundaysUpTo,
   countHolidaysUpTo,
   filterAttendanceUpTo,
+  getActualShiftHours,
+  recomputeStatus,
+  shouldApplyLateEarly,
 } from '@/lib/payroll-calc';
 
 export async function GET(request: NextRequest) {
@@ -47,6 +50,7 @@ export async function GET(request: NextRequest) {
             relievingDate: true,    // <-- added (was fetched separately per row)
             shiftStart: true,       // <-- added (needed for half-day recompute)
             shiftEnd: true,         // <-- added (needed for half-day recompute)
+            employmentType: true,   // <-- added (needed for Freelance late/early suppression)
           },
         },
       },
@@ -142,21 +146,45 @@ export async function GET(request: NextRequest) {
       // Filter attendance to cutoff (drop future-dated rows defensively)
       const effectiveAttendance = filterAttendanceUpTo(attendance, p.year, p.month, cutoffDay);
 
+      // ── Recompute status with Freelance short-shift late/early suppression ──
+      const actualShiftHours = getActualShiftHours(emp?.shiftHours, emp?.shiftStart, emp?.shiftEnd);
+      const applyLateEarly = shouldApplyLateEarly({
+        employmentType: emp?.employmentType,
+        shiftHours: emp?.shiftHours,
+      });
+      const recomputedStatusMap = new Map<string, string>();
+      for (const a of effectiveAttendance) {
+        const cs = recomputeStatus(a, actualShiftHours, emp?.shiftStart, emp?.shiftEnd, applyLateEarly);
+        const ad = new Date(a.date);
+        const dateKey = `${ad.getFullYear()}-${String(ad.getMonth() + 1).padStart(2, '0')}-${String(ad.getDate()).padStart(2, '0')}`;
+        recomputedStatusMap.set(dateKey, cs);
+      }
+      // Helper: get recomputed status for a record
+      const getStatus = (a: any): string => {
+        const ad = new Date(a.date);
+        const dateKey = `${ad.getFullYear()}-${String(ad.getMonth() + 1).padStart(2, '0')}-${String(ad.getDate()).padStart(2, '0')}`;
+        return recomputedStatusMap.get(dateKey) || a.status;
+      };
+
       // Calculate effective present days and total base hours (HOUR-BASED)
-      const rawPresentDays = effectiveAttendance.filter(a => ['present', 'late', 'early-out'].includes(a.status)).length;
-      const halfDays = effectiveAttendance.filter(a => a.status === 'half-day' || a.status === 'half_day').length;
+      const rawPresentDays = effectiveAttendance.filter(a => ['present', 'late', 'early-out'].includes(getStatus(a))).length;
+      const halfDays = effectiveAttendance.filter(a => {
+        const cs = getStatus(a);
+        return cs === 'half-day' || cs === 'half_day';
+      }).length;
       const presentDays = rawPresentDays;
 
       let totalBaseHours = 0;
       let effectivePresentDays = 0;
       for (const a of effectiveAttendance) {
-        if (['present', 'late', 'early-out', 'half-day', 'half_day'].includes(a.status)) {
+        const cs = getStatus(a);
+        if (['present', 'late', 'early-out', 'half-day', 'half_day'].includes(cs)) {
           // Base hours = totalHours - overtimeHours (excludes OT)
           const baseHrs = Math.max(0, (a.totalHours || 0) - (a.overtimeHours || 0));
           totalBaseHours += baseHrs;
 
           // Effective present days = baseHrs / shiftHours
-          if (a.status === 'half-day' || a.status === 'half_day') {
+          if (cs === 'half-day' || cs === 'half_day') {
             effectivePresentDays += 0.5;
           } else {
             effectivePresentDays += Math.min(1, baseHrs / shiftHrs);
@@ -169,7 +197,8 @@ export async function GET(request: NextRequest) {
       const leaves = leavesByEmp.get(p.employeeId) || [];
       const presentDateStrs = new Set();
       for (const a of effectiveAttendance) {
-        if (['present', 'late', 'early-out', 'half-day', 'half_day'].includes(a.status)) {
+        const cs = getStatus(a);
+        if (['present', 'late', 'early-out', 'half-day', 'half_day'].includes(cs)) {
           const ad = new Date(a.date);
           presentDateStrs.add(`${ad.getFullYear()}-${String(ad.getMonth() + 1).padStart(2, '0')}-${String(ad.getDate()).padStart(2, '0')}`);
         }
@@ -208,7 +237,7 @@ export async function GET(request: NextRequest) {
       const absentDays = Math.max(0, totalWorkingDays - presentDays - halfDays);
 
       // Recalculate OT from stored values (use cutoff-filtered attendance)
-      const otHours = Math.round(effectiveAttendance.filter(a => ['present', 'late', 'half-day', 'half_day', 'early-out'].includes(a.status)).reduce((sum, a) => sum + (a.overtimeHours || 0), 0) * 100) / 100;
+      const otHours = Math.round(effectiveAttendance.filter(a => ['present', 'late', 'half-day', 'half_day', 'early-out'].includes(getStatus(a))).reduce((sum, a) => sum + (a.overtimeHours || 0), 0) * 100) / 100;
       const otAmount = otHours * hourlyRate;
 
       // HOUR-BASED salary: Total Hrs = baseHrs + sundayHrs + otHrs (NO paid leaves)
@@ -297,26 +326,45 @@ export async function POST(request: NextRequest) {
     // Filter attendance to cutoff (drop future-dated rows defensively)
     const effectiveAttendance = filterAttendanceUpTo(attendance, year, month, cutoffDay);
 
+    // ── Compute actual shift hours (with 12-hour format fix-up) ──
+    const actualShiftHours = getActualShiftHours(employee.shiftHours, employee.shiftStart, employee.shiftEnd);
+    // Freelance short-shift rule (Aug 13, 2026): suppress late/early for Freelance with shiftHours < 4
+    const applyLateEarly = shouldApplyLateEarly(employee);
+
+    // Recompute status for each attendance record (12-hour shift format fix-up
+    // AND Freelance short-shift late/early suppression)
+    const recomputedStatusMap = new Map<string, string>();
+    for (const a of effectiveAttendance) {
+      const cs = recomputeStatus(a, actualShiftHours, employee.shiftStart, employee.shiftEnd, applyLateEarly);
+      const ad = new Date(a.date);
+      const dateKey = `${ad.getFullYear()}-${String(ad.getMonth() + 1).padStart(2, '0')}-${String(ad.getDate()).padStart(2, '0')}`;
+      recomputedStatusMap.set(dateKey, cs);
+    }
+
     // ─── HOUR-BASED salary calculation ───
     let totalBaseHours = 0;
     let totalWorkMinutes = 0;
     let effectivePresentDays = 0;
 
     for (const a of effectiveAttendance) {
-      if (a.checkIn && a.checkOut && ['present', 'late', 'half-day', 'half_day', 'early-out'].includes(a.status)) {
+      const ad = new Date(a.date);
+      const dateKey = `${ad.getFullYear()}-${String(ad.getMonth() + 1).padStart(2, '0')}-${String(ad.getDate()).padStart(2, '0')}`;
+      const correctedStatus = recomputedStatusMap.get(dateKey) || a.status;
+
+      if (a.checkIn && a.checkOut && ['present', 'late', 'half-day', 'half_day', 'early-out'].includes(correctedStatus)) {
         const [h1, m1] = a.checkIn.split(':').map(Number);
         const [h2, m2] = a.checkOut.split(':').map(Number);
         const workMin = Math.max(0, (h2 * 60 + m2) - (h1 * 60 + m1));
         totalWorkMinutes += workMin;
       }
 
-      if (['present', 'late', 'early-out', 'half-day', 'half_day'].includes(a.status)) {
+      if (['present', 'late', 'early-out', 'half-day', 'half_day'].includes(correctedStatus)) {
         // Base hours = totalHours - overtimeHours (excludes OT)
         const baseHrs = Math.max(0, (a.totalHours || 0) - (a.overtimeHours || 0));
         totalBaseHours += baseHrs;
 
         // Effective present days = baseHrs / shiftHours
-        if (a.status === 'half-day' || a.status === 'half_day') {
+        if (correctedStatus === 'half-day' || correctedStatus === 'half_day') {
           effectivePresentDays += 0.5;
         } else {
           effectivePresentDays += Math.min(1, baseHrs / employee.shiftHours);
@@ -329,12 +377,30 @@ export async function POST(request: NextRequest) {
     const totalWorkedHrs = Math.floor(totalWorkMinutes / 60) + (totalWorkMinutes % 60) / 100;
 
     // ─── OT Hours: Sum stored overtimeHours directly (decimal sum) ───
-    const otHoursDecimal = Math.round(effectiveAttendance.filter(a => ['present', 'late', 'half-day', 'half_day', 'early-out'].includes(a.status)).reduce((sum, a) => sum + (a.overtimeHours || 0), 0) * 100) / 100;
+    // Use recomputed status to decide which records count
+    const otHoursDecimal = Math.round(
+      effectiveAttendance.filter(a => {
+        const ad = new Date(a.date);
+        const dateKey = `${ad.getFullYear()}-${String(ad.getMonth() + 1).padStart(2, '0')}-${String(ad.getDate()).padStart(2, '0')}`;
+        const cs = recomputedStatusMap.get(dateKey) || a.status;
+        return ['present', 'late', 'half-day', 'half_day', 'early-out'].includes(cs);
+      }).reduce((sum, a) => sum + (a.overtimeHours || 0), 0) * 100
+    ) / 100;
     const otHours = otHoursDecimal;
 
-    // Attendance counts
-    const rawPresentDays = effectiveAttendance.filter(a => ['present', 'late', 'early-out'].includes(a.status)).length;
-    const halfDays = effectiveAttendance.filter(a => a.status === 'half-day' || a.status === 'half_day').length;
+    // Attendance counts — use RECOMPUTED status
+    const rawPresentDays = effectiveAttendance.filter(a => {
+      const ad = new Date(a.date);
+      const dateKey = `${ad.getFullYear()}-${String(ad.getMonth() + 1).padStart(2, '0')}-${String(ad.getDate()).padStart(2, '0')}`;
+      const cs = recomputedStatusMap.get(dateKey) || a.status;
+      return ['present', 'late', 'early-out'].includes(cs);
+    }).length;
+    const halfDays = effectiveAttendance.filter(a => {
+      const ad = new Date(a.date);
+      const dateKey = `${ad.getFullYear()}-${String(ad.getMonth() + 1).padStart(2, '0')}-${String(ad.getDate()).padStart(2, '0')}`;
+      const cs = recomputedStatusMap.get(dateKey) || a.status;
+      return cs === 'half-day' || cs === 'half_day';
+    }).length;
     const presentDays = rawPresentDays;
 
     // Approved leaves
@@ -350,9 +416,11 @@ export async function POST(request: NextRequest) {
     );
     const presentDateStrs = new Set();
     for (const a of effectiveAttendance) {
-      if (['present', 'late', 'early-out', 'half-day', 'half_day'].includes(a.status)) {
-        const ad = new Date(a.date);
-        presentDateStrs.add(`${ad.getFullYear()}-${String(ad.getMonth() + 1).padStart(2, '0')}-${String(ad.getDate()).padStart(2, '0')}`);
+      const ad = new Date(a.date);
+      const dateKey = `${ad.getFullYear()}-${String(ad.getMonth() + 1).padStart(2, '0')}-${String(ad.getDate()).padStart(2, '0')}`;
+      const cs = recomputedStatusMap.get(dateKey) || a.status;
+      if (['present', 'late', 'early-out', 'half-day', 'half_day'].includes(cs)) {
+        presentDateStrs.add(dateKey);
       }
     }
 
