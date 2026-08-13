@@ -1025,3 +1025,29 @@ Stage Summary:
 - Final values:
     Mukul (EMP-428) July 2026: salary=₹15,000, hourlyRate=₹53.76, gross=₹13,859.33
     Ashish (EMP-436) July 2026: salary=₹60,000, hourlyRate=₹215.05, gross=₹28,798.78
+
+---
+Task ID: 11
+Agent: main-agent
+Task: Add 'Freelance' as new employment category alongside Full Time / Part Time. Mark 3 specific employees as Freelance. No data/formula changes for others.
+
+Work Log:
+- Added 'Freelance' to EMPLOYMENT_TYPES array in EmployeeManagement.tsx
+  (alongside Full Time and Part Time)
+- Updated EmpTypeBadge component with distinct sky/cyan color for Freelance
+- Committed as 4a82b24, pushed to GitHub, Vercel auto-deployed
+- Updated 3 employees via PUT /api/employees/[employeeId]:
+    EMP-011 Reena Gujjar (SDF Ajmer, Helper) — Part Time → Freelance
+    EMP-034 Prakash (LRSL Ajmer, Accountant) — Part Time → Freelance
+    EMP-026 Mayank Agarwal (SI Ajmer, CA) — Part Time → Freelance
+- Verified: ALL other fields preserved for each (salary, shiftHours,
+  shiftStart, shiftEnd, salaryType, firm, location, designation, status)
+- Verified: August 2026 payroll UNCHANGED for all 3 (auto-regen-on-salary-change
+  did not trigger because salary and shiftHours are unchanged)
+
+Stage Summary:
+- New employment category "Freelance" added (visible in employee form dropdown)
+- 3 employees marked Freelance: Reena (EMP-011), Prakash (EMP-034), Mayank (EMP-026)
+- ZERO data changes to other employees
+- ZERO payroll/attendance data changes
+- ZERO formula changes
