@@ -1051,3 +1051,96 @@ Stage Summary:
 - ZERO data changes to other employees
 - ZERO payroll/attendance data changes
 - ZERO formula changes
+
+---
+Task ID: 12
+Agent: Super Z (main)
+Task: Per user instruction (Aug 13, 2026): From this month, Freelance employees with short shifts (Prakash 2h, Mayank 1h) should NOT be marked late/early — they just need to complete their working hours (half-day rule only). Reena (Freelance 4h) keeps late/early marking. No data loss, no changes to other employees.
+
+Work Log:
+- Pulled live data for 3 Freelance employees from production API:
+  * Reena Gujjar (EMP-011): SDF, shiftHours=4, 10:00-14:00, hourlyRate=₹50
+  * Prakash    (EMP-034): LRSL, shiftHours=2, 17:00-19:00, hourlyRate=₹967.74
+  * Mayank     (EMP-026): SI, shiftHours=1, 10:00-11:00, hourlyRate=₹322.58
+- Snapshotted Aug 2026 attendance BEFORE changes (/tmp/att_aug_before.json):
+  * Prakash: 8 days marked 'late' (lateEntry=true) — WRONG, should be 'present'
+  * Mayank:  7 days marked 'late' (lateEntry=true) — WRONG, should be 'present'
+  * Reena:   2 days late, 2 days early-out, 1 half-day — CORRECT, keep as-is
+
+- Designed rule: Freelance with shiftHours >= 4 (Reena) → apply late/early;
+  Freelance with shiftHours < 4 (Prakash, Mayank) → suppress late/early,
+  only half-day rule applies (worked < shift/2).
+
+- Implemented in /src/lib/payroll-calc.ts:
+  * Added shouldApplyLateEarly(employee) helper
+  * Added applyLateEarly param (default true) to recomputeStatus()
+    - When false: passes through absent/weekly-off/holiday/leave unchanged,
+      applies half-day rule to present-like records, returns 'present' otherwise
+  * Added applyLateEarly param to recomputeEarlyOutFlag() (returns false if !applyLateEarly)
+  * Added new recomputeLateEntryFlag(rec, applyLateEarly) helper for consistency
+
+- Updated WRITE routes (suppress late/early at write time going forward):
+  * POST /api/attendance/route.ts — wraps late/early computation in `if (applyLateEarly)`
+  * PUT  /api/attendance/[id]/route.ts — same pattern
+  * POST /api/attendance/bulk-upload/route.ts — same pattern
+
+- Updated READ routes (suppress late/early at display/calc time):
+  * GET  /api/attendance/route.ts — passes applyLateEarly + recomputes lateEntry/earlyOut in response
+  * GET  /api/attendance/monthly-summary/route.ts
+  * GET  /api/attendance/export-monthly/route.ts (3 call sites)
+  * GET  /api/attendance/export-master/route.ts (4 call sites)
+  * POST /api/payroll/generate-all/route.ts
+  * GET  /api/payroll/summary-export/route.ts
+  * POST /api/payroll/route.ts (single-employee) — ALSO rewrote to use recomputeStatus
+  * GET  /api/payroll/route.ts — rewrote enrichment to use recomputeStatus with getStatus() helper
+  * PUT  /api/employees/[employeeId]/route.ts (auto-regen helper)
+
+- Added `employmentType` to Prisma select clauses in 4 routes that needed it
+  for shouldApplyLateEarly() lookup.
+
+- TypeScript check: 0 NEW errors introduced (all pre-existing errors unchanged).
+
+- Committed in 3 commits:
+  * 00f674e — feat(attendance): suppress late/early for Freelance short-shift
+  * e443c78 — fix(payroll-calc): preserve 'absent' status for Freelance short-shift
+  * d9b91ed — fix(payroll): apply recomputeStatus + applyLateEarly to /api/payroll routes
+
+- Pushed all 3 commits to GitHub main; Vercel auto-deployed each within ~90s.
+
+- Verified AFTER deploy via /api/attendance?month=8&year=2026:
+  * Reena:   9 records, status/late/early UNCHANGED (raw=✓ preserved)
+  * Prakash: 9 records, all 'late' → 'present', lateEntry=false ✓ (raw=✓ preserved)
+  * Mayank:  9 records, all 'late' → 'present', lateEntry=false ✓ (raw=✓ preserved)
+  * Prakash Aug 1 (absent, no check-in): correctly stays 'absent' (not reclassified as half-day)
+  * Mayank Aug 4/5/12 (absent, no check-in): correctly stay 'absent'
+  * RAW DATA INTEGRITY: ✓ ALL PRESERVED (checkIn, checkOut, totalHours, halfDay — all untouched)
+
+- Regenerated Aug 2026 payroll for ONLY these 3 employees via POST /api/payroll:
+  * Reena:   present=8, absent=2, half=1, gross=₹1,985.83 (UNCHANGED)
+  * Prakash: present=8 (was 3), absent=3, half=0 (was 5), gross=₹20,403.18 (UNCHANGED)
+  * Mayank:  present=6, absent=5, half=0, gross=₹2,440.86 (UNCHANGED)
+
+- Cross-verified OTHER 39 employees: ZERO changes (no collateral damage).
+
+- Downloaded production Master Excel for Aug 2026:
+  /home/z/my-project/download/Payroll_Master_August_2026.xlsx
+  * Reena (SDF sheet): shows actual IN/OUT times for days 1-11 (10:37/14:01, 10:01/14:06, etc.)
+  * Prakash (LRSL sheet): shows actual IN/OUT times for days 4-11 (17:40/19:24, etc.),
+    NO "Late" labels anywhere. Day 1 & 3 show "Absent" (genuine absences).
+  * Mayank (SI sheet): shows actual IN/OUT times for days 1, 6-11 (15:20/16:24, etc.),
+    NO "Late" labels anywhere. Days 3-5 show "Absent".
+
+Stage Summary:
+- ✅ Code deployed: 3 commits pushed (00f674e, e443c78, d9b91ed), Vercel auto-deployed
+- ✅ Reena (Freelance 4h): UNCHANGED — late/early/half-day all still apply (2 late, 2 early, 1 half-day)
+- ✅ Prakash (Freelance 2h): late/early SUPPRESSED — was 8 lates, now 0; only half-day rule applies
+- ✅ Mayank (Freelance 1h): late/early SUPPRESSED — was 7 lates, now 0; only half-day rule applies
+- ✅ NO data loss: all stored attendance rows untouched (raw=✓ for all 27 records)
+- ✅ NO changes to other 39 employees (0 changes verified)
+- ✅ Aug 2026 payroll regenerated for 3 employees with new logic
+- ✅ Gross salaries unchanged (hour calculation uses check-in/out times, not status)
+- 📄 Master Excel: /home/z/my-project/download/Payroll_Master_August_2026.xlsx
+- Rule summary:
+  * Full Time / Part Time → ALWAYS apply late/early
+  * Freelance with shiftHours >= 4 → APPLY late/early (like Reena)
+  * Freelance with shiftHours  < 4 → SKIP late/early, only half-day rule (like Prakash, Mayank)
