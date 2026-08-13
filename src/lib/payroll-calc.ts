@@ -408,13 +408,14 @@ export function recomputeStatus(
   // suppress all late/early statuses. Half-day rule still applies
   // because freelancers must complete their working hours.
   if (!applyLateEarly) {
-    // Half-day rule still applies: worked < half of actual shift → half-day
-    if (isActuallyHalfDay(rec.totalHours, actualShiftHours)) return 'half-day';
-    // Pass through non-late/early statuses unchanged
+    // First, pass through non-working-day / non-attendance statuses unchanged.
+    // This ensures 'absent' (employee didn't show up at all) stays 'absent',
+    // not reclassified as 'half-day' just because totalHours=0 < shift/2.
     const s = rec.status;
     if (s === 'absent' || s === 'weekly-off' || s === 'holiday' || s === 'leave') return s;
-    // For any other stored status (including 'late', 'early-out', 'present',
-    // 'half-day' wrongly marked), return 'present' since late/early are suppressed
+    // For present/late/early-out/half-day statuses, apply half-day rule:
+    // worked < half of actual shift → half-day, otherwise present.
+    if (isActuallyHalfDay(rec.totalHours, actualShiftHours)) return 'half-day';
     return 'present';
   }
 
