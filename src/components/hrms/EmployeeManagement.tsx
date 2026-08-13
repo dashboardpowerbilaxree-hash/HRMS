@@ -31,7 +31,10 @@ const FIRM_BADGE_CLASS: Record<string, string> = {
 
 const FIRMS = ['LAPL', 'LRSL', 'SI', 'SDF'];
 const LOCATIONS = ['Ajmer', 'Gurgaon', 'Palra Warehouse', 'Jaipur', 'Roofing Factory'];
-const EMPLOYMENT_TYPES = ['Full Time', 'Part Time'];
+// Freelance: employees whose working hours are not fixed (e.g. CA, Accountant,
+// Helper). They come and go on their own schedule; only the shift *duration*
+// matters, which is already stored in `shiftHours`. No fixed check-in/out time.
+const EMPLOYMENT_TYPES = ['Full Time', 'Part Time', 'Freelance'];
 // UI displays capitalized, but API stores lowercase
 const SALARY_TYPES = ['Hourly', 'Daily'];
 
@@ -540,10 +543,14 @@ export function EmployeeManagement() {
   );
 
   // ── Employment Type badge ──
+  // Freelance gets its own color (sky/cyan) — distinct from Full Time (gold)
+  // and Part Time (amber). Freelancers have flexible hours (no fixed shift).
   const EmpTypeBadge = ({ type }: { type: string }) => (
     <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium whitespace-nowrap shrink-0 ${
       type === 'Full Time'
         ? 'bg-gold/10 text-gold border border-gold/20'
+        : type === 'Freelance'
+        ? 'bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20'
         : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
     }`}>
       {type}
