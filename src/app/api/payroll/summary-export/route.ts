@@ -8,6 +8,7 @@ import {
   filterAttendanceUpTo,
   getActualShiftHours,
   recomputeStatus,
+  shouldApplyLateEarly,
 } from '@/lib/payroll-calc';
 
 // ════════════════════════════════════════════════════════════
@@ -148,9 +149,14 @@ async function enrichPayroll(p: any) {
   const effectiveAttendance = filterAttendanceUpTo(attendance, p.year, p.month, cutoffDay);
 
   const actualShiftHours = getActualShiftHours(emp?.shiftHours, emp?.shiftStart, emp?.shiftEnd);
+  // Freelance short-shift rule (Aug 13, 2026): suppress late/early for Freelance with shiftHours < 4
+  const applyLateEarly = shouldApplyLateEarly({
+    employmentType: emp?.employmentType,
+    shiftHours: emp?.shiftHours,
+  });
   const correctedAttendance = effectiveAttendance.map(a => ({
     ...a,
-    status: recomputeStatus(a, actualShiftHours, emp?.shiftStart, emp?.shiftEnd),
+    status: recomputeStatus(a, actualShiftHours, emp?.shiftStart, emp?.shiftEnd, applyLateEarly),
   }));
 
   const rawPresentDays = correctedAttendance.filter(a => ['present', 'late', 'early-out'].includes(a.status)).length;
@@ -615,6 +621,7 @@ export async function GET(request: NextRequest) {
             shiftHours: true,
             shiftStart: true,
             shiftEnd: true,
+            employmentType: true, // needed for Freelance late/early suppression
             monthlySalary: true,
             relievingDate: true,
           },

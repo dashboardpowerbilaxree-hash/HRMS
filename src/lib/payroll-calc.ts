@@ -148,6 +148,48 @@ export function filterAttendanceUpTo<T extends { date: Date }>(
 }
 
 // ════════════════════════════════════════════════════════════════
+// FREELANCE LATE/EARLY APPLICABILITY
+//
+// Per user instruction (Aug 13, 2026):
+//   Freelance employees have flexible hours — they just need to
+//   complete their working hours. Late-entry and early-out penalties
+//   should NOT apply to them, EXCEPT when their shift is long enough
+//   (4+ hours) that punctuality matters.
+//
+//   Examples:
+//     - Reena Gujjar (EMP-011): Freelance, shiftHours=4 (10:00-14:00)
+//       → APPLY late/early. She comes after 10:15 → mark late.
+//     - Prakash    (EMP-034): Freelance, shiftHours=2 (17:00-19:00)
+//       → SKIP late/early. Only half-day rule applies (worked < 1h).
+//     - Mayank     (EMP-026): Freelance, shiftHours=1 (10:00-11:00)
+//       → SKIP late/early. Only half-day rule applies (worked < 0.5h).
+//
+//   Full Time / Part Time employees: ALWAYS apply late/early (default).
+// ════════════════════════════════════════════════════════════════
+
+/**
+ * Determine whether late-entry and early-out flags should be applied
+ * for a given employee.
+ *
+ * Rules:
+ *   - Non-Freelance (Full Time / Part Time): ALWAYS apply late/early
+ *   - Freelance with shiftHours >= 4: APPLY late/early
+ *   - Freelance with shiftHours  < 4: SKIP late/early
+ *
+ * @param employee  Employee object with at least employmentType and shiftHours
+ * @returns true if late/early should be applied, false otherwise
+ */
+export function shouldApplyLateEarly(employee: {
+  employmentType?: string | null;
+  shiftHours?: number | null;
+}): boolean {
+  // Non-freelance: always apply late/early
+  if (employee.employmentType !== 'Freelance') return true;
+  // Freelance: only apply if shift is 4+ hours (regular shift like Reena's)
+  return (employee.shiftHours || 0) >= 4;
+}
+
+// ════════════════════════════════════════════════════════════════
 // HALF-DAY RECOMPUTE UTILITIES
 //
 // Problem being solved:
@@ -359,7 +401,23 @@ export function recomputeStatus(
   actualShiftHours: number,
   shiftStart?: string | null | undefined,
   shiftEnd?: string | null | undefined,
+  applyLateEarly: boolean = true,
 ): string {
+  // ── Freelance short-shift suppression ──
+  // If late/early should NOT apply (Freelance with shiftHours < 4),
+  // suppress all late/early statuses. Half-day rule still applies
+  // because freelancers must complete their working hours.
+  if (!applyLateEarly) {
+    // Half-day rule still applies: worked < half of actual shift → half-day
+    if (isActuallyHalfDay(rec.totalHours, actualShiftHours)) return 'half-day';
+    // Pass through non-late/early statuses unchanged
+    const s = rec.status;
+    if (s === 'absent' || s === 'weekly-off' || s === 'holiday' || s === 'leave') return s;
+    // For any other stored status (including 'late', 'early-out', 'present',
+    // 'half-day' wrongly marked), return 'present' since late/early are suppressed
+    return 'present';
+  }
+
   const isStoredHalfDay = rec.status === 'half-day' || rec.status === 'half_day' || !!rec.halfDay;
 
   // ── Half-day recompute ──
@@ -403,6 +461,9 @@ export function recomputeStatus(
  * routes WITHOUT modifying the database.
  *
  * Returns `true` if the record should be treated as an early-out.
+ *
+ * Pass `applyLateEarly=false` for Freelance employees with short shifts
+ * (shiftHours < 4) — they should never be marked as early-out.
  */
 export function recomputeEarlyOutFlag(
   rec: {
@@ -411,10 +472,38 @@ export function recomputeEarlyOutFlag(
   },
   shiftStart: string | null | undefined,
   shiftEnd: string | null | undefined,
+  applyLateEarly: boolean = true,
 ): boolean {
+  // If late/early should NOT apply, never mark as early-out
+  if (!applyLateEarly) return false;
   // If we have shift info, recompute; otherwise fall back to stored flag.
   if (shiftStart !== undefined && shiftEnd !== undefined && (shiftStart || shiftEnd)) {
     return isActuallyEarlyOut(rec.checkOut, shiftStart, shiftEnd);
   }
   return !!rec.earlyOut;
+}
+
+/**
+ * Recompute the raw `lateEntry` boolean flag for an attendance record.
+ *
+ * The stored `lateEntry` flag is set at attendance-write time based on
+ * the employee's shiftStart + 15-min grace. We do NOT recompute it
+ * against shiftStart here (since the shift may have been updated since
+ * the record was written, just like for early-out). For now, we trust
+ * the stored flag — BUT we suppress it for Freelance employees with
+ * short shifts (shiftHours < 4), since late marking should not apply
+ * to them.
+ *
+ * Pass `applyLateEarly=false` for Freelance employees with short shifts.
+ *
+ * Returns `true` if the record should be treated as a late entry.
+ */
+export function recomputeLateEntryFlag(
+  rec: {
+    lateEntry?: boolean | null;
+  },
+  applyLateEarly: boolean = true,
+): boolean {
+  if (!applyLateEarly) return false;
+  return !!rec.lateEntry;
 }

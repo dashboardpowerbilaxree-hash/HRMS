@@ -7,6 +7,7 @@ import {
   filterAttendanceUpTo,
   getActualShiftHours,
   recomputeStatus,
+  shouldApplyLateEarly,
 } from '@/lib/payroll-calc';
 
 export async function POST(request: NextRequest) {
@@ -51,6 +52,9 @@ export async function POST(request: NextRequest) {
         // ── Compute actual shift hours (with 12-hour format fix-up) ──
         // This must match what Master Excel and Attendance Tracker use.
         const actualShiftHours = getActualShiftHours(emp.shiftHours, emp.shiftStart, emp.shiftEnd);
+        // Freelance short-shift rule (Aug 13, 2026): suppress late/early
+        // for Freelance employees with shiftHours < 4 (e.g. Prakash 2h, Mayank 1h).
+        const applyLateEarly = shouldApplyLateEarly(emp);
 
         // ─── HOUR-BASED salary calculation ───
         // IMPORTANT: Use recomputeStatus() to fix wrongly-marked half-day and
@@ -63,7 +67,7 @@ export async function POST(request: NextRequest) {
         // Track recomputed status for each attendance record
         const recomputedStatusMap = new Map<string, string>();
         for (const a of effectiveAttendance) {
-          const cs = recomputeStatus(a, actualShiftHours, emp.shiftStart, emp.shiftEnd);
+          const cs = recomputeStatus(a, actualShiftHours, emp.shiftStart, emp.shiftEnd, applyLateEarly);
           const ad = new Date(a.date);
           const dateKey = `${ad.getFullYear()}-${String(ad.getMonth() + 1).padStart(2, '0')}-${String(ad.getDate()).padStart(2, '0')}`;
           recomputedStatusMap.set(dateKey, cs);

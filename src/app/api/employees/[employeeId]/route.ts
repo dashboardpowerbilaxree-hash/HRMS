@@ -7,6 +7,7 @@ import {
   filterAttendanceUpTo,
   getActualShiftHours,
   recomputeStatus,
+  shouldApplyLateEarly,
 } from '@/lib/payroll-calc';
 
 /**
@@ -55,11 +56,13 @@ async function regenerateCurrentMonthPayroll(employeeId: string) {
     });
     const effectiveAttendance = filterAttendanceUpTo(attendance, year, month, cutoffDay);
     const actualShiftHours = getActualShiftHours(emp.shiftHours, emp.shiftStart, emp.shiftEnd);
+    // Freelance short-shift rule (Aug 13, 2026): suppress late/early for Freelance with shiftHours < 4
+    const applyLateEarly = shouldApplyLateEarly(emp);
 
     // Recompute status for each attendance record (12-hour shift format fix-up)
     const recomputedStatusMap = new Map<string, string>();
     for (const a of effectiveAttendance) {
-      const cs = recomputeStatus(a, actualShiftHours, emp.shiftStart, emp.shiftEnd);
+      const cs = recomputeStatus(a, actualShiftHours, emp.shiftStart, emp.shiftEnd, applyLateEarly);
       const ad = new Date(a.date);
       const dateKey = `${ad.getFullYear()}-${String(ad.getMonth() + 1).padStart(2, '0')}-${String(ad.getDate()).padStart(2, '0')}`;
       recomputedStatusMap.set(dateKey, cs);

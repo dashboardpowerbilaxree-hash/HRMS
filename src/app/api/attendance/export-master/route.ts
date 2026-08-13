@@ -6,6 +6,7 @@ import {
   countHolidaysUpTo,
   getActualShiftHours,
   recomputeStatus,
+  shouldApplyLateEarly,
 } from '@/lib/payroll-calc';
 
 // Master Excel Sheet Export
@@ -119,6 +120,7 @@ export async function GET(request: NextRequest) {
           employeeId: true, fullName: true, firm: true, department: true,
           designation: true, location: true, shiftHours: true,
           shiftStart: true, shiftEnd: true,  // <-- needed for half-day recompute
+          employmentType: true,  // <-- needed for Freelance late/early suppression
           monthlySalary: true, hourlyRate: true, overtimeRate: true,
           relievingDate: true,  // <-- needed for cutoff-day calculation
         },
@@ -210,12 +212,15 @@ export async function GET(request: NextRequest) {
 
         // ── Compute this employee's actual shift hours (shared helper) ──
         const actualShiftHours = getActualShiftHours(emp.shiftHours, emp.shiftStart, emp.shiftEnd);
+        // Freelance short-shift rule (Aug 13, 2026): suppress late/early for
+        // Freelance employees with shiftHours < 4 (e.g. Prakash 2h, Mayank 1h).
+        const applyLateEarly = shouldApplyLateEarly(emp);
 
         // Build a set of present-date-strings for this employee (for leave overlap check)
         const presentDateStrs = new Set<string>();
         if (empAttendance) {
           for (const [dayNum, rec] of empAttendance.entries()) {
-            const correctedStatus = recomputeStatus(rec, actualShiftHours, emp.shiftStart, emp.shiftEnd);
+            const correctedStatus = recomputeStatus(rec, actualShiftHours, emp.shiftStart, emp.shiftEnd, applyLateEarly);
             if (['present', 'late', 'early-out', 'half-day', 'half_day'].includes(correctedStatus)) {
               const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
               presentDateStrs.add(dateStr);
@@ -233,7 +238,7 @@ export async function GET(request: NextRequest) {
 
           const rec = empAttendance?.get(d);
           // Recompute the status on-the-fly using the shared helper
-          const correctedStatus = rec ? recomputeStatus(rec, actualShiftHours, emp.shiftStart, emp.shiftEnd) : '';
+          const correctedStatus = rec ? recomputeStatus(rec, actualShiftHours, emp.shiftStart, emp.shiftEnd, applyLateEarly) : '';
 
           if (rec) {
             if (correctedStatus === 'absent') {
@@ -384,12 +389,14 @@ export async function GET(request: NextRequest) {
 
           // Actual shift hours for this employee (shared helper, with 12-hour fix-up)
           const actualShiftHours = getActualShiftHours(emp.shiftHours, emp.shiftStart, emp.shiftEnd);
+          // Freelance short-shift rule (Aug 13, 2026): suppress late/early
+          const applyLateEarly = shouldApplyLateEarly(emp);
 
           // Build present-date-str set for this employee (for leave overlap check)
           const presentDateStrs = new Set<string>();
           if (empAttendance) {
             for (const [dayNum, rec] of empAttendance.entries()) {
-              const cs = recomputeStatus(rec, actualShiftHours, emp.shiftStart, emp.shiftEnd);
+              const cs = recomputeStatus(rec, actualShiftHours, emp.shiftStart, emp.shiftEnd, applyLateEarly);
               if (['present', 'late', 'early-out', 'half-day', 'half_day'].includes(cs)) {
                 presentDateStrs.add(`${year}-${String(month).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`);
               }
@@ -422,7 +429,7 @@ export async function GET(request: NextRequest) {
 
             if (rec) {
               // Use recomputed status (handles wrongly-marked half-day AND early-out)
-              const correctedStatus = recomputeStatus(rec, actualShiftHours, emp.shiftStart, emp.shiftEnd);
+              const correctedStatus = recomputeStatus(rec, actualShiftHours, emp.shiftStart, emp.shiftEnd, applyLateEarly);
               if (correctedStatus === 'absent') {
                 // The bulk-upload route creates an 'absent' attendance record
                 // when an employee doesn't punch in. So a full-day leave also

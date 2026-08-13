@@ -8,6 +8,8 @@ import {
   getActualShiftHours,
   recomputeStatus,
   recomputeEarlyOutFlag,
+  recomputeLateEntryFlag,
+  shouldApplyLateEarly,
 } from '@/lib/payroll-calc';
 
 const FIRM_NAMES: Record<string, string> = {
@@ -116,9 +118,14 @@ export async function GET(request: NextRequest) {
     // We recompute the effective status here WITHOUT modifying the DB
     // (per user's "no data tampering" instruction).
     // The corrected status is used for ALL display and calculation below.
+    //
+    // Freelance short-shift rule (Aug 13, 2026):
+    // For Freelance employees with shiftHours < 4, suppress late/early.
+    const applyLateEarly = shouldApplyLateEarly(employee);
     const correctedAttendance = effectiveAttendance.map(a => ({
       ...a,
-      status: recomputeStatus(a, actualShiftHours, employee.shiftStart, employee.shiftEnd),
+      status: recomputeStatus(a, actualShiftHours, employee.shiftStart, employee.shiftEnd, applyLateEarly),
+      lateEntry: recomputeLateEntryFlag(a, applyLateEarly),
     }));
 
     // Calculate summary — use RECOMPUTED status so half-days that were
@@ -209,8 +216,9 @@ export async function GET(request: NextRequest) {
     // Recompute early-out flag using actual shift end (with 12h fix-up + 5min grace)
     // so employees with short shifts (e.g., 10-14:00) are not wrongly counted
     // as early-out when they leave at their actual shift end.
+    // For Freelance short-shift employees, late/early is suppressed.
     const earlyOuts = correctedAttendance.filter(a =>
-      recomputeEarlyOutFlag(a, employee.shiftStart, employee.shiftEnd)
+      recomputeEarlyOutFlag(a, employee.shiftStart, employee.shiftEnd, applyLateEarly)
     ).length;
 
     // Working days in month = cutoffDay - sundays - elapsedHolidays

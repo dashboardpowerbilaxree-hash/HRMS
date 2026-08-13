@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { isActuallyEarlyOut } from '@/lib/payroll-calc';
+import { isActuallyEarlyOut, shouldApplyLateEarly } from '@/lib/payroll-calc';
 
 function calcHours(checkIn: string, checkOut: string): number {
   const [h1, m1] = checkIn.split(':').map(Number);
@@ -86,29 +86,39 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         if (calculatedShift > 0) actualShiftHours = calculatedShift;
       }
 
-      const gracePeriod = 15;
-      if (employee.shiftStart) {
+      // Freelance short-shift rule (Aug 13, 2026):
+      // Freelance employees with shiftHours < 4 should NOT be marked late/early.
+      // Freelance with shiftHours >= 4 (e.g. Reena 4h) and all Full Time /
+      // Part Time employees follow normal late/early rules.
+      const applyLateEarly = shouldApplyLateEarly(employee);
+
+      // Late entry detection (grace period of 15 minutes)
+      // SKIP for Freelance short-shift employees
+      if (applyLateEarly && employee.shiftStart) {
+        const gracePeriod = 15;
         const [shiftH, shiftM] = employee.shiftStart.split(':').map(Number);
         const [checkInH, checkInM] = finalCheckIn.split(':').map(Number);
         const shiftMinutes = shiftH * 60 + shiftM;
         const checkInMinutes = checkInH * 60 + checkInM;
         lateEntry = checkInMinutes > shiftMinutes + gracePeriod;
-      }
 
-      // Early out detection.
-      // Use isActuallyEarlyOut helper so that:
-      //   1. The 12-hour-format fix-up is applied (e.g., shiftEnd "02:00"
-      //      is interpreted as 14:00, not 2 AM).
-      //   2. A 5-minute grace period is applied (leaving 1-5 min before
-      //      shift end is NOT flagged as early-out).
-      // This ensures employees with short shifts (4h, 5h, etc.) are not
-      // wrongly flagged as early-out when they leave at their actual
-      // shift end time.
-      if (employee.shiftEnd) {
-        earlyOut = isActuallyEarlyOut(finalCheckOut, employee.shiftStart, employee.shiftEnd);
+        // Early out detection.
+        // Use isActuallyEarlyOut helper so that:
+        //   1. The 12-hour-format fix-up is applied (e.g., shiftEnd "02:00"
+        //      is interpreted as 14:00, not 2 AM).
+        //   2. A 5-minute grace period is applied (leaving 1-5 min before
+        //      shift end is NOT flagged as early-out).
+        // This ensures employees with short shifts (4h, 5h, etc.) are not
+        // wrongly flagged as early-out when they leave at their actual
+        // shift end time.
+        if (employee.shiftEnd) {
+          earlyOut = isActuallyEarlyOut(finalCheckOut, employee.shiftStart, employee.shiftEnd);
+        }
       }
+      // else: lateEntry and earlyOut stay false (Freelance short shift)
 
       // Half day detection: only when worked LESS than half of actual shift duration
+      // This rule applies to ALL employees (including Freelance short-shift)
       halfDay = totalHours < actualShiftHours / 2;
 
       // OT calculation: OT = total hours worked MINUS actual shift hours
