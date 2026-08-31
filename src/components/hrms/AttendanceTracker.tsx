@@ -170,6 +170,9 @@ interface MonthlySummary {
   lateEntries: number;
   earlyOuts?: number;
   records: AttendanceRecord[];
+  // Holidays in this month (from monthly-summary API) — used to show
+  // 'Holiday' badge on days with no attendance record (e.g. Aug 28 Rakhi)
+  holidays?: { name: string; type?: string; dateStr: string }[];
   // Salary calculation fields (from monthly-summary API)
   perDayRate?: number;
   calculatedHourlyRate?: number;
@@ -1274,10 +1277,11 @@ export function AttendanceTracker() {
                                 return rDate.getFullYear() === monthlySummary.year && rDate.getMonth() + 1 === monthlySummary.month && rDate.getDate() === day;
                               });
                               const isSunday = dateObj.getDay() === 0;
+                              const holiday = monthlySummary.holidays?.find((h: any) => h.dateStr === dateStr);
                               rows.push(
                                 <TableRow
                                   key={day}
-                                  className={`${isSunday ? 'bg-blue-500/5' : 'hover:bg-muted/30'} transition-colors`}
+                                  className={`${isSunday ? 'bg-blue-500/5' : holiday ? 'bg-purple-500/5' : 'hover:bg-muted/30'} transition-colors`}
                                 >
                                   <TableCell className="text-xs whitespace-nowrap font-medium">
                                     {dateObj.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
@@ -1291,6 +1295,11 @@ export function AttendanceTracker() {
                                       <StatusBadge status={rec.status} />
                                     ) : isSunday ? (
                                       <StatusBadge status="weekly-off" />
+                                    ) : holiday ? (
+                                      <span className="inline-flex items-center gap-1.5">
+                                        <StatusBadge status="holiday" />
+                                        <span className="text-[10px] font-semibold text-purple-500">{holiday.name}</span>
+                                      </span>
                                     ) : (
                                       <span className="text-xs text-muted-foreground italic">No Record</span>
                                     )}

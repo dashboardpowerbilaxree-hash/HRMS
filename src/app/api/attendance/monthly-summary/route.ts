@@ -362,6 +362,17 @@ export async function GET(request: NextRequest) {
       earlyOuts,
       records: correctedAttendance,
       leaves,
+      // Holidays in this month (as YYYY-MM-DD strings for easy client lookup).
+      // Lets the UI / reports show 'Holiday (name)' on days that have no
+      // attendance record (e.g., Aug 28 'Rakhi') instead of 'No Record'.
+      holidays: holidays.map(h => {
+        const hd = new Date(h.date);
+        return {
+          name: h.name,
+          type: h.type,
+          dateStr: `${hd.getFullYear()}-${String(hd.getMonth() + 1).padStart(2, '0')}-${String(hd.getDate()).padStart(2, '0')}`,
+        };
+      }),
       // Salary calculation fields — full precision, frontend rounds for display
       perDayRate,
       calculatedHourlyRate,

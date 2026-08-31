@@ -240,6 +240,12 @@ export async function GET(request: NextRequest) {
         return `${hd.getFullYear()}-${String(hd.getMonth() + 1).padStart(2, '0')}-${String(hd.getDate()).padStart(2, '0')}`;
       })
     );
+    // Holiday name lookup (dateStr -> name) for the daily register display
+    const holidayNameMap = new Map<string, string>();
+    for (const h of holidays) {
+      const hd = new Date(h.date);
+      holidayNameMap.set(`${hd.getFullYear()}-${String(hd.getMonth() + 1).padStart(2, '0')}-${String(hd.getDate()).padStart(2, '0')}`, h.name);
+    }
     const presentDateStrs = new Set();
     for (const a of correctedAttendance) {
       if (['present', 'late', 'early-out', 'half-day'].includes(a.status)) {
@@ -481,12 +487,16 @@ export async function GET(request: NextRequest) {
           recomputeEarlyOutFlag(rec, employee.shiftStart, employee.shiftEnd, applyLateEarly) ? 'Yes' : '',
         ]], { origin: `A${row}` });
       } else {
+        // No attendance record for this day. Show the reason: Sunday = Weekly
+        // Off, festival holiday (from Holiday table, e.g. Aug 28 'Rakhi') =
+        // Holiday (name), otherwise genuinely no record.
+        const holidayName = holidayNameMap.get(dateStr);
         XLSXStyle.utils.sheet_add_aoa(ws1, [[
           day,
           dateObj.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
           dayName,
           '-', '-', isSunday ? '0.00' : '-',
-          isSunday ? 'Weekly Off' : 'No Record',
+          isSunday ? 'Weekly Off' : (holidayName ? `Holiday (${holidayName})` : 'No Record'),
           '0.00', '0.00', '', '',
         ]], { origin: `A${row}` });
       }
@@ -504,7 +514,7 @@ export async function GET(request: NextRequest) {
             else if (status === 'Early out' || status === 'Early Out') cell.s = styleBold('E11D48', LIGHT_RED);
             else if (status === 'Half Day') cell.s = styleBold(AMBER, LIGHT_AMBER);
             else if (status === 'Weekly Off') cell.s = styleBold(SKY, 'EFF6FF');
-            else if (status === 'Holiday') cell.s = styleBold(PURPLE, 'F5F3FF');
+            else if (status.startsWith('Holiday')) cell.s = styleBold(PURPLE, 'F5F3FF');
             else cell.s = styleData(bg);
           } else if (c === 'C') {
             const dayVal = String(cell.v || '');
