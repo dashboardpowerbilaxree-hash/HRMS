@@ -10,6 +10,7 @@ import {
   recomputeEarlyOutFlag,
   recomputeLateEntryFlag,
   shouldApplyLateEarly,
+  computePaidHolidayHrs,
 } from '@/lib/payroll-calc';
 
 const FIRM_NAMES: Record<string, string> = {
@@ -308,9 +309,10 @@ export async function GET(request: NextRequest) {
     // Total Worked Hrs = sum of (totalHours - overtimeHours) for each working day
     //   This correctly deducts late arrivals and early departures
     // Sunday Hours = sundayCount × shiftHours (paid weekly off)
+    // Holiday Hours = paid festival holidays × shiftHours (e.g. Aug 28 Rakhi)
     // OT Hours = sum of overtimeHours (time AFTER shift end)
     // ═══ NO PAID LEAVES — company policy ═══
-    // Total Hrs = Total Worked Hrs + OT + Sunday  (NO paid leave hours)
+    // Total Hrs = Total Worked Hrs + OT + Sunday + Holiday  (NO paid leave hours)
     // Gross Salary = hourlyRate × Total Hrs — round only the final amount
 
     // Hourly Rate = monthlySalary / (daysInMonth × shiftHours) — 2 decimal precision
@@ -319,7 +321,10 @@ export async function GET(request: NextRequest) {
     const sundayCount = sundays;
     const sundayHrs = sundayCount * employee.shiftHours;
     const paidLeaveHrs = 0;  // ← NO PAID LEAVES per company policy
-    const totalHrs = totalBaseHours + sundayHrs + totalOvertimeHoursDecimal + paidLeaveHrs;
+    // Festival holidays ARE paid at shift hours (e.g. Aug 28 'Rakhi') —
+    // mirrors paid Sundays; skips Sunday-overlap & worked days (no double pay)
+    const holidayHrs = computePaidHolidayHrs(year, month, cutoffDay, holidays, employee.shiftHours || 9, presentDateStrs);
+    const totalHrs = totalBaseHours + sundayHrs + totalOvertimeHoursDecimal + paidLeaveHrs + holidayHrs;
 
     // Calculate salary components — only round FINAL amounts
     const calculatedBaseSalary = calculatedHourlyRate * totalBaseHours;
@@ -351,6 +356,7 @@ export async function GET(request: NextRequest) {
       unpaidLeaves: effectiveUnpaidLeaves,
       halfDays,
       holidayDays,
+      holidayHrs,
       weeklyOffs,
       sundays,
       totalAttendance,

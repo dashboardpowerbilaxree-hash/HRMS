@@ -508,3 +508,63 @@ export function recomputeLateEntryFlag(
   if (!applyLateEarly) return false;
   return !!rec.lateEntry;
 }
+
+// ════════════════════════════════════════════════════════════════
+// FESTIVAL HOLIDAY PAID HOURS
+//
+// Per user instruction (Aug 31, 2026):
+//   Festival holidays (e.g., Aug 28 'Rakhi') are PAID holidays — every
+//   employee gets their shift hours credited for the day even though
+//   no attendance record exists (the office was closed).
+//
+//   Mirrors the PAID SUNDAY pattern (sundayHrs = sundays × shiftHrs):
+//     holidayHrs = paidHolidayDays × shiftHrs
+//
+//   A holiday is NOT paid again when:
+//     - it falls on a Sunday (Sundays are already paid separately —
+//       avoids double pay)
+//     - the employee has a present-like attendance record that day
+//       (their actual worked hours are already counted in
+//       totalBaseHours — avoids double pay)
+//     - it falls after the cutoff day (future days / post-relieving)
+// ════════════════════════════════════════════════════════════════
+
+/**
+ * Compute paid festival-holiday hours for one employee in one month.
+ *
+ * @param year              Payroll year (e.g. 2026)
+ * @param month             Payroll month 1-12
+ * @param cutoffDay         Effective cutoff day (caps future / post-relieving days)
+ * @param holidays          Holidays fetched for this month (from db.holiday)
+ * @param shiftHrs          Employee's shift hours (same value used for paid Sundays)
+ * @param presentDateStrs   Set of YYYY-MM-DD date strings where the employee
+ *                          has a present-like attendance record (present/late/
+ *                          early-out/half-day) — used to skip double pay.
+ * @returns holidayHrs (paid holiday days × shiftHrs, 2-decimal rounded)
+ */
+export function computePaidHolidayHrs(
+  year: number,
+  month: number,
+  cutoffDay: number,
+  holidays: { date: Date }[],
+  shiftHrs: number,
+  presentDateStrs: Set<string>,
+): number {
+  let paidDays = 0;
+  for (const h of holidays) {
+    const hd = new Date(h.date);
+    // Only holidays inside the payroll month
+    if (hd.getFullYear() !== year || hd.getMonth() + 1 !== month) continue;
+    const day = hd.getDate();
+    // Cap at cutoff day — no pay for future / post-relieving holidays
+    if (day > cutoffDay) continue;
+    // Sunday holidays are already paid via sundayHrs — skip to avoid double pay
+    if (hd.getDay() === 0) continue;
+    // If the employee actually worked that day, actual hours are already
+    // counted in totalBaseHours — skip to avoid double pay
+    const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    if (presentDateStrs.has(dateStr)) continue;
+    paidDays++;
+  }
+  return Math.round(paidDays * (shiftHrs || 0) * 100) / 100;
+}

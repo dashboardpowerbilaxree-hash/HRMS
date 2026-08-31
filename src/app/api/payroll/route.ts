@@ -8,6 +8,7 @@ import {
   getActualShiftHours,
   recomputeStatus,
   shouldApplyLateEarly,
+  computePaidHolidayHrs,
 } from '@/lib/payroll-calc';
 
 export async function GET(request: NextRequest) {
@@ -240,9 +241,12 @@ export async function GET(request: NextRequest) {
       const otHours = Math.round(effectiveAttendance.filter(a => ['present', 'late', 'half-day', 'half_day', 'early-out'].includes(getStatus(a))).reduce((sum, a) => sum + (a.overtimeHours || 0), 0) * 100) / 100;
       const otAmount = otHours * hourlyRate;
 
-      // HOUR-BASED salary: Total Hrs = baseHrs + sundayHrs + otHrs (NO paid leaves)
+      // HOUR-BASED salary: Total Hrs = baseHrs + sundayHrs + otHrs + holidayHrs
+      // (NO paid leaves per company policy; festival holidays ARE paid at
+      //  shift hours — e.g. Aug 28 'Rakhi' — per user instruction Aug 31, 2026)
       const paidLeaveHrs = 0;  // ← NO PAID LEAVES per company policy
-      const totalHrs = totalBaseHours + sundayHrs + otHours + paidLeaveHrs;
+      const holidayHrs = computePaidHolidayHrs(p.year, p.month, cutoffDay, allHolidays, shiftHrs, presentDateStrs);
+      const totalHrs = totalBaseHours + sundayHrs + otHours + paidLeaveHrs + holidayHrs;
       const baseSalary = hourlyRate * totalBaseHours;
       const grossSalary = hourlyRate * totalHrs;
 
@@ -268,6 +272,7 @@ export async function GET(request: NextRequest) {
         absentDays,
         halfDays,
         holidayDays,
+        holidayHrs,          // ← PAID festival-holiday hrs (e.g. Aug 28 Rakhi × shiftHrs)
         paidLeaves: totalLeaveDays,  // total leave count (all unpaid, for display)
         totalWorkingDays,
         effectivePresentDays,
@@ -460,11 +465,13 @@ export async function POST(request: NextRequest) {
     const absentDays = Math.max(0, totalWorkingDays - presentDays - halfDays);
 
     // ─── HOUR-BASED SALARY CALCULATION (matching Excel) ───
-    // Total Hrs = baseHrs + sundayHrs + otHrs (NO paid leaves — company policy)
+    // Total Hrs = baseHrs + sundayHrs + otHrs + holidayHrs
+    // (NO paid leaves — company policy; festival holidays ARE paid at shift hours)
     const sundayCount = sundays;
     const sundayHrs = sundayCount * employee.shiftHours;
     const paidLeaveHrs = 0;  // ← NO PAID LEAVES per company policy
-    const totalHrs = totalBaseHours + sundayHrs + otHoursDecimal + paidLeaveHrs;
+    const holidayHrs = computePaidHolidayHrs(year, month, cutoffDay, holidays, employee.shiftHours || 9, presentDateStrs);
+    const totalHrs = totalBaseHours + sundayHrs + otHoursDecimal + paidLeaveHrs + holidayHrs;
     const baseSalary = hourlyRate * totalBaseHours;
     const sundayEarnings = hourlyRate * sundayHrs;
     const earnedSundayHrs = sundayHrs;

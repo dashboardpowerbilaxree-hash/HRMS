@@ -8,6 +8,7 @@ import {
   getActualShiftHours,
   recomputeStatus,
   shouldApplyLateEarly,
+  computePaidHolidayHrs,
 } from '@/lib/payroll-calc';
 
 /**
@@ -157,7 +158,10 @@ async function regenerateCurrentMonthPayroll(employeeId: string) {
 
     const sundayHrs = sundays * emp.shiftHours;
     const paidLeaveHrs = 0;
-    const totalHrs = totalBaseHours + sundayHrs + otHoursDecimal + paidLeaveHrs;
+    // Festival holidays ARE paid at shift hours (e.g. Aug 28 'Rakhi') —
+    // mirrors paid Sundays; skips Sunday-overlap & worked days (no double pay)
+    const holidayHrs = computePaidHolidayHrs(year, month, cutoffDay, holidays, emp.shiftHours || 9, presentDateStrs);
+    const totalHrs = totalBaseHours + sundayHrs + otHoursDecimal + paidLeaveHrs + holidayHrs;
     const baseSalary = hourlyRate * totalBaseHours;
     const sundayEarnings = hourlyRate * sundayHrs;
     const otAmount = otHoursDecimal * hourlyRate;

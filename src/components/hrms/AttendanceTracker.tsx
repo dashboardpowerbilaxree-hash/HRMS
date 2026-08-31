@@ -159,6 +159,7 @@ interface MonthlySummary {
   unpaidLeaves?: number;
   halfDays: number;
   holidayDays: number;
+  holidayHrs?: number;  // PAID festival-holiday hrs (e.g. Aug 28 Rakhi × shiftHrs)
   weeklyOffs: number;
   sundays: number;
   totalAttendance: number;
@@ -1198,7 +1199,8 @@ export function AttendanceTracker() {
                           <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider border-r border-emerald-600/30">Total Hrs Worked</th>
                           <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider border-r border-emerald-600/30">OT Hrs</th>
                           <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider border-r border-emerald-600/30">Sunday Hrs</th>
-                          <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider">Total Hrs including Sunday Hrs</th>
+                          <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider border-r border-emerald-600/30">Holiday Hrs</th>
+                          <th className="px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wider">Total Hrs incl. Sunday & Holiday</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1211,6 +1213,7 @@ export function AttendanceTracker() {
                           <td className="px-3 py-3 font-bold text-cyan-600 dark:text-cyan-400 border-r border-border/30">{displayDecimalAsColon(monthlySummary.totalWorkHours)}</td>
                           <td className="px-3 py-3 font-bold text-yellow-600 dark:text-yellow-400 border-r border-border/30">{formatOT(monthlySummary.totalOvertimeHours)}</td>
                           <td className="px-3 py-3 text-blue-600 dark:text-blue-400 border-r border-border/30">{displayDecimalAsColon(monthlySummary.totalSundayHours)}</td>
+                          <td className="px-3 py-3 font-bold text-purple-600 dark:text-purple-400 border-r border-border/30">{displayDecimalAsColon(monthlySummary.holidayHrs ?? 0)}</td>
                           <td className="px-3 py-3 font-bold text-gold">{displayDecimalAsColon(monthlySummary.totalHrs ?? monthlySummary.totalHrsInclSunday ?? monthlySummary.totalWorkHours ?? 0)}</td>
                         </tr>
                       </tbody>

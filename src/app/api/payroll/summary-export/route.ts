@@ -9,6 +9,7 @@ import {
   getActualShiftHours,
   recomputeStatus,
   shouldApplyLateEarly,
+  computePaidHolidayHrs,
 } from '@/lib/payroll-calc';
 
 // ════════════════════════════════════════════════════════════
@@ -235,7 +236,10 @@ async function enrichPayroll(p: any) {
 
   const sundayHrs = sundays * shiftHrs;
   const paidLeaveHrs = 0;  // ← NO PAID LEAVES per company policy
-  const totalHrs = Math.round((totalBaseHours + sundayHrs + otHours + paidLeaveHrs) * 100) / 100;
+  // Festival holidays ARE paid at shift hours (e.g. Aug 28 'Rakhi') —
+  // mirrors paid Sundays; skips Sunday-overlap & worked days (no double pay)
+  const holidayHrs = computePaidHolidayHrs(p.year, p.month, cutoffDay, holidays, shiftHrs, presentDateStrs);
+  const totalHrs = Math.round((totalBaseHours + sundayHrs + otHours + paidLeaveHrs + holidayHrs) * 100) / 100;
   const grossSalary = Math.round(hourlyRate * totalHrs * 100) / 100;
 
   // Net salary (existing formula): gross + bonus + incentive + arrear - totalDeductions
@@ -255,8 +259,8 @@ async function enrichPayroll(p: any) {
     presentDays,           // F
     absentDays,            // G
     workedHrs: Math.round((totalBaseHours + otHours) * 100) / 100,  // H: Worked Hrs INCLUDING OT (base + OT)
-    additionalHrs: sundayHrs,   // I: Additional hrs = PAID Sunday hrs (sundays × shiftHrs)
-    totalHrs,             // J: Total Hrs including Sunday Hrs (= workedHrs_incl_OT + sundayHrs)
+    additionalHrs: sundayHrs + holidayHrs,   // I: Additional hrs = PAID Sunday hrs + PAID festival-holiday hrs
+    totalHrs,             // J: Total Hrs including Sunday + Holiday Hrs
     grossSalary,           // K
     sdRefund: p.securityDeposit || 0,    // L: SD Refund
     salaryAdvance: p.advanceDeduction || 0, // M: Salary Advance
@@ -295,7 +299,7 @@ function buildFirmSheet(
     // Row 4: Column headers
     [
       'S.No', 'Employee Name', 'Monthly Salary', 'Working Hrs', 'Sl/Hr',
-      'Present Days', 'Absent Days', 'Worked Hrs including OT', 'Additional hrs', 'Total Hrs including Sunday Hrs',
+      'Present Days', 'Absent Days', 'Worked Hrs including OT', 'Additional hrs (Sun + Holiday)', 'Total Hrs incl. Sunday & Holiday Hrs',
       'Gross Salary', 'SD Refund', 'Salary Advance', 'Net Salary',
     ],
   ];
